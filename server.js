@@ -71,6 +71,7 @@ function broadcastToChunk(chunkId, message) {
         switch (parsedMessage.type) {
             
             case 'add_box_request':
+                
         const addChunkId = parsedMessage.payload.chunkId;
         const addChunkData = chunkCache.get(addChunkId);
 
@@ -84,6 +85,20 @@ function broadcastToChunk(chunkId, message) {
             });
         }
         break;
+
+        case 'webrtc_offer':
+            case 'webrtc_answer':
+            case 'webrtc_ice_candidate':
+                const recipientId = parsedMessage.payload.recipientId;
+                const recipientWs = clients.get(recipientId);
+
+                if (recipientWs) {
+                    recipientWs.send(message);
+                    console.log(`Forwarded ${parsedMessage.type} from ${ws.clientId} to ${recipientId}`);
+                } else {
+                    console.error(`Recipient ${recipientId} not found.`);
+                }
+                break;
 
 
 
