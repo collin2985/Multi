@@ -211,22 +211,25 @@ function flashBox(obj) {
             sendMessage('remove_box_request', { chunkId: 'chunkA' });
         });
 
-        const flashBoxBtn = document.getElementById('flashBoxBtn');
-        flashBoxBtn.addEventListener('click', () => {
-            let p2pMessageSent = false;
-            otherClients.forEach(peer => {
-                const peerDataChannel = peer.dataChannel;
-                if (peerDataChannel && peerDataChannel.readyState === 'open') {
-                    const message = { type: 'flash_box' };
-                    peerDataChannel.send(JSON.stringify(message));
-                    p2pMessageSent = true;
-                }
-            });
+        // This is the corrected version of the flashBoxBtn event listener
+const flashBoxBtn = document.getElementById('flashBoxBtn');
+flashBoxBtn.addEventListener('click', () => {
+    let p2pMessageSent = false;
+    // Loop through all established peer connections
+    otherClients.forEach(peer => {
+        // Check if the peer's data channel is open
+        if (peer.dataChannel && peer.dataChannel.readyState === 'open') {
+            const message = { type: 'flash_box' };
+            peer.dataChannel.send(JSON.stringify(message));
+            console.log("Sent P2P message:", message);
+            p2pMessageSent = true;
+        }
+    });
 
-            if (!p2pMessageSent) {
-                console.error("P2P Data Channel is not open with any peer.");
-            }
-        });
+    if (!p2pMessageSent) {
+        console.error("P2P Data Channel is not open with any peer.");
+    }
+});
 
         // --- 4. ANIMATION LOOP ---
         camera.position.z = 5;
