@@ -68,6 +68,19 @@
                 const receivedDataChannel = event.channel;
                 console.log("Data Channel established with peer!");
                 receivedDataChannel.onmessage = handleDataChannelMessage;
+// ... after the `handleDataChannelMessage` function
+
+function flashBox(obj) {
+    const originalColor = obj.material.color.getHex();
+    obj.material.color.setHex(0xff0000); // Set to red
+    setTimeout(() => {
+        obj.material.color.setHex(originalColor); // Revert after 500ms
+    }, 500);
+}
+
+// ... the rest of your script
+
+
                 // Store the data channel for sending messages back
                 otherClients.set(otherClientId, { ...otherClients.get(otherClientId), dataChannel: receivedDataChannel });
             };
