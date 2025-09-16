@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multiplayer Game Prototype</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <button id="addBoxBtn" style="position: absolute; top: 10px; left: 100px;">Add Box</button>
+<button id="removeBoxBtn" style="position: absolute; top: 10px; left: 180px;">Remove Box</button>
+    <button id="joinChunkBtn" style="position: absolute; top: 10px; left: 10px;">Join Chunk</button>
+    <button id="flashBoxBtn" style="position: absolute; top: 10px; left: 300px;">Flash Box</button>
+    <script type="importmap">
+        {
+          "imports": {
+            "three": "https://unpkg.com/three@0.145.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.145.0/examples/jsm/"
+          }
+        }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+
+        // --- 1. SET UP THE SCENE ---
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Add a simple light to the scene
+        const light = new THREE.AmbientLight(0x404040); // soft white light
+        scene.add(light);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        directionalLight.position.set(5, 5, 5).normalize();
+        scene.add(directionalLight);
+
+        // --- 2. CONNECT TO THE SERVER ---
+        const ws = new WebSocket('ws://localhost:8080');
+
+        ws.onping = function() {
+    ws.pong();
+};
+
+        ws.onopen = function(event) {
+            console.log("Connected to the server.");
+        };
+
+ws.onmessage = function(event) {
+    const data = JSON.parse(event.data);
+    console.log("Message from server:", data);
+
+    if (data.type === 'chunk_state_change') {
+        const chunkState = data.payload.state;
+        if (chunkState.boxPresent) {
+            scene.add(box); // Show the box
+        } else {
+            scene.remove(box); // Hide the box
+        }
+    }
+};
+
+        ws.onclose = function(event) {
+            console.log("Disconnected from the server.");
+        };
+
+        ws.onerror = function(error) {
+            console.error("WebSocket Error:", error);
+        };
+
+        // --- 3. CREATE A SIMPLE VISUAL OBJECT ---
+        // We'll use a cube to represent our "box"
+        const geometry = new THREE.BoxGeometry(1, 1, 1);
+        const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+        const box = new THREE.Mesh(geometry, material);
+        box.position.set(0, 0.5, -5); // Position it in front of the camera
+        scene.add(box);
+
+
+
+        // --- 3.5. HANDLE GAME LOGIC ---
+        // Function to send a message to the server
+        function sendMessage(type, payload) {
+            if (ws.readyState === WebSocket.OPEN) {
+                const message = { type, payload };
+                ws.send(JSON.stringify(message));
+                console.log(`Sent message: ${type}`);
+            } else {
+                console.error("WebSocket is not open.");
+            }
+        }
+
+
+        
+        // Handle the button click to join a chunk
+        const joinChunkBtn = document.getElementById('joinChunkBtn');
+        joinChunkBtn.addEventListener('click', () => {
+            sendMessage('join_chunk', { chunkId: 'chunkA' });
+        });
+
+// Handle the button clicks to add/remove a box
+const addBoxBtn = document.getElementById('addBoxBtn');
+addBoxBtn.addEventListener('click', () => {
+    sendMessage('add_box_request', { chunkId: 'chunkA', position: box.position });
+});
+
+const removeBoxBtn = document.getElementById('removeBoxBtn');
+removeBoxBtn.addEventListener('click', () => {
+    sendMessage('remove_box_request', { chunkId: 'chunkA' });
+});
+
+        // --- 4. ANIMATION LOOP ---
+        camera.position.z = 5;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+
+        animate();
+
+        // --- 5. HANDLE WINDOW RESIZE ---
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+    </script>
+</body>
+</html>
