@@ -85,6 +85,9 @@ function broadcastToChunk(chunkId, message) {
         }
         break;
 
+
+
+        
     case 'remove_box_request':
         const removeChunkId = parsedMessage.payload.chunkId;
         const removeChunkData = chunkCache.get(removeChunkId);
@@ -99,32 +102,28 @@ function broadcastToChunk(chunkId, message) {
             });
         }
         break;
-            case 'join_chunk':
-                const chunkId = parsedMessage.payload.chunkId;
-                const chunkData = loadChunk(chunkId);
+      case 'join_chunk':
+                const chunkId = parsedMessage.payload.chunkId;
+                const chunkData = loadChunk(chunkId);
 
-                if (chunkData) {
-                    // Update the client's current chunk
-                    ws.currentChunk = chunkId;
+                if (chunkData) {
+                    ws.currentChunk = chunkId;
 
-                    // Add the client's ID to the chunk's players list if they're not already there
-                    const isPlayerInChunk = chunkData.players.some(p => p.id === ws.clientId);
-                    if (!isPlayerInChunk) {
-                        chunkData.players.push({ id: ws.clientId });
-                        console.log(`Client ${ws.clientId} joined chunk: ${chunkId}`);
-                    }
-                    
-                    // Send the full chunk state to the client
-                    ws.send(JSON.stringify({
-                        type: 'chunk_state_change',
-                        payload: { chunkId, state: chunkData }
-                    }));
-                    
-                    saveChunk(chunkId);
-                }
-                break;
+                    const isPlayerInChunk = chunkData.players.some(p => p.id === ws.clientId);
+                    if (!isPlayerInChunk) {
+                        chunkData.players.push({ id: ws.clientId });
+                        console.log(`Client ${ws.clientId} joined chunk: ${chunkId}`);
+                        // ADD THIS LINE:
+                        saveChunk(chunkId); 
+                    }
+                    
+                    ws.send(JSON.stringify({
+                        type: 'chunk_state_change',
+                        payload: { chunkId, state: chunkData }
+                    }));
+                }
+                break;
         }
-
         
     });
 
