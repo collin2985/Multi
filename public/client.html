@@ -40,8 +40,7 @@
         scene.add(directionalLight);
 
         // --- 2. CONNECT TO THE SERVER ---
-        const ws = new WebSocket('https://multiplayer-game-dcwy.onrender.com');
-
+const ws = new WebSocket('wss://multiplayer-game-dcwy.onrender.com');
         ws.onping = function() {
     ws.pong();
 };
