@@ -13,7 +13,7 @@ const clients = new Map();
 // Save the chunk state to its file
 function saveChunk(chunkId) {
     if (chunkCache.has(chunkId)) {
-        const filePath = `./public/${chunkId}.json`;
+        const filePath = `./public/${chunkId}.JSON`;
         const chunkData = chunkCache.get(chunkId);
         fs.writeFileSync(filePath, JSON.stringify(chunkData, null, 2), 'utf8');
         console.log(`Saved chunk: ${chunkId}`);
@@ -26,7 +26,7 @@ function loadChunk(chunkId) {
         return chunkCache.get(chunkId);
     }
     
-    const filePath = `./public/${chunkId}.json`;
+    const filePath = `./public/${chunkId}.JSON`;
     
     try {
         const fileData = fs.readFileSync(filePath, 'utf8');
