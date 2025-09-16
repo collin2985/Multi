@@ -1,50 +1,49 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multiplayer Game Prototype</title>
-    <style>
-        body { margin: 0; overflow: hidden; }
-        canvas { display: block; }
-    </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multiplayer Game Prototype</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+    </style>
 </head>
 <body>
-    <button id="addBoxBtn" style="position: absolute; top: 10px; left: 100px;">Add Box</button>
+    <button id="addBoxBtn" style="position: absolute; top: 10px; left: 100px;">Add Box</button>
     <button id="removeBoxBtn" style="position: absolute; top: 10px; left: 180px;">Remove Box</button>
-    <button id="joinChunkBtn" style="position: absolute; top: 10px; left: 10px;">Join Chunk</button>
-    <button id="flashBoxBtn" style="position: absolute; top: 10px; left: 300px;">Flash Box</button>
-    <script type="importmap">
-        {
-          "imports": {
-            "three": "https://unpkg.com/three@0.145.0/build/three.module.js",
-            "three/addons/": "https://unpkg.com/three@0.145.0/examples/jsm/"
-          }
-        }
-    </script>
-    <script type="module">
-        import * as THREE from 'three';
+    <button id="joinChunkBtn" style="position: absolute; top: 10px; left: 10px;">Join Chunk</button>
+    <button id="flashBoxBtn" style="position: absolute; top: 10px; left: 300px;">Flash Box</button>
+    <script type="importmap">
+        {
+          "imports": {
+            "three": "https://unpkg.com/three@0.145.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.145.0/examples/jsm/"
+          }
+        }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
 
-        // --- 1. SET UP THE SCENE ---
-        const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        document.body.appendChild(renderer.domElement);
+        // --- 1. SET UP THE SCENE ---
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
 
-        // Add a simple light to the scene
-        const light = new THREE.AmbientLight(0x404040); // soft white light
-        scene.add(light);
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-        directionalLight.position.set(5, 5, 5).normalize();
-        scene.add(directionalLight);
+        // Add a simple light to the scene
+        const light = new THREE.AmbientLight(0x404040); // soft white light
+        scene.add(light);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        directionalLight.position.set(5, 5, 5).normalize();
+        scene.add(directionalLight);
 
-        // --- 2. CONNECT TO THE SERVER ---
+        // --- 2. CONNECT TO THE SERVER ---
         const ws = new WebSocket('wss://multiplayer-game-dcwy.onrender.com');
 
         // P2P variables
-        let dataChannel;
-        let otherClients = new Map(); // Store peer connections for each client
+        let otherClients = new Map(); // Stores a peer connection and its data channel for each client
 
         function createPeerConnection(otherClientId) {
             const configuration = {
@@ -54,7 +53,6 @@
             };
             
             const peerConnection = new RTCPeerConnection(configuration);
-            otherClients.set(otherClientId, peerConnection);
 
             peerConnection.onicecandidate = event => {
                 if (event.candidate) {
@@ -100,7 +98,7 @@
         ws.onopen = function(event) {
             console.log("Connected to the server.");
         };
-
+        
         // This is the single, combined version of your ws.onmessage handler
         ws.onmessage = function(event) {
             const data = JSON.parse(event.data);
@@ -114,7 +112,7 @@
                     .then(() => {
                         sendMessage('webrtc_answer', {
                             recipientId: data.payload.senderId,
-                            senderId: ws.clientId, // Add sender ID
+                            senderId: ws.clientId,
                             answer: peerConn.localDescription
                         });
                     });
@@ -123,7 +121,7 @@
                 peerConn.setRemoteDescription(new RTCSessionDescription(data.payload.answer));
             } else if (data.type === 'webrtc_ice_candidate') {
                 const peerConn = otherClients.get(data.payload.senderId);
-                if (peerConn && peerConn.iceGatheringState !== 'complete') { // Add a check to prevent errors
+                if (peerConn) { 
                     peerConn.addIceCandidate(new RTCIceCandidate(data.payload.candidate));
                 }
             } else if (data.type === 'chunk_state_change') {
@@ -133,8 +131,9 @@
                 chunkState.players.forEach(player => {
                     if (player.id !== ws.clientId && !otherClients.has(player.id)) {
                         const peerConn = createPeerConnection(player.id);
-                        const newP2PDataChannel = peerConn.createDataChannel("chat");
-                        newP2PDataChannel.onmessage = handleDataChannelMessage;
+                        const dataChannel = peerConn.createDataChannel("chat");
+                        dataChannel.onmessage = handleDataChannelMessage;
+                        otherClients.set(player.id, { ...otherClients.get(player.id), dataChannel: dataChannel });
 
                         peerConn.createOffer()
                             .then(offer => peerConn.setLocalDescription(offer))
@@ -154,7 +153,7 @@
                     scene.remove(box);
                 }
             } else if (data.type === 'welcome') {
-                // Initial message from the server
+                 // Initial message from the server
             }
         };
 
@@ -203,9 +202,10 @@
         flashBoxBtn.addEventListener('click', () => {
             let p2pMessageSent = false;
             otherClients.forEach(peer => {
-                if (peer.dataChannel && peer.dataChannel.readyState === 'open') {
+                const peerDataChannel = peer.dataChannel;
+                if (peerDataChannel && peerDataChannel.readyState === 'open') {
                     const message = { type: 'flash_box' };
-                    peer.dataChannel.send(JSON.stringify(message));
+                    peerDataChannel.send(JSON.stringify(message));
                     p2pMessageSent = true;
                 }
             });
@@ -230,7 +230,6 @@
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
-
     </script>
 </body>
 </html>
