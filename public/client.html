@@ -113,7 +113,7 @@
         let clientId = null;
         let isInChunk = false;
         let boxInScene = false;
-        const peers = new Map(); // peerId -> { connection, dataChannel, state }
+        const peers = new Map(); // peerId -> { connection, dataChannel, state, targetPosition: null }
         let terrainRenderer = null; // Initialize terrain renderer
         const avatars = new Map(); // peerId -> THREE.Mesh
 
@@ -122,7 +122,7 @@
         const pointer = new THREE.Vector2();
         const playerTargetPosition = new THREE.Vector3();
         let isMoving = false;
-
+        
         // --- UI ELEMENTS ---
         const statusEl = document.getElementById('status');
         const connectionStatusEl = document.getElementById('connectionStatus');
@@ -209,6 +209,15 @@
                 playerTargetPosition.copy(intersect.point);
                 isMoving = true;
                 updateStatus(`🚀 Moving to clicked position: (${playerTargetPosition.x.toFixed(2)}, ${playerTargetPosition.z.toFixed(2)})`);
+                
+                // --- ADDED: Broadcast move event once per click ---
+                broadcastP2P({
+                    type: 'player_move',
+                    payload: {
+                        start: playerObject.position.toArray(),
+                        target: playerTargetPosition.toArray()
+                    }
+                });
             }
         }
         
@@ -255,7 +264,11 @@
                 connection,
                 dataChannel: null,
                 state: 'connecting',
-                isInitiator
+                isInitiator,
+                // --- ADDED: Target position for local animation ---
+                targetPosition: null,
+                // --- ADDED: Start time for timing the animation ---
+                moveStartTime: null
             };
 
             peers.set(peerId, peerState);
@@ -348,17 +361,18 @@
             }
             updatePeerInfo();
         }
-
+        
         function handleP2PMessage(message, fromPeer) {
-            updateStatus(`📨 P2P from ${fromPeer}: ${message.type}`);
-            
             switch (message.type) {
-                case 'player_state':
-                    const { position, quaternion } = message.payload;
+                // --- ADDED: Handle the new 'player_move' message ---
+                case 'player_move':
+                    const peer = peers.get(fromPeer);
                     const avatar = avatars.get(fromPeer);
-                    if (avatar) {
-                        avatar.position.fromArray(position);
-                        avatar.quaternion.fromArray(quaternion);
+                    if (peer && avatar) {
+                        avatar.position.fromArray(message.payload.start);
+                        peer.targetPosition = new THREE.Vector3().fromArray(message.payload.target);
+                        peer.moveStartTime = performance.now();
+                        updateStatus(`🕺 Avatar for ${fromPeer} is now moving`);
                     }
                     break;
                 default:
@@ -380,21 +394,9 @@
             });
             return sentCount;
         }
-        
-        function sendPlayerState() {
-            if (isInChunk) {
-                const message = {
-                    type: 'player_state',
-                    payload: {
-                        position: playerObject.position.toArray(),
-                        quaternion: playerObject.quaternion.toArray()
-                    }
-                };
-                broadcastP2P(message);
-            }
-        }
-        
-        setInterval(sendPlayerState, 100);
+
+        // --- REMOVED: Inefficient broadcast interval ---
+        // setInterval(sendPlayerState, 100);
 
         // --- SERVER MESSAGE HANDLING ---
         ws.onmessage = async function(event) {
@@ -612,22 +614,40 @@
         };
         
         // --- ANIMATION LOOP ---
+        const playerSpeed = 0.05; // Meters per millisecond
         function animate() {
             requestAnimationFrame(animate);
 
-            // Click-to-move player movement
+            // --- LOCAL PLAYER MOVEMENT ---
             if (isMoving) {
                 const distance = playerObject.position.distanceTo(playerTargetPosition);
-                const moveStep = 0.5;
+                const moveStep = playerSpeed * (performance.now() - lastFrameTime);
+                
                 if (distance > 0.1) {
                     playerObject.position.lerp(playerTargetPosition, moveStep / distance);
-                    sendPlayerState();
                 } else {
                     playerObject.position.copy(playerTargetPosition);
                     isMoving = false;
                     updateStatus("📍 Arrived at destination.");
                 }
             }
+
+            // --- ANIMATE OTHER PLAYERS' AVATARS ---
+            avatars.forEach((avatar, peerId) => {
+                const peer = peers.get(peerId);
+                if (peer && peer.targetPosition) {
+                    const distance = avatar.position.distanceTo(peer.targetPosition);
+                    const moveStep = playerSpeed * (performance.now() - lastFrameTime);
+
+                    if (distance > 0.1) {
+                        avatar.position.lerp(peer.targetPosition, moveStep / distance);
+                    } else {
+                        avatar.position.copy(peer.targetPosition);
+                        peer.targetPosition = null; // Clear target to stop animation
+                        updateStatus(`✅ Avatar for ${peerId} arrived at destination.`);
+                    }
+                }
+            });
 
             // Update camera position to follow the player
             const cameraOffset = new THREE.Vector3(-15, 20, 25);
@@ -638,11 +658,12 @@
 
             const serverBox = scene.getObjectByName('serverBox');
             if (serverBox) {
-                serverBox.rotation.x += 0.005;
-                serverBox.rotation.y += 0.01;
+                box.rotation.x += 0.005;
+                box.rotation.y += 0.01;
             }
-            
+
             renderer.render(scene, camera);
+            lastFrameTime = performance.now();
         }
 
         // --- RESIZE HANDLING ---
@@ -653,6 +674,7 @@
         });
 
         // --- INITIALIZATION ---
+        let lastFrameTime = performance.now(); // Used for frame-rate independent movement
         updateStatus("🎮 Game initialized");
         updateStatus("📋 Click 'Join Chunk' to start");
         updateConnectionStatus('connecting', '🔄 Connecting...');
