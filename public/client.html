@@ -33,7 +33,7 @@
         document.body.appendChild(renderer.domElement);
 
         // Add a simple light to the scene
-        const light = new THREE.AmbientLight(0x404040); // soft white light
+        const light = new THREE.AmbientLight(0x404040);
         scene.add(light);
         const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
         directionalLight.position.set(5, 5, 5).normalize();
@@ -43,15 +43,12 @@
         const ws = new WebSocket('wss://multiplayer-game-dcwy.onrender.com');
 
         // P2P variables
-        let otherClients = new Map(); // Stores a peer connection and its data channel for each client
+        let otherClients = new Map(); // peer connection + data channel per client
 
         function createPeerConnection(otherClientId) {
             const configuration = {
-                iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' }
-                ]
+                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
             };
-            
             const peerConnection = new RTCPeerConnection(configuration);
 
             peerConnection.onicecandidate = event => {
@@ -68,20 +65,6 @@
                 const receivedDataChannel = event.channel;
                 console.log("Data Channel established with peer!");
                 receivedDataChannel.onmessage = handleDataChannelMessage;
-// ... after the `handleDataChannelMessage` function
-
-function flashBox(obj) {
-    const originalColor = obj.material.color.getHex();
-    obj.material.color.setHex(0xff0000); // Set to red
-    setTimeout(() => {
-        obj.material.color.setHex(originalColor); // Revert after 500ms
-    }, 500);
-}
-
-// ... the rest of your script
-
-
-                // Store the data channel for sending messages back
                 otherClients.set(otherClientId, { ...otherClients.get(otherClientId), dataChannel: receivedDataChannel });
             };
 
@@ -104,15 +87,11 @@ function flashBox(obj) {
             }, 500);
         }
 
-        ws.onping = function() {
-            ws.pong();
-        };
+        ws.onopen = () => console.log("Connected to the server.");
+        ws.onclose = () => console.log("Disconnected from the server.");
+        ws.onerror = error => console.error("WebSocket Error:", error);
 
-        ws.onopen = function(event) {
-            console.log("Connected to the server.");
-        };
-        
-        // This is the single, combined version of your ws.onmessage handler
+        // --- Handle server messages ---
         ws.onmessage = function(event) {
             const data = JSON.parse(event.data);
             console.log("Message from server:", data);
@@ -137,10 +116,10 @@ function flashBox(obj) {
                 if (peerConn) { 
                     peerConn.addIceCandidate(new RTCIceCandidate(data.payload.candidate));
                 }
-            } else if (data.type === 'chunk_state_change') {
+            } 
+            // 🔴 persistent: server broadcasts authoritative state
+            else if (data.type === 'chunk_state_change') {
                 const chunkState = data.payload.state;
-
-                // Initiate P2P connections with other players in the chunk
                 chunkState.players.forEach(player => {
                     if (player.id !== ws.clientId && !otherClients.has(player.id)) {
                         const peerConn = createPeerConnection(player.id);
@@ -160,22 +139,13 @@ function flashBox(obj) {
                     }
                 });
 
+                // 🔴 update box ONLY when server says so
                 if (chunkState.boxPresent) {
-                    scene.add(box);
+                    if (!scene.children.includes(box)) scene.add(box);
                 } else {
                     scene.remove(box);
                 }
-            } else if (data.type === 'welcome') {
-                 // Initial message from the server
             }
-        };
-
-        ws.onclose = function(event) {
-            console.log("Disconnected from the server.");
-        };
-
-        ws.onerror = function(error) {
-            console.error("WebSocket Error:", error);
         };
 
         // --- 3. CREATE A SIMPLE VISUAL OBJECT ---
@@ -183,70 +153,54 @@ function flashBox(obj) {
         const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
         const box = new THREE.Mesh(geometry, material);
         box.position.set(0, 0.5, -5);
-        scene.add(box);
 
-        // --- 3.5. HANDLE GAME LOGIC ---
+        // --- 4. SEND MESSAGES ---
         function sendMessage(type, payload) {
             if (ws.readyState === WebSocket.OPEN) {
-                const message = { type, payload };
-                ws.send(JSON.stringify(message));
+                ws.send(JSON.stringify({ type, payload }));
                 console.log(`Sent message: ${type}`);
             } else {
                 console.error("WebSocket is not open.");
             }
         }
-        
-        const joinChunkBtn = document.getElementById('joinChunkBtn');
-        joinChunkBtn.addEventListener('click', () => {
+
+        // --- 5. BUTTON HANDLERS ---
+        document.getElementById('joinChunkBtn').onclick = () => {
             sendMessage('join_chunk', { chunkId: 'chunkA' });
-        });
+        };
 
-        const addBoxBtn = document.getElementById('addBoxBtn');
-        addBoxBtn.addEventListener('click', () => {
+        document.getElementById('addBoxBtn').onclick = () => {
+            // 🔴 request only — no local add
             sendMessage('add_box_request', { chunkId: 'chunkA', position: box.position });
-        });
+        };
 
-        const removeBoxBtn = document.getElementById('removeBoxBtn');
-        removeBoxBtn.addEventListener('click', () => {
+        document.getElementById('removeBoxBtn').onclick = () => {
+            // 🔴 request only — no local remove
             sendMessage('remove_box_request', { chunkId: 'chunkA' });
-        });
+        };
 
+        document.getElementById('flashBoxBtn').onclick = () => {
+            // 🔴 flash locally + send via P2P
+            flashBox(box);
+            let sent = false;
+            otherClients.forEach(peer => {
+                if (peer.dataChannel && peer.dataChannel.readyState === 'open') {
+                    peer.dataChannel.send(JSON.stringify({ type: 'flash_box' }));
+                    sent = true;
+                }
+            });
+            if (!sent) console.warn("No open P2P channels to send flash_box");
+        };
 
-
-
-
-        // This is the corrected version of the flashBoxBtn event listener
-const flashBoxBtn = document.getElementById('flashBoxBtn');
-flashBoxBtn.addEventListener('click', () => {
-    flashBox(box);
-
-    let p2pMessageSent = false;
-    // Loop through all established peer connections
-    otherClients.forEach(peer => {
-        // Check if the peer's data channel is open
-        if (peer.dataChannel && peer.dataChannel.readyState === 'open') {
-            const message = { type: 'flash_box' };
-            peer.dataChannel.send(JSON.stringify(message));
-            console.log("Sent P2P message:", message);
-            p2pMessageSent = true;
-        }
-    });
-
-    if (!p2pMessageSent) {
-        console.error("P2P Data Channel is not open with any peer.");
-    }
-});
-
-        // --- 4. ANIMATION LOOP ---
+        // --- 6. ANIMATION LOOP ---
         camera.position.z = 5;
-
         function animate() {
             requestAnimationFrame(animate);
             renderer.render(scene, camera);
         }
         animate();
 
-        // --- 5. HANDLE WINDOW RESIZE ---
+        // --- 7. RESIZE ---
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
