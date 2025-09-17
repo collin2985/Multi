@@ -100,6 +100,8 @@ wss.on('connection', ws => {
                     type: 'chunk_state_change',
                     payload: { chunkId, state: chunkData }
                 });
+                                    terrainRenderer.addTerrainChunk(payload.chunkId);
+
                 break;
 
             case 'add_box_request':
