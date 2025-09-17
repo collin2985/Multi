@@ -110,7 +110,8 @@
         import { SimpleTerrainRenderer } from './terrain.js';
 
         // --- GLOBAL STATE ---
-        let clientId = null;
+        // FIX: Generate the clientId immediately upon script execution.
+        const clientId = 'client_' + Math.random().toString(36).substr(2, 12);
         let isInChunk = false;
         let boxInScene = false;
         const peers = new Map(); // peerId -> { connection, dataChannel, state, targetPosition: null }
@@ -610,6 +611,7 @@
 
         // --- BUTTON HANDLERS ---
         joinBtn.onclick = () => {
+            // FIX: Ensure clientId is sent with the message
             if (sendServerMessage('join_chunk', { chunkId: 'chunkA', clientId: clientId })) {
                 isInChunk = true;
                 joinBtn.disabled = true;
