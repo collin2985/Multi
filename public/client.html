@@ -123,6 +123,12 @@
         const playerTargetPosition = new THREE.Vector3();
         let isMoving = false;
         
+        // --- WEBSOCKET RECONNECTION STATE ---
+        let ws = null;
+        let wsRetryAttempts = 0;
+        const wsMaxRetries = 10;
+        const wsRetryInterval = 5000; // 5 seconds
+        
         // --- UI ELEMENTS ---
         const statusEl = document.getElementById('status');
         const connectionStatusEl = document.getElementById('connectionStatus');
@@ -222,30 +228,83 @@
         }
         
         // --- WEBSOCKET CONNECTION ---
-        const ws = new WebSocket('wss://multiplayer-game-dcwy.onrender.com');
+        function connectToServer() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close();
+            }
 
-        // Generate client ID immediately
-        clientId = 'client_' + Math.random().toString(36).substr(2, 12);
-        updateStatus(`Generated client ID: ${clientId}`);
+            ws = new WebSocket('wss://multiplayer-game-dcwy.onrender.com');
 
-        ws.onopen = () => {
-            updateStatus("✅ Connected to server");
-            updateConnectionStatus('connected', '✅ Server Connected');
-            joinBtn.disabled = false;
-        };
+            // --- WEBSOCKET EVENT HANDLERS ---
+            ws.onopen = () => {
+                updateStatus("✅ Connected to server");
+                updateConnectionStatus('connected', '✅ Server Connected');
+                joinBtn.disabled = false;
+                wsRetryAttempts = 0; // Reset retry counter on success
+            };
 
-        ws.onclose = (event) => {
-            updateStatus(`❌ Server disconnected (${event.code})`);
-            updateConnectionStatus('disconnected', '❌ Server Disconnected');
-            isInChunk = false;
-            updateButtonStates();
-        };
+            ws.onclose = (event) => {
+                updateStatus(`❌ Server disconnected (${event.code})`);
+                updateConnectionStatus('disconnected', '❌ Server Disconnected');
+                isInChunk = false;
+                updateButtonStates();
+                attemptWsReconnect();
+            };
 
-        ws.onerror = (error) => {
-            updateStatus(`❌ Server error: ${error}`);
-            updateConnectionStatus('disconnected', '❌ Server Error');
-        };
+            ws.onerror = (error) => {
+                updateStatus(`❌ Server error: ${error}`);
+                updateConnectionStatus('disconnected', '❌ Server Error');
+            };
 
+            ws.onmessage = async function(event) {
+                let messageData;
+                
+                if (event.data instanceof Blob) {
+                    messageData = await event.data.text();
+                } else {
+                    messageData = event.data;
+                }
+                
+                let data;
+                try {
+                    data = JSON.parse(messageData);
+                } catch (error) {
+                    updateStatus(`❌ Invalid server message: ${error.message}`);
+                    return;
+                }
+
+                updateStatus(`📥 Server: ${data.type}`);
+
+                switch (data.type) {
+                    case 'webrtc_offer':
+                        await handleWebRTCOffer(data.payload);
+                        break;
+                    case 'webrtc_answer':
+                        await handleWebRTCAnswer(data.payload);
+                        break;
+                    case 'webrtc_ice_candidate':
+                        await handleWebRTCIceCandidate(data.payload);
+                        break;
+                    case 'chunk_state_change':
+                        handleChunkStateChange(data.payload);
+                        break;
+                    default:
+                        updateStatus(`❓ Unknown server message: ${data.type}`);
+                }
+            };
+        }
+        
+        // --- AUTOMATIC WEBSOCKET RECONNECTION LOGIC ---
+        function attemptWsReconnect() {
+            if (wsRetryAttempts < wsMaxRetries) {
+                wsRetryAttempts++;
+                updateStatus(`Attempting server reconnect... (${wsRetryAttempts}/${wsMaxRetries})`);
+                setTimeout(connectToServer, wsRetryInterval);
+            } else {
+                updateStatus("❌ Max server reconnection attempts reached. Please refresh.");
+            }
+        }
+        
         // --- P2P CONNECTION MANAGEMENT ---
         function createPeerConnection(peerId, isInitiator = false) {
             updateStatus(`Creating ${isInitiator ? 'outgoing' : 'incoming'} P2P connection to ${peerId}`);
@@ -275,7 +334,7 @@
 
             // ICE candidate handling
             connection.onicecandidate = (event) => {
-                if (event.candidate && ws.readyState === WebSocket.OPEN) {
+                if (event.candidate && ws && ws.readyState === WebSocket.OPEN) {
                     sendServerMessage('webrtc_ice_candidate', {
                         recipientId: peerId,
                         senderId: clientId,
@@ -292,9 +351,10 @@
                 
                 if (state === 'connected') {
                     updateStatus(`✅ P2P connected to ${peerId}`);
-                } else if (state === 'failed' || state === 'closed') {
+                } else if (state === 'failed' || state === 'closed' || state === 'disconnected') {
                     updateStatus(`❌ P2P ${state} with ${peerId}`);
-                    cleanupPeer(peerId);
+                    // We don't cleanup here to allow for reconnection attempts
+                    // cleanupPeer(peerId);
                 }
                 updatePeerInfo();
             };
@@ -325,12 +385,12 @@
 
             channel.onclose = () => {
                 updateStatus(`📡 Data channel closed with ${peerId}`);
-                cleanupPeer(peerId);
+                const peer = peers.get(peerId);
+                if(peer) peer.state = 'disconnected';
             };
 
             channel.onerror = (error) => {
                 updateStatus(`❌ Data channel error with ${peerId}: ${error}`);
-                cleanupPeer(peerId);
             };
 
             channel.onmessage = (event) => {
@@ -364,7 +424,6 @@
         
         function handleP2PMessage(message, fromPeer) {
             switch (message.type) {
-                // Handle the new 'player_move' message
                 case 'player_move':
                     const peer = peers.get(fromPeer);
                     const avatar = avatars.get(fromPeer);
@@ -396,47 +455,6 @@
         }
 
         // --- SERVER MESSAGE HANDLING ---
-        ws.onmessage = async function(event) {
-            let messageData;
-            
-            if (event.data instanceof Blob) {
-                messageData = await event.data.text();
-            } else {
-                messageData = event.data;
-            }
-            
-            let data;
-            try {
-                data = JSON.parse(messageData);
-            } catch (error) {
-                updateStatus(`❌ Invalid server message: ${error.message}`);
-                return;
-            }
-
-            updateStatus(`📥 Server: ${data.type}`);
-
-            switch (data.type) {
-                case 'webrtc_offer':
-                    await handleWebRTCOffer(data.payload);
-                    break;
-                    
-                case 'webrtc_answer':
-                    await handleWebRTCAnswer(data.payload);
-                    break;
-                    
-                case 'webrtc_ice_candidate':
-                    await handleWebRTCIceCandidate(data.payload);
-                    break;
-                    
-                case 'chunk_state_change':
-                    handleChunkStateChange(data.payload);
-                    break;
-                    
-                default:
-                    updateStatus(`❓ Unknown server message: ${data.type}`);
-            }
-        };
-
         async function handleWebRTCOffer(payload) {
             const { senderId, offer } = payload;
             if (!senderId || !offer) return;
@@ -574,7 +592,7 @@
 
         // --- SERVER COMMUNICATION ---
         function sendServerMessage(type, payload) {
-            if (ws.readyState !== WebSocket.OPEN) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
                 updateStatus("❌ Cannot send - server disconnected");
                 updateConnectionStatus('disconnected', '❌ Server Disconnected');
                 return false;
@@ -613,21 +631,24 @@
         // --- ANIMATION LOOP ---
         const playerSpeed = 0.05; // Meters per millisecond
         const stopThreshold = 0.01; // The distance to snap to the target
+        
         function animate() {
             requestAnimationFrame(animate);
+            const now = performance.now();
+            const deltaTime = now - lastFrameTime;
 
             // --- LOCAL PLAYER MOVEMENT ---
             if (isMoving) {
                 const distance = playerObject.position.distanceTo(playerTargetPosition);
-                const moveStep = playerSpeed * (performance.now() - lastFrameTime);
                 
-                // If we're close enough, snap to the target to prevent jitter
-                if (distance < stopThreshold) {
+                if (distance <= stopThreshold) {
                     playerObject.position.copy(playerTargetPosition);
                     isMoving = false;
                     updateStatus("📍 Arrived at destination.");
                 } else {
-                    playerObject.position.lerp(playerTargetPosition, moveStep / distance);
+                    const moveStep = playerSpeed * deltaTime;
+                    const alpha = Math.min(1, moveStep / distance); // Clamp the interpolation factor
+                    playerObject.position.lerp(playerTargetPosition, alpha);
                 }
             }
 
@@ -636,19 +657,22 @@
                 const peer = peers.get(peerId);
                 if (peer && peer.targetPosition) {
                     const distance = avatar.position.distanceTo(peer.targetPosition);
-                    const moveStep = playerSpeed * (performance.now() - lastFrameTime);
 
-                    // If we're close enough, snap to the target to prevent jitter
-                    if (distance < stopThreshold) {
+                    if (distance <= stopThreshold) {
                         avatar.position.copy(peer.targetPosition);
                         peer.targetPosition = null; // Clear target to stop animation
                         updateStatus(`✅ Avatar for ${peerId} arrived at destination.`);
                     } else {
-                        avatar.position.lerp(peer.targetPosition, moveStep / distance);
+                        const moveStep = playerSpeed * deltaTime;
+                        const alpha = Math.min(1, moveStep / distance); // Clamp the interpolation factor
+                        avatar.position.lerp(peer.targetPosition, alpha);
                     }
                 }
             });
 
+            // --- P2P RECONNECTION ATTEMPT ---
+            checkAndReconnectPeers();
+            
             // Update camera position to follow the player
             const cameraOffset = new THREE.Vector3(-15, 20, 25);
             const cameraTargetPosition = playerObject.position.clone().add(cameraOffset);
@@ -663,7 +687,31 @@
             }
 
             renderer.render(scene, camera);
-            lastFrameTime = performance.now();
+            lastFrameTime = now;
+        }
+        
+        // --- P2P RECONNECTION LOGIC ---
+        let lastPeerCheckTime = 0;
+        const peerCheckInterval = 5000; // 5 seconds
+        
+        function checkAndReconnectPeers() {
+            const now = performance.now();
+            if (now - lastPeerCheckTime < peerCheckInterval) {
+                return;
+            }
+            lastPeerCheckTime = now;
+
+            const otherPlayers = Array.from(peers.keys());
+            for (const peerId of otherPlayers) {
+                const peer = peers.get(peerId);
+                if (peer && (peer.state === 'disconnected' || peer.state === 'failed')) {
+                    const shouldInitiate = clientId < peerId;
+                    if (shouldInitiate) {
+                        updateStatus(`Attempting P2P reconnect to ${peerId}...`);
+                        initiateConnection(peerId);
+                    }
+                }
+            }
         }
 
         // --- RESIZE HANDLING ---
@@ -678,6 +726,7 @@
         updateStatus("🎮 Game initialized");
         updateStatus("📋 Click 'Join Chunk' to start");
         updateConnectionStatus('connecting', '🔄 Connecting...');
+        connectToServer();
         animate();
     </script>
 </body>
