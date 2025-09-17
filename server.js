@@ -193,7 +193,7 @@ const interval = setInterval(() => {
         
         console.log('Periodic player check finished');
     }
-}, 30000);
+}, 60000);
 
 // Clean up the interval when the server closes
 wss.on('close', () => {

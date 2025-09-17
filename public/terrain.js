@@ -193,10 +193,10 @@ class SimpleTerrainRenderer {
         this.terrainChunks.set(`${x},${z}`, mesh);
     }
 
-    chunkIdToCoords(chunkId) {
-        const hash = chunkId.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
-        return [(hash % 10) * CONFIG.TERRAIN.chunkSize, Math.floor(hash / 10) * CONFIG.TERRAIN.chunkSize];
-    }
+chunkIdToCoords(chunkId) {
+    // This will now always return coordinates for the origin
+    return [0, 0];
+}
 
     clearChunks() {
         this.terrainChunks.forEach((mesh, chunkId) => {
