@@ -116,7 +116,12 @@
         const peers = new Map(); // peerId -> { connection, dataChannel, state }
         let terrainRenderer = null; // Initialize terrain renderer
         const avatars = new Map(); // peerId -> THREE.Mesh
-        const keyboardState = {};
+
+        // Click-to-move state
+        const raycaster = new THREE.Raycaster();
+        const pointer = new THREE.Vector2();
+        const playerTargetPosition = new THREE.Vector3();
+        let isMoving = false;
 
         // --- UI ELEMENTS ---
         const statusEl = document.getElementById('status');
@@ -163,20 +168,50 @@
         const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
         directionalLight.position.set(10, 10, 5);
         scene.add(directionalLight);
-
+        
+        // The local player avatar
+        const playerObject = new THREE.Mesh(
+            new THREE.SphereGeometry(1, 32, 32),
+            new THREE.MeshBasicMaterial({ color: 0x0000ff })
+        );
+        playerObject.position.set(0, 5, 0); // Start player above ground
+        scene.add(playerObject);
+        
         // The box that server controls
-        const geometry = new THREE.BoxGeometry(1, 1, 1);
-        const material = new THREE.MeshLambertMaterial({ color: 0x00ff00 });
-        const box = new THREE.Mesh(geometry, material);
+        const box = new THREE.Mesh(
+            new THREE.BoxGeometry(1, 1, 1),
+            new THREE.MeshLambertMaterial({ color: 0x00ff00 })
+        );
         box.position.set(0, 0, -3);
         box.name = 'serverBox';
-
-        camera.position.set(0, 35, 20);
-        camera.lookAt(0, 0, -3);
 
         // Initialize terrain renderer
         terrainRenderer = new SimpleTerrainRenderer(scene);
 
+        // --- CLICK-TO-MOVE HANDLER ---
+        window.addEventListener('pointerdown', onPointerDown);
+        
+        function onPointerDown(event) {
+            // Check if pointer is on UI elements
+            if (event.target.tagName !== 'CANVAS') return;
+
+            pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+            pointer.y = - (event.clientY / window.innerHeight) * 2 + 1;
+        
+            raycaster.setFromCamera(pointer, camera);
+        
+            // Check for intersection with terrain chunks
+            const terrainObjects = Array.from(terrainRenderer.terrainChunks.values());
+            const intersects = raycaster.intersectObjects(terrainObjects, true);
+        
+            if (intersects.length > 0) {
+                const intersect = intersects[0];
+                playerTargetPosition.copy(intersect.point);
+                isMoving = true;
+                updateStatus(`🚀 Moving to clicked position: (${playerTargetPosition.x.toFixed(2)}, ${playerTargetPosition.z.toFixed(2)})`);
+            }
+        }
+        
         // --- WEBSOCKET CONNECTION ---
         const ws = new WebSocket('wss://multiplayer-game-dcwy.onrender.com');
 
@@ -351,8 +386,8 @@
                 const message = {
                     type: 'player_state',
                     payload: {
-                        position: camera.position.toArray(),
-                        quaternion: camera.quaternion.toArray()
+                        position: playerObject.position.toArray(),
+                        quaternion: playerObject.quaternion.toArray()
                     }
                 };
                 broadcastP2P(message);
@@ -576,23 +611,32 @@
             sendServerMessage('remove_box_request', { chunkId: 'chunkA' });
         };
         
-        // --- KEYBOARD CONTROLS ---
-        document.addEventListener('keydown', (e) => keyboardState[e.key.toLowerCase()] = true);
-        document.addEventListener('keyup', (e) => keyboardState[e.key.toLowerCase()] = false);
-
         // --- ANIMATION LOOP ---
         function animate() {
             requestAnimationFrame(animate);
 
-            // Local player movement
-            const moveSpeed = 0.5;
-            if (keyboardState['w']) camera.translateZ(-moveSpeed);
-            if (keyboardState['s']) camera.translateZ(moveSpeed);
-            if (keyboardState['a']) camera.translateX(-moveSpeed);
-            if (keyboardState['d']) camera.translateX(moveSpeed);
-            if (keyboardState[' ']) camera.translateY(moveSpeed); // Space bar for up
-            if (keyboardState['shift']) camera.translateY(-moveSpeed); // Shift for down
-            
+            // Click-to-move player movement
+            if (isMoving) {
+                const distance = playerObject.position.distanceTo(playerTargetPosition);
+                const moveStep = 0.5;
+                if (distance > 0.1) {
+                    playerObject.position.lerp(playerTargetPosition, moveStep / distance);
+                    // Update P2P state on every move
+                    sendPlayerState();
+                } else {
+                    playerObject.position.copy(playerTargetPosition);
+                    isMoving = false;
+                    updateStatus("📍 Arrived at destination.");
+                }
+            }
+
+            // Update camera position to follow the player
+            const cameraOffset = new THREE.Vector3(-15, 20, 25); // Above and behind
+            const targetPosition = playerObject.position.clone();
+            const smoothedCameraPosition = camera.position.lerp(targetPosition.add(cameraOffset), 0.1);
+            camera.position.copy(smoothedCameraPosition);
+            camera.lookAt(targetPosition);
+
             // The server-controlled box should still animate
             const serverBox = scene.getObjectByName('serverBox');
             if (serverBox) {
