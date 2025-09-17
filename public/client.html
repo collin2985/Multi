@@ -663,7 +663,7 @@
 
             checkAndReconnectPeers();
             
-            const cameraOffset = new THREE.Vector3(-15, 20, 50);
+            const cameraOffset = new THREE.Vector3(-15, 40, 20);
             const cameraTargetPosition = playerObject.position.clone().add(cameraOffset);
             const smoothedCameraPosition = camera.position.lerp(cameraTargetPosition, 0.1);
             camera.position.copy(smoothedCameraPosition);

@@ -3,7 +3,7 @@ import * as THREE from 'three';
 const CONFIG = Object.freeze({
     TERRAIN: {
         chunkSize: 50,
-        segments: 50  // Reduced for better performance and stability
+        segments: 100
     },
     GRAPHICS: {
         textureSize: 24,
@@ -16,6 +16,8 @@ class SimpleTerrainRenderer {
         this.scene = scene;
         this.terrainChunks = new Map();
         this.terrainMaterial = null;
+        this.terrainWorker = null;
+        this.pendingChunks = new Map();
         this.textures = this.initializeTextures();
         this.initialize();
     }
@@ -49,12 +51,15 @@ class SimpleTerrainRenderer {
     }
 
     initialize() {
+        this.terrainWorker = this.createTerrainWorker();
         this.terrainMaterial = new THREE.ShaderMaterial({
             vertexShader: `
                 varying vec3 vNormal;
+                varying vec3 vPosition;
                 varying vec3 vWorldPosition;
                 void main() {
-                    vNormal = normalize(normalMatrix * normal);
+                    vNormal = normal;
+                    vPosition = position;
                     vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
                     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
                 }
@@ -66,30 +71,34 @@ class SimpleTerrainRenderer {
                 uniform sampler2D uSnow;
                 uniform vec3 uLightDir;
                 varying vec3 vNormal;
+                varying vec3 vPosition;
                 varying vec3 vWorldPosition;
                 void main() {
                     float height = vWorldPosition.y;
-                    float slope = 1.0 - abs(vNormal.y);
+                    float slope = 1.0 - vNormal.y;
                     
-                    vec2 texCoord = vWorldPosition.xz * 0.02;
+                    // Use world position for texture sampling
+                    vec2 texCoord = vWorldPosition.xz * 0.1;
                     vec3 dirtColor = texture2D(uDirt, texCoord).rgb;
                     vec3 grassColor = texture2D(uGrass, texCoord).rgb;
                     vec3 rockColor = texture2D(uRock, texCoord).rgb;
                     vec3 snowColor = texture2D(uSnow, texCoord).rgb;
                     
-                    float dirtMix = smoothstep(-2.0, 1.0, -height);
-                    float grassMix = smoothstep(-5.0, 8.0, height) * smoothstep(0.5, 0.0, slope);
-                    float rockMix = smoothstep(0.3, 0.7, slope);
-                    float snowMix = smoothstep(5.0, 10.0, height);
+                    // Terrain mixing
+                    float dirtMix = clamp(1.0 - height * 0.1, 0.0, 1.0);
+                    float grassMix = clamp(height * 0.1 - slope, 0.0, 1.0);
+                    float rockMix = clamp(slope * 0.5, 0.0, 1.0);
+                    float snowMix = clamp(height * 0.05 - 0.5, 0.0, 1.0);
                     
-                    float sum = dirtMix + grassMix + rockMix + snowMix + 0.001;
-                    dirtMix /= sum; grassMix /= sum; rockMix /= sum; snowMix /= sum;
+                    float sum = dirtMix + grassMix + rockMix + snowMix;
+                    if (sum > 0.0) {
+                        dirtMix /= sum; grassMix /= sum; rockMix /= sum; snowMix /= sum;
+                    } else {
+                        grassMix = 1.0;
+                    }
                     
                     vec3 color = dirtColor * dirtMix + grassColor * grassMix + rockColor * rockMix + snowColor * snowMix;
-                    
-                    float lightIntensity = max(dot(vNormal, normalize(uLightDir)), 0.0);
-                    float light = lightIntensity * 0.6 + 0.4;
-                    
+                    float light = max(dot(vNormal, uLightDir), 0.0) * 0.7 + 0.3;
                     gl_FragColor = vec4(color * light, 1.0);
                 }
             `,
@@ -98,128 +107,128 @@ class SimpleTerrainRenderer {
                 uGrass: { value: this.textures.grass },
                 uRock: { value: this.textures.rock },
                 uSnow: { value: this.textures.snow },
-                uLightDir: { value: new THREE.Vector3(0.5, 1, 0.5).normalize() }
+                uLightDir: { value: new THREE.Vector3(1, 1, 1).normalize() }
             },
-            side: THREE.DoubleSide
+            side: THREE.FrontSide
         });
     }
 
-    // Simple Perlin-like noise function (inline to avoid worker complexity)
-    noise(x, z) {
-        // Simple deterministic noise
-        const n = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453;
-        return (n - Math.floor(n)) * 2 - 1;
+    createTerrainWorker() {
+        const workerCode = `
+            const perm = new Uint8Array([${[151,160,137,91,90,15,131,13,201,95,96,53,194,233,7,225,140,36,103,30,69,142,8,99,37,240,21,10,23,190,6,148,247,120,234,75,0,26,197,62,94,252,219,203,117,35,11,32,57,177,33,88,237,149,56,87,174,20,125,136,171,168,68,175,74,165,71,134,139,48,27,166,77,146,158,231,83,111,229,122,60,211,133,230,220,105,92,41,55,46,245,40,244,102,143,54,65,25,63,161,1,216,80,73,209,76,132,187,208,89,18,169,200,196,135,130,116,188,159,86,164,100,109,198,173,186,3,64,52,217,226,250,124,123,5,202,38,147,118,126,255,82,85,212,207,206,59,227,47,16,58,17,182,189,28,42,223,183,170,213,119,248,152,2,44,154,163,70,221,153,101,155,167,43,172,9,129,22,39,253,19,98,108,110,79,113,224,232,178,185,112,104,218,246,97,228,251,34,242,193,238,210,144,12,191,179,162,241,81,51,145,235,249,14,239,107,49,192,214,31,181,199,106,157,184,84,204,176,115,121,50,45,127,4,150,254,138,236,205,93,222,114,67,29,24,72,243,141,128,195,78,66,215,61,156,180].join(',')}]);
+            
+            function fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
+            function lerp(t, a, b) { return a + t * (b - a); }
+            function grad(hash, x, y, z) {
+                const h = hash & 15;
+                const u = h < 8 ? x : y;
+                const v = h < 4 ? y : h === 12 || h === 14 ? x : z;
+                return ((h & 1) === 0 ? u : -u) + ((h & 2) === 0 ? v : -v);
+            }
+            function perlin(x, y, z) {
+                const X = Math.floor(x) & 255, Y = Math.floor(y) & 255, Z = Math.floor(z) & 255;
+                x -= Math.floor(x); y -= Math.floor(y); z -= Math.floor(z);
+                const u = fade(x), v = fade(y), w = fade(z);
+                const A = perm[X] + Y, AA = perm[A] + Z, AB = perm[A + 1] + Z,
+                      B = perm[X + 1] + Y, BA = perm[B] + Z, BB = perm[B + 1] + Z;
+                return lerp(w, lerp(v, lerp(u, grad(perm[AA], x, y, z), grad(perm[BA], x - 1, y, z)),
+                                      lerp(u, grad(perm[AB], x, y - 1, z), grad(perm[BB], x - 1, y - 1, z))),
+                              lerp(v, lerp(u, grad(perm[AA + 1], x, y, z - 1), grad(perm[BA + 1], x - 1, y, z - 1)),
+                                      lerp(u, grad(perm[AB + 1], x, y - 1, z - 1), grad(perm[BB + 1], x - 1, y - 1, z - 1))));
+            }
+            self.onmessage = function(e) {
+                if (e.data.type === 'calculateHeightBatch') {
+                    const { points, batchId } = e.data.data;
+                    const results = points.map(point => {
+                        const height = perlin(point.x * 0.02, 0, point.z * 0.02) * 10;
+                        return { x: point.x, z: point.z, height, index: point.index };
+                    });
+                    self.postMessage({ type: 'heightBatchResult', data: { results, batchId } });
+                }
+            };
+        `;
+        const blob = new Blob([workerCode], { type: 'application/javascript' });
+        const worker = new Worker(URL.createObjectURL(blob));
+        worker.onmessage = this.handleWorkerMessage.bind(this);
+        return worker;
     }
 
-    // Smooth noise with multiple octaves
-    smoothNoise(x, z, octaves = 4) {
-        let value = 0;
-        let amplitude = 1;
-        let frequency = 0.01;
-        let maxValue = 0;
-        
-        for (let i = 0; i < octaves; i++) {
-            const sampleX = x * frequency;
-            const sampleZ = z * frequency;
+    handleWorkerMessage(e) {
+        const { type, data } = e.data;
+        if (type === 'heightBatchResult') {
+            const { results, batchId } = data;
+            const pending = this.pendingChunks.get(batchId);
+            if (!pending) return;
             
-            // Bilinear interpolation for smoother noise
-            const x0 = Math.floor(sampleX);
-            const x1 = x0 + 1;
-            const z0 = Math.floor(sampleZ);
-            const z1 = z0 + 1;
+            const { geometry, chunkX, chunkZ } = pending;
+            const positions = geometry.attributes.position.array;
             
-            const sx = sampleX - x0;
-            const sz = sampleZ - z0;
+            for (let i = 0; i < results.length; i++) {
+                const { height, index } = results[i];
+                positions[index + 1] = height;
+            }
             
-            const n00 = this.noise(x0, z0);
-            const n10 = this.noise(x1, z0);
-            const n01 = this.noise(x0, z1);
-            const n11 = this.noise(x1, z1);
-            
-            const nx0 = n00 * (1 - sx) + n10 * sx;
-            const nx1 = n01 * (1 - sx) + n11 * sx;
-            const nxz = nx0 * (1 - sz) + nx1 * sz;
-            
-            value += nxz * amplitude;
-            maxValue += amplitude;
-            amplitude *= 0.5;
-            frequency *= 2;
+            geometry.attributes.position.needsUpdate = true;
+            geometry.computeVertexNormals();
+            this.finishTerrainChunk(geometry, chunkX, chunkZ);
+            this.pendingChunks.delete(batchId);
         }
-        
-        return value / maxValue;
     }
 
     addTerrainChunk(chunkId) {
         const coords = this.chunkIdToCoords(chunkId);
         const [chunkX, chunkZ] = coords;
         
-        const chunkKey = `${chunkX},${chunkZ}`;
-        if (this.terrainChunks.has(chunkKey)) {
+        // Check if chunk already exists
+        if (this.terrainChunks.has(`${chunkX},${chunkZ}`)) {
             return; 
         }
         
-        console.log(`Creating terrain chunk at (${chunkX}, ${chunkZ})`);
-        
-        // Create geometry
         const geometry = new THREE.PlaneGeometry(
             CONFIG.TERRAIN.chunkSize,
             CONFIG.TERRAIN.chunkSize,
             CONFIG.TERRAIN.segments,
             CONFIG.TERRAIN.segments
         );
-        
-        // Rotate to be horizontal
         geometry.rotateX(-Math.PI / 2);
         
-        // Get vertex positions
         const positions = geometry.attributes.position.array;
-        const vertexCount = positions.length / 3;
+        const pointsToCalculate = [];
         
-        console.log(`Processing ${vertexCount} vertices for chunk ${chunkId}`);
-        
-        // Generate heights for all vertices
-        for (let i = 0; i < vertexCount; i++) {
-            const vertexIndex = i * 3;
-            
-            // Get local vertex position (relative to chunk center)
-            const localX = positions[vertexIndex];
-            const localZ = positions[vertexIndex + 2];
-            
-            // Convert to world position
+        for (let i = 0; i < positions.length; i += 3) {
+            // FIXED: Proper world coordinate calculation
+            const localX = positions[i];
+            const localZ = positions[i + 2];
             const worldX = chunkX + localX;
             const worldZ = chunkZ + localZ;
-            
-            // Generate height using smooth noise
-            const height = this.smoothNoise(worldX, worldZ, 3) * 8;
-            
-            // Set the Y coordinate (height)
-            positions[vertexIndex + 1] = height;
+            pointsToCalculate.push({ x: worldX, z: worldZ, index: i });
         }
         
-        // Update geometry
-        geometry.attributes.position.needsUpdate = true;
-        geometry.computeVertexNormals();
-        
-        // Create mesh
+        if (pointsToCalculate.length > 0) {
+            const batchId = chunkId;
+            this.pendingChunks.set(batchId, { geometry, chunkX, chunkZ });
+            this.terrainWorker.postMessage({
+                type: 'calculateHeightBatch',
+                data: { points: pointsToCalculate, batchId }
+            });
+        }
+    }
+
+    finishTerrainChunk(geometry, chunkX, chunkZ) {
         const mesh = new THREE.Mesh(geometry, this.terrainMaterial);
         mesh.position.set(chunkX, 0, chunkZ);
-        
-        // Add to scene and store reference
         this.scene.add(mesh);
-        this.terrainChunks.set(chunkKey, mesh);
-        
-        console.log(`Successfully added terrain chunk at (${chunkX}, ${chunkZ})`);
+        this.terrainChunks.set(`${chunkX},${chunkZ}`, mesh);
+        console.log(`Added terrain chunk at (${chunkX}, ${chunkZ})`);
     }
 
     removeTerrainChunk(chunkId) {
         const coords = this.chunkIdToCoords(chunkId);
         const [chunkX, chunkZ] = coords;
-        const chunkKey = `${chunkX},${chunkZ}`;
-        
-        const mesh = this.terrainChunks.get(chunkKey);
+        const mesh = this.terrainChunks.get(`${chunkX},${chunkZ}`);
         if (mesh) {
             this.scene.remove(mesh);
-            this.terrainChunks.delete(chunkKey);
+            this.terrainChunks.delete(`${chunkX},${chunkZ}`);
             mesh.geometry.dispose();
             console.log(`Removed chunk: ${chunkId}`);
         }
@@ -242,9 +251,11 @@ class SimpleTerrainRenderer {
             mesh.geometry.dispose();
         });
         this.terrainChunks.clear();
-        
         if (this.terrainMaterial) {
             this.terrainMaterial.dispose();
+        }
+        if (this.terrainWorker) {
+            this.terrainWorker.terminate();
         }
     }
 }
