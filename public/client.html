@@ -502,7 +502,15 @@
             
             updateStatus(`🏠 Chunk update: ${chunkState.players.length} players, box: ${chunkState.boxPresent}`);
             
-            terrainRenderer.addTerrainChunk(payload.chunkId);
+            // Extract seed from server payload
+            const seed = chunkState.seed || 0; // Default to 0 if not provided
+            
+            // Add terrain chunk with numerical coordinates and seed
+            // For simplicity, assuming chunkId is 'chunk_x_z', parse to get chunkX, chunkZ
+            const parts = payload.chunkId.split('_');
+            const chunkX = parseInt(parts[1]) * 50; // Assuming chunkSize=50
+            const chunkZ = parseInt(parts[2]) * 50;
+            terrainRenderer.addTerrainChunk({ chunkX, chunkZ, seed });
             
             if (chunkState.boxPresent) {
                 const existingBox = scene.getObjectByName('serverBox');
@@ -590,21 +598,23 @@
 
         // --- BUTTON HANDLERS ---
         joinBtn.onclick = () => {
-            const chunkCoords = [];
+            const chunkSize = 50; // Match CONFIG.TERRAIN.chunkSize in terrain.js
             const radius = 1; // 3x3 grid
-            for (let x = -radius; x <= radius; x++) {
-                for (let z = -radius; z <= radius; z++) {
-                    chunkCoords.push({ x, z });
-                }
-            }
             let hasJoined = false;
-            for (const coords of chunkCoords) {
-                const chunkId = `chunk_${coords.x}_${coords.z}`;
-                terrainRenderer.addTerrainChunk(chunkId);
-                // Join only the central chunk for server state
-                if (coords.x === 0 && coords.z === 0) {
-                    if (sendServerMessage('join_chunk', { chunkId: chunkId, clientId: clientId })) {
-                        hasJoined = true;
+            for (let indexX = -radius; indexX <= radius; indexX++) {
+                for (let indexZ = -radius; indexZ <= radius; indexZ++) {
+                    const chunkX = indexX * chunkSize;
+                    const chunkZ = indexZ * chunkSize;
+                    const chunkId = `chunk_${indexX}_${indexZ}`; // Keep string ID for server compatibility
+                    
+                    // Add terrain chunk with numerical coordinates (seed will be provided later from server)
+                    terrainRenderer.addTerrainChunk({ chunkX, chunkZ });
+                    
+                    // Join only the central chunk for server state
+                    if (indexX === 0 && indexZ === 0) {
+                        if (sendServerMessage('join_chunk', { chunkId, clientId })) {
+                            hasJoined = true;
+                        }
                     }
                 }
             }
@@ -629,6 +639,7 @@
         // --- ANIMATION LOOP ---
         const playerSpeed = 0.05;
         const stopThreshold = 0.01;
+        let lastFrameTime = performance.now();
         
         function animate() {
             requestAnimationFrame(animate);
@@ -716,7 +727,6 @@
         });
 
         // --- INITIALIZATION ---
-        let lastFrameTime = performance.now();
         updateStatus("🎮 Game initialized");
         updateStatus("📋 Click 'Join Chunk' to start");
         updateConnectionStatus('connecting', '🔄 Connecting...');

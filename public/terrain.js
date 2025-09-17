@@ -143,9 +143,11 @@ class SimpleTerrainRenderer {
             }
             self.onmessage = function(e) {
                 if (e.data.type === 'calculateHeightBatch') {
-                    const { points, batchId } = e.data.data;
+                    const { points, batchId, seed } = e.data.data;
                     const results = points.map(point => {
-                        const height = perlin(point.x * 0.02, 0, point.z * 0.02) * 10;
+                        // Apply seed as offset to coordinates for seeded noise
+                        const offset = seed * 0.001;
+                        const height = perlin(point.x * 0.02 + offset, 0, point.z * 0.02 + offset) * 10;
                         return { x: point.x, z: point.z, height, index: point.index };
                     });
                     self.postMessage({ type: 'heightBatchResult', data: { results, batchId } });
@@ -170,7 +172,7 @@ class SimpleTerrainRenderer {
             
             for (let i = 0; i < results.length; i++) {
                 const { height, index } = results[i];
-                positions[index + 1] = height;
+                positions[index + 1] = height; // y is height
             }
             
             geometry.attributes.position.needsUpdate = true;
@@ -180,16 +182,15 @@ class SimpleTerrainRenderer {
         }
     }
 
-    addTerrainChunk(chunkId) {
-        const coords = this.chunkIdToCoords(chunkId);
-        const [chunkX, chunkZ] = coords;
+    addTerrainChunk({ chunkX = 0, chunkZ = 0, seed = 0 }) {
+        const key = `${chunkX},${chunkZ}`;
         
         // Check if chunk already exists
-        if (this.terrainChunks.has(`${chunkX},${chunkZ}`)) {
+        if (this.terrainChunks.has(key)) {
             return; 
         }
         
-        console.log(`Creating terrain chunk at (${chunkX}, ${chunkZ})`);
+        console.log(`Creating terrain chunk at (${chunkX}, ${chunkZ}) with seed ${seed}`);
         
         const geometry = new THREE.PlaneGeometry(
             CONFIG.TERRAIN.chunkSize,
@@ -197,12 +198,11 @@ class SimpleTerrainRenderer {
             CONFIG.TERRAIN.segments,
             CONFIG.TERRAIN.segments
         );
-        geometry.rotateX(-Math.PI / 2);
+        // No rotation: PlaneGeometry is now in xz-plane, with y as height
         
         const positions = geometry.attributes.position.array;
         const pointsToCalculate = [];
         
-        // FIXED: Process vertices in proper grid order
         const segmentSize = CONFIG.TERRAIN.chunkSize / CONFIG.TERRAIN.segments;
         const halfSize = CONFIG.TERRAIN.chunkSize / 2;
         
@@ -210,11 +210,18 @@ class SimpleTerrainRenderer {
             for (let col = 0; col <= CONFIG.TERRAIN.segments; col++) {
                 const vertexIndex = (row * (CONFIG.TERRAIN.segments + 1) + col) * 3;
                 
-                // Calculate world position properly
+                // Calculate local position (x, 0, z) - y will be set to height later
                 const localX = -halfSize + col * segmentSize;
-                const localZ = -halfSize + row * segmentSize;
+                const localZ = -halfSize + row * segmentSize; // Note: row increases z positively
+                
+                // World positions for noise
                 const worldX = chunkX + localX;
-                const worldZ = chunkZ - localZ;
+                const worldZ = chunkZ + localZ;
+                
+                // Set initial position (y=0)
+                positions[vertexIndex] = localX;     // x
+                positions[vertexIndex + 1] = 0;      // y (height to be computed)
+                positions[vertexIndex + 2] = localZ; // z
                 
                 pointsToCalculate.push({ 
                     x: worldX, 
@@ -225,11 +232,11 @@ class SimpleTerrainRenderer {
         }
         
         if (pointsToCalculate.length > 0) {
-            const batchId = chunkId;
+            const batchId = key;
             this.pendingChunks.set(batchId, { geometry, chunkX, chunkZ });
             this.terrainWorker.postMessage({
                 type: 'calculateHeightBatch',
-                data: { points: pointsToCalculate, batchId }
+                data: { points: pointsToCalculate, batchId, seed }
             });
         }
     }
@@ -242,27 +249,15 @@ class SimpleTerrainRenderer {
         console.log(`Added terrain chunk at (${chunkX}, ${chunkZ})`);
     }
 
-    removeTerrainChunk(chunkId) {
-        const coords = this.chunkIdToCoords(chunkId);
-        const [chunkX, chunkZ] = coords;
-        const mesh = this.terrainChunks.get(`${chunkX},${chunkZ}`);
+    removeTerrainChunk({ chunkX, chunkZ }) {
+        const key = `${chunkX},${chunkZ}`;
+        const mesh = this.terrainChunks.get(key);
         if (mesh) {
             this.scene.remove(mesh);
-            this.terrainChunks.delete(`${chunkX},${chunkZ}`);
+            this.terrainChunks.delete(key);
             mesh.geometry.dispose();
-            console.log(`Removed chunk: ${chunkId}`);
+            console.log(`Removed chunk at (${chunkX}, ${chunkZ})`);
         }
-    }
-    
-    chunkIdToCoords(chunkId) {
-        const parts = chunkId.split('_');
-        if (parts.length === 3 && parts[0] === 'chunk') {
-            const x = parseInt(parts[1]) * CONFIG.TERRAIN.chunkSize;
-            const z = parseInt(parts[2]) * CONFIG.TERRAIN.chunkSize;
-            return [x, z];
-        }
-        console.error(`Invalid chunkId: ${chunkId}`);
-        return [0, 0];
     }
 
     clearChunks() {

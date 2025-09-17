@@ -11,6 +11,9 @@ const chunkCache = new Map();
 // A map to quickly find a client's WebSocket connection by their player ID
 const clients = new Map();
 
+// Define a global terrain seed (can be fixed or dynamically generated)
+const terrainSeed = Math.floor(Math.random() * 1000000); // Example: Random seed per server start
+
 // Save the chunk state to its file
 function saveChunk(chunkId) {
     if (chunkCache.has(chunkId)) {
@@ -83,8 +86,8 @@ wss.on('connection', ws => {
 
                 let chunkData = loadChunk(chunkId);
                 if (!chunkData) {
-                    // Initialize chunk if it doesn't exist
-                    chunkData = { players: [], boxPresent: false };
+                    // Initialize chunk if it doesn't exist, including the seed
+                    chunkData = { players: [], boxPresent: false, seed: terrainSeed };
                     chunkCache.set(chunkId, chunkData);
                     saveChunk(chunkId);
                 }
@@ -96,7 +99,7 @@ wss.on('connection', ws => {
                     saveChunk(chunkId);
                 }
 
-                // Broadcast to ALL clients in the chunk
+                // Broadcast to ALL clients in the chunk, including the seed
                 broadcastToChunk(chunkId, {
                     type: 'chunk_state_change',
                     payload: { chunkId, state: chunkData }
