@@ -337,14 +337,19 @@
         }
 
         // --- BOX VISUAL EFFECTS (P2P ONLY) ---
+// --- BOX VISUAL EFFECTS (P2P ONLY) ---
+        // Define the box's original color as a constant
+        const originalBoxColor = new THREE.Color(0x00ff00);
+
         function flashBox() {
             if (!boxInScene) return;
             
-            const originalColor = box.material.color.getHex();
+            // Set the color to red
             box.material.color.setHex(0xff4444);
             
+            // After 300ms, set the color back to the original green
             setTimeout(() => {
-                box.material.color.setHex(originalColor);
+                box.material.color.copy(originalBoxColor);
             }, 300);
             
             updateStatus("⚡ Box flashed!");
