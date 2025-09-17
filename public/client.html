@@ -3,17 +3,80 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multiplayer Game Prototype</title>
+    <title>Multiplayer Game Prototype - Fixed</title>
     <style>
         body { margin: 0; overflow: hidden; }
         canvas { display: block; }
+        .controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 100;
+        }
+        button {
+            margin-right: 10px;
+            padding: 10px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        #status {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            max-width: 400px;
+        }
+        #connectionStatus {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 14px;
+            z-index: 100;
+            transition: all 0.3s ease;
+        }
+        .status-connecting {
+            background: #ff9800;
+            color: white;
+            animation: pulse 1.5s infinite;
+        }
+        .status-connected {
+            background: #4caf50;
+            color: white;
+        }
+        .status-disconnected {
+            background: #f44336;
+            color: white;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
     </style>
 </head>
 <body>
-    <button id="addBoxBtn" style="position: absolute; top: 10px; left: 100px;">Add Box</button>
-    <button id="removeBoxBtn" style="position: absolute; top: 10px; left: 180px;">Remove Box</button>
-    <button id="joinChunkBtn" style="position: absolute; top: 10px; left: 10px;">Join Chunk</button>
-    <button id="flashBoxBtn" style="position: absolute; top: 10px; left: 300px;">Flash Box</button>
+    <div class="controls">
+        <button id="joinChunkBtn">Join Chunk</button>
+        <button id="addBoxBtn">Add Box</button>
+        <button id="removeBoxBtn">Remove Box</button>
+        <button id="flashBoxBtn">Flash Box</button>
+    </div>
+    <div id="connectionStatus" class="status-connecting">🔄 Connecting...</div>
+    <div id="status">Connecting...</div>
+    
     <script type="importmap">
         {
           "imports": {
@@ -32,18 +95,33 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // Add a simple light to the scene
-        const light = new THREE.AmbientLight(0x404040);
+        // Add lighting
+        const light = new THREE.AmbientLight(0x404040, 0.5);
         scene.add(light);
         const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-        directionalLight.position.set(5, 5, 5).normalize();
+        directionalLight.position.set(5, 5, 5);
         scene.add(directionalLight);
+
+        // Status element
+        const statusEl = document.getElementById('status');
+        const connectionStatusEl = document.getElementById('connectionStatus');
+        
+        function updateStatus(msg) {
+            statusEl.innerHTML += msg + '<br>';
+            statusEl.scrollTop = statusEl.scrollHeight;
+            console.log(msg);
+        }
+
+        function updateConnectionStatus(status, message) {
+            connectionStatusEl.className = `status-${status}`;
+            connectionStatusEl.innerHTML = message;
+        }
 
         // --- 2. CONNECT TO THE SERVER ---
         const ws = new WebSocket('wss://multiplayer-game-dcwy.onrender.com');
 
-        // P2P variables
-        let otherClients = new Map(); // peer connection + data channel per client
+        // P2P variables - FIXED STRUCTURE
+        let otherClients = new Map(); // Now properly stores both peerConnection and dataChannel
 
         function createPeerConnection(otherClientId) {
             const configuration = {
@@ -61,11 +139,28 @@
                 }
             };
 
+            // Handle incoming data channel (when peer creates one)
             peerConnection.ondatachannel = event => {
                 const receivedDataChannel = event.channel;
-                console.log("Data Channel established with peer!");
+                updateStatus(`Data channel received from ${otherClientId}`);
+                
+                receivedDataChannel.onopen = () => {
+                    updateStatus(`Data channel with ${otherClientId} is now open (received)`);
+                };
+                
                 receivedDataChannel.onmessage = handleDataChannelMessage;
-                otherClients.set(otherClientId, { ...otherClients.get(otherClientId), dataChannel: receivedDataChannel });
+                
+                // FIXED: Properly update the stored peer info
+                const existingPeer = otherClients.get(otherClientId) || {};
+                otherClients.set(otherClientId, {
+                    ...existingPeer,
+                    dataChannel: receivedDataChannel,
+                    peerConnection: peerConnection
+                });
+            };
+
+            peerConnection.onconnectionstatechange = () => {
+                updateStatus(`Connection state with ${otherClientId}: ${peerConnection.connectionState}`);
             };
 
             return peerConnection;
@@ -73,59 +168,109 @@
 
         function handleDataChannelMessage(event) {
             const message = JSON.parse(event.data);
-            console.log("P2P Message from peer:", message);
+            updateStatus(`P2P Message received: ${message.type}`);
+            
             if (message.type === 'flash_box') {
                 flashBox(box);
             }
         }
 
         function flashBox(obj) {
+            if (!obj || !scene.children.includes(obj)) {
+                updateStatus("Cannot flash box - not present in scene");
+                return;
+            }
+            
             const originalColor = obj.material.color.getHex();
             obj.material.color.setHex(0xff0000);
             setTimeout(() => {
                 obj.material.color.setHex(originalColor);
             }, 500);
+            updateStatus("Box flashed!");
         }
 
-        ws.onopen = () => console.log("Connected to the server.");
-        ws.onclose = () => console.log("Disconnected from the server.");
-        ws.onerror = error => console.error("WebSocket Error:", error);
+        ws.onopen = () => {
+            updateStatus("Connected to server");
+            updateConnectionStatus('connected', '✅ Connected');
+            ws.clientId = Math.random().toString(36).substr(2, 9); // Generate client ID
+        };
+
+        ws.onclose = () => {
+            updateStatus("Disconnected from server");
+            updateConnectionStatus('disconnected', '❌ Disconnected');
+        };
+        
+        ws.onerror = error => {
+            updateStatus(`WebSocket Error: ${error}`);
+            updateConnectionStatus('disconnected', '❌ Error');
+        };
 
         // --- Handle server messages ---
         ws.onmessage = function(event) {
             const data = JSON.parse(event.data);
-            console.log("Message from server:", data);
+            updateStatus(`Server message: ${data.type}`);
 
             if (data.type === 'webrtc_offer') {
-                const peerConn = createPeerConnection(data.payload.senderId);
+                const senderId = data.payload.senderId;
+                const peerConn = createPeerConnection(senderId);
+                
+                // FIXED: Store the peer connection immediately
+                otherClients.set(senderId, {
+                    peerConnection: peerConn,
+                    dataChannel: null
+                });
+
                 peerConn.setRemoteDescription(new RTCSessionDescription(data.payload.offer))
                     .then(() => peerConn.createAnswer())
                     .then(answer => peerConn.setLocalDescription(answer))
                     .then(() => {
                         sendMessage('webrtc_answer', {
-                            recipientId: data.payload.senderId,
+                            recipientId: senderId,
                             senderId: ws.clientId,
                             answer: peerConn.localDescription
                         });
                     });
+
             } else if (data.type === 'webrtc_answer') {
-                const peerConn = otherClients.get(data.payload.senderId);
-                peerConn.setRemoteDescription(new RTCSessionDescription(data.payload.answer));
-            } else if (data.type === 'webrtc_ice_candidate') {
-                const peerConn = otherClients.get(data.payload.senderId);
-                if (peerConn) { 
-                    peerConn.addIceCandidate(new RTCIceCandidate(data.payload.candidate));
+                const senderId = data.payload.senderId;
+                const peerInfo = otherClients.get(senderId);
+                if (peerInfo && peerInfo.peerConnection) {
+                    peerInfo.peerConnection.setRemoteDescription(new RTCSessionDescription(data.payload.answer));
+                } else {
+                    updateStatus(`No peer connection found for answer from ${senderId}`);
                 }
-            } 
-            // 🔴 persistent: server broadcasts authoritative state
-            else if (data.type === 'chunk_state_change') {
+
+            } else if (data.type === 'webrtc_ice_candidate') {
+                const senderId = data.payload.senderId;
+                const peerInfo = otherClients.get(senderId);
+                if (peerInfo && peerInfo.peerConnection) {
+                    peerInfo.peerConnection.addIceCandidate(new RTCIceCandidate(data.payload.candidate));
+                } else {
+                    updateStatus(`No peer connection found for ICE candidate from ${senderId}`);
+                }
+
+            } else if (data.type === 'chunk_state_change') {
                 const chunkState = data.payload.state;
+                
+                // Establish P2P connections with other players
                 chunkState.players.forEach(player => {
                     if (player.id !== ws.clientId && !otherClients.has(player.id)) {
+                        updateStatus(`Establishing P2P connection with ${player.id}`);
+                        
                         const peerConn = createPeerConnection(player.id);
-                        const dataChannel = peerConn.createDataChannel("chat");
+                        const dataChannel = peerConn.createDataChannel("game");
+                        
+                        dataChannel.onopen = () => {
+                            updateStatus(`Data channel with ${player.id} is now open (created)`);
+                        };
+                        
                         dataChannel.onmessage = handleDataChannelMessage;
-                        otherClients.set(player.id, { ...otherClients.get(player.id), dataChannel: dataChannel });
+
+                        // FIXED: Properly store both peerConnection and dataChannel
+                        otherClients.set(player.id, {
+                            peerConnection: peerConn,
+                            dataChannel: dataChannel
+                        });
 
                         peerConn.createOffer()
                             .then(offer => peerConn.setLocalDescription(offer))
@@ -139,18 +284,22 @@
                     }
                 });
 
-                // 🔴 update box ONLY when server says so
+                // Update box state based on server authority
                 if (chunkState.boxPresent) {
-                    if (!scene.children.includes(box)) scene.add(box);
+                    if (!scene.children.includes(box)) {
+                        scene.add(box);
+                        updateStatus("Box added to scene");
+                    }
                 } else {
                     scene.remove(box);
+                    updateStatus("Box removed from scene");
                 }
             }
         };
 
         // --- 3. CREATE A SIMPLE VISUAL OBJECT ---
         const geometry = new THREE.BoxGeometry(1, 1, 1);
-        const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+        const material = new THREE.MeshLambertMaterial({ color: 0x00ff00 });
         const box = new THREE.Mesh(geometry, material);
         box.position.set(0, 0.5, -5);
 
@@ -158,9 +307,10 @@
         function sendMessage(type, payload) {
             if (ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type, payload }));
-                console.log(`Sent message: ${type}`);
+                updateStatus(`Sent: ${type}`);
             } else {
-                console.error("WebSocket is not open.");
+                updateStatus("WebSocket not open - cannot send message");
+                updateConnectionStatus('disconnected', '❌ Not Connected');
             }
         }
 
@@ -170,32 +320,48 @@
         };
 
         document.getElementById('addBoxBtn').onclick = () => {
-            // 🔴 request only — no local add
             sendMessage('add_box_request', { chunkId: 'chunkA', position: box.position });
         };
 
         document.getElementById('removeBoxBtn').onclick = () => {
-            // 🔴 request only — no local remove
             sendMessage('remove_box_request', { chunkId: 'chunkA' });
         };
 
         document.getElementById('flashBoxBtn').onclick = () => {
-            // 🔴 flash locally + send via P2P
+            // Flash locally first
             flashBox(box);
-            let sent = false;
-            otherClients.forEach(peer => {
-                if (peer.dataChannel && peer.dataChannel.readyState === 'open') {
-                    peer.dataChannel.send(JSON.stringify({ type: 'flash_box' }));
-                    sent = true;
+            
+            // Send flash message via P2P
+            let sentCount = 0;
+            otherClients.forEach((peerInfo, peerId) => {
+                if (peerInfo.dataChannel && peerInfo.dataChannel.readyState === 'open') {
+                    peerInfo.dataChannel.send(JSON.stringify({ type: 'flash_box' }));
+                    sentCount++;
+                    updateStatus(`Flash sent to ${peerId}`);
+                } else {
+                    updateStatus(`Cannot send flash to ${peerId} - channel not open (state: ${peerInfo.dataChannel?.readyState || 'null'})`);
                 }
             });
-            if (!sent) console.warn("No open P2P channels to send flash_box");
+            
+            if (sentCount === 0) {
+                updateStatus("No open P2P channels available");
+            } else {
+                updateStatus(`Flash sent to ${sentCount} peer(s)`);
+            }
         };
 
         // --- 6. ANIMATION LOOP ---
         camera.position.z = 5;
+        
         function animate() {
             requestAnimationFrame(animate);
+            
+            // Add some rotation to make it more visually interesting
+            if (scene.children.includes(box)) {
+                box.rotation.x += 0.01;
+                box.rotation.y += 0.01;
+            }
+            
             renderer.render(scene, camera);
         }
         animate();
@@ -206,6 +372,8 @@
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
+
+        updateStatus("Game initialized - Click 'Join Chunk' to start");
     </script>
 </body>
 </html>
