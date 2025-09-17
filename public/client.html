@@ -676,7 +676,7 @@
             checkAndReconnectPeers();
             
             // Update camera position to follow the player
-            const cameraOffset = new THREE.Vector3(-15, 20, 25);
+            const cameraOffset = new THREE.Vector3(-15, 20, 35);
             const cameraTargetPosition = playerObject.position.clone().add(cameraOffset);
             const smoothedCameraPosition = camera.position.lerp(cameraTargetPosition, 0.1);
             camera.position.copy(smoothedCameraPosition);
