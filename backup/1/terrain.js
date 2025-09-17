@@ -157,7 +157,7 @@ class SimpleTerrainRenderer {
         }
     }
 
-    addTerrainChunk(chunkId) {
+addTerrainChunk(chunkId) {
         const coords = this.chunkIdToCoords(chunkId);
         const [x, z] = coords;
         
@@ -211,10 +211,10 @@ class SimpleTerrainRenderer {
         }
     }
 
-    chunkIdToCoords(chunkId) {
-        // This will now always return coordinates for the origin
-        return [0, 0];
-    }
+chunkIdToCoords(chunkId) {
+    // This will now always return coordinates for the origin
+    return [0, 0];
+}
 
     clearChunks() {
         this.terrainChunks.forEach((mesh, chunkId) => {

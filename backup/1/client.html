@@ -92,6 +92,7 @@
         <button id="joinChunkBtn">Join Chunk</button>
         <button id="addBoxBtn" disabled>Add Box</button>
         <button id="removeBoxBtn" disabled>Remove Box</button>
+        <button id="flashBoxBtn" disabled>Flash Box</button>
     </div>
     <div id="connectionStatus" class="status-connecting">🔄 Connecting...</div>
     <div id="peerInfo">P2P Connections: 0</div>
@@ -115,8 +116,6 @@
         let boxInScene = false;
         const peers = new Map(); // peerId -> { connection, dataChannel, state }
         let terrainRenderer = null; // Initialize terrain renderer
-        const avatars = new Map(); // peerId -> THREE.Mesh
-        const keyboardState = {};
 
         // --- UI ELEMENTS ---
         const statusEl = document.getElementById('status');
@@ -125,6 +124,7 @@
         const joinBtn = document.getElementById('joinChunkBtn');
         const addBtn = document.getElementById('addBoxBtn');
         const removeBtn = document.getElementById('removeBoxBtn');
+        const flashBtn = document.getElementById('flashBoxBtn');
 
         function updateStatus(msg) {
             const timestamp = new Date().toLocaleTimeString();
@@ -140,13 +140,14 @@
 
         function updatePeerInfo() {
             const connectedPeers = Array.from(peers.values()).filter(p => p.state === 'connected');
-            peerInfoEl.innerHTML = `P2P Connections: ${connectedPeers.length}/${peers.size}<br>Avatars: ${avatars.size}`;
+            peerInfoEl.innerHTML = `P2P Connections: ${connectedPeers.length}/${peers.size}`;
             updateButtonStates();
         }
 
         function updateButtonStates() {
             addBtn.disabled = !isInChunk || boxInScene;
             removeBtn.disabled = !isInChunk || !boxInScene;
+            flashBtn.disabled = !boxInScene || Array.from(peers.values()).filter(p => p.state === 'connected').length === 0;
         }
 
         // --- THREE.JS SCENE SETUP ---
@@ -169,7 +170,6 @@
         const material = new THREE.MeshLambertMaterial({ color: 0x00ff00 });
         const box = new THREE.Mesh(geometry, material);
         box.position.set(0, 0, -3);
-        box.name = 'serverBox';
 
         camera.position.set(0, 35, 20);
         camera.lookAt(0, 0, -3);
@@ -303,27 +303,17 @@
                 }
                 peers.delete(peerId);
                 updateStatus(`🧹 Cleaned up peer ${peerId}`);
+                updatePeerInfo();
             }
-            // Also remove the avatar
-            const avatar = avatars.get(peerId);
-            if (avatar) {
-                scene.remove(avatar);
-                avatars.delete(peerId);
-                updateStatus(`👋 Avatar for ${peerId} removed.`);
-            }
-            updatePeerInfo();
         }
 
         function handleP2PMessage(message, fromPeer) {
             updateStatus(`📨 P2P from ${fromPeer}: ${message.type}`);
             
             switch (message.type) {
-                case 'player_state':
-                    const { position, quaternion } = message.payload;
-                    const avatar = avatars.get(fromPeer);
-                    if (avatar) {
-                        avatar.position.fromArray(position);
-                        avatar.quaternion.fromArray(quaternion);
+                case 'flash_box':
+                    if (boxInScene) {
+                        flashBox();
                     }
                     break;
                 default:
@@ -345,21 +335,25 @@
             });
             return sentCount;
         }
-        
-        function sendPlayerState() {
-            if (isInChunk) {
-                const message = {
-                    type: 'player_state',
-                    payload: {
-                        position: camera.position.toArray(),
-                        quaternion: camera.quaternion.toArray()
-                    }
-                };
-                broadcastP2P(message);
-            }
+
+        // --- BOX VISUAL EFFECTS (P2P ONLY) ---
+// --- BOX VISUAL EFFECTS (P2P ONLY) ---
+        // Define the box's original color as a constant
+        const originalBoxColor = new THREE.Color(0x00ff00);
+
+        function flashBox() {
+            if (!boxInScene) return;
+            
+            // Set the color to red
+            box.material.color.setHex(0xff4444);
+            
+            // After 300ms, set the color back to the original green
+            setTimeout(() => {
+                box.material.color.copy(originalBoxColor);
+            }, 300);
+            
+            updateStatus("⚡ Box flashed!");
         }
-        
-        setInterval(sendPlayerState, 100);
 
         // --- SERVER MESSAGE HANDLING ---
         ws.onmessage = async function(event) {
@@ -466,29 +460,27 @@
             
             updateStatus(`🏠 Chunk update: ${chunkState.players.length} players, box: ${chunkState.boxPresent}`);
             
+ 
+            
             terrainRenderer.addTerrainChunk(payload.chunkId);
 
+
+
             // Update box state - ONLY server decides this
-            if (chunkState.boxPresent) {
-                const existingBox = scene.getObjectByName('serverBox');
-                if (!existingBox) {
-                    scene.add(box);
-                    boxInScene = true;
-                    updateStatus("📦 Box added to scene (server authority)");
-                }
-            } else {
-                const existingBox = scene.getObjectByName('serverBox');
-                if (existingBox) {
-                    scene.remove(existingBox);
-                    boxInScene = false;
-                    updateStatus("📦 Box removed from scene (server authority)");
-                }
+            if (chunkState.boxPresent && !boxInScene) {
+                scene.add(box);
+                boxInScene = true;
+                updateStatus("📦 Box added to scene (server authority)");
+            } else if (!chunkState.boxPresent && boxInScene) {
+                scene.remove(box);
+                boxInScene = false;
+                updateStatus("📦 Box removed from scene (server authority)");
             }
             
-            // Update P2P connections and avatars
+            // Update P2P connections - use deterministic connection initiation
             const otherPlayers = chunkState.players.filter(p => p.id !== clientId);
             
-            // Remove connections and avatars for players who have left
+            // Clean up connections to players who left
             peers.forEach((peer, peerId) => {
                 if (!otherPlayers.some(p => p.id === peerId)) {
                     updateStatus(`👋 Player ${peerId} left chunk`);
@@ -496,21 +488,13 @@
                 }
             });
             
-            // Establish connections and create avatars for new players
+            // Establish connections to new players
             for (const player of otherPlayers) {
                 if (!peers.has(player.id)) {
                     const shouldInitiate = clientId < player.id;
                     if (shouldInitiate) {
                         await initiateConnection(player.id);
                     }
-                }
-                if (!avatars.has(player.id)) {
-                    const geometry = new THREE.SphereGeometry(1, 32, 32);
-                    const material = new THREE.MeshBasicMaterial({ color: Math.random() * 0xffffff });
-                    const avatar = new THREE.Mesh(geometry, material);
-                    scene.add(avatar);
-                    avatars.set(player.id, avatar);
-                    updateStatus(`🟢 Avatar for ${player.id} added.`);
                 }
             }
             
@@ -575,29 +559,31 @@
         removeBtn.onclick = () => {
             sendServerMessage('remove_box_request', { chunkId: 'chunkA' });
         };
-        
-        // --- KEYBOARD CONTROLS ---
-        document.addEventListener('keydown', (e) => keyboardState[e.key.toLowerCase()] = true);
-        document.addEventListener('keyup', (e) => keyboardState[e.key.toLowerCase()] = false);
+
+        flashBtn.onclick = () => {
+            if (!boxInScene) {
+                updateStatus("❌ Cannot flash - no box in scene");
+                return;
+            }
+            
+            flashBox();
+            
+            const sentCount = broadcastP2P({ type: 'flash_box' });
+            
+            if (sentCount > 0) {
+                updateStatus(`⚡ Flash sent to ${sentCount} peer(s)`);
+            } else {
+                updateStatus("⚡ Flashed locally (no peers connected)");
+            }
+        };
 
         // --- ANIMATION LOOP ---
         function animate() {
             requestAnimationFrame(animate);
-
-            // Local player movement
-            const moveSpeed = 0.5;
-            if (keyboardState['w']) camera.translateZ(-moveSpeed);
-            if (keyboardState['s']) camera.translateZ(moveSpeed);
-            if (keyboardState['a']) camera.translateX(-moveSpeed);
-            if (keyboardState['d']) camera.translateX(moveSpeed);
-            if (keyboardState[' ']) camera.translateY(moveSpeed); // Space bar for up
-            if (keyboardState['shift']) camera.translateY(-moveSpeed); // Shift for down
             
-            // The server-controlled box should still animate
-            const serverBox = scene.getObjectByName('serverBox');
-            if (serverBox) {
-                serverBox.rotation.x += 0.005;
-                serverBox.rotation.y += 0.01;
+            if (boxInScene) {
+                box.rotation.x += 0.005;
+                box.rotation.y += 0.01;
             }
             
             renderer.render(scene, camera);
