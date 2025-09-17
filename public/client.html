@@ -455,9 +455,7 @@
             
             updateStatus(`🏠 Chunk update: ${chunkState.players.length} players, box: ${chunkState.boxPresent}`);
             
-            // Render terrain for the chunk
-            terrainRenderer.clearChunks();
-            terrainRenderer.addTerrainChunk(payload.chunkId);
+
             
             // Update box state - ONLY server decides this
             if (chunkState.boxPresent && !boxInScene) {
