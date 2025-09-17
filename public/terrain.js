@@ -198,6 +198,19 @@ addTerrainChunk(chunkId) {
         this.terrainChunks.set(`${x},${z}`, mesh);
     }
 
+    removeTerrainChunk(chunkId) {
+        const coords = this.chunkIdToCoords(chunkId);
+        const [x, z] = coords;
+        const mesh = this.terrainChunks.get(`${x},${z}`);
+        if (mesh) {
+            this.scene.remove(mesh);
+            this.terrainChunks.delete(`${x},${z}`);
+            mesh.geometry.dispose();
+            mesh.material.dispose();
+            console.log(`Removed chunk: ${chunkId}`);
+        }
+    }
+
 chunkIdToCoords(chunkId) {
     // This will now always return coordinates for the origin
     return [0, 0];
