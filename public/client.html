@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multiplayer Game Prototype - Fixed</title>
+    <title>Multiplayer Game - Server/P2P Hybrid</title>
     <style>
-        body { margin: 0; overflow: hidden; }
+        body { margin: 0; overflow: hidden; background: #1a1a1a; }
         canvas { display: block; }
         .controls {
             position: absolute;
@@ -15,26 +15,34 @@
         }
         button {
             margin-right: 10px;
-            padding: 10px;
+            padding: 10px 15px;
             background: #4CAF50;
             color: white;
             border: none;
             border-radius: 4px;
             cursor: pointer;
+            font-size: 14px;
         }
         button:hover {
             background: #45a049;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
         }
         #status {
             position: absolute;
             bottom: 10px;
             left: 10px;
-            background: rgba(0,0,0,0.7);
+            background: rgba(0,0,0,0.8);
             color: white;
             padding: 10px;
             border-radius: 4px;
             font-family: monospace;
-            max-width: 400px;
+            max-width: 500px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-size: 12px;
         }
         #connectionStatus {
             position: absolute;
@@ -65,17 +73,30 @@
             50% { opacity: 0.5; }
             100% { opacity: 1; }
         }
+        #peerInfo {
+            position: absolute;
+            top: 70px;
+            right: 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            min-width: 200px;
+        }
     </style>
 </head>
 <body>
     <div class="controls">
         <button id="joinChunkBtn">Join Chunk</button>
-        <button id="addBoxBtn">Add Box</button>
-        <button id="removeBoxBtn">Remove Box</button>
-        <button id="flashBoxBtn">Flash Box</button>
+        <button id="addBoxBtn" disabled>Add Box</button>
+        <button id="removeBoxBtn" disabled>Remove Box</button>
+        <button id="flashBoxBtn" disabled>Flash Box</button>
     </div>
     <div id="connectionStatus" class="status-connecting">🔄 Connecting...</div>
-    <div id="status">Connecting...</div>
+    <div id="peerInfo">P2P Connections: 0</div>
+    <div id="status">Initializing...</div>
     
     <script type="importmap">
         {
@@ -88,28 +109,26 @@
     <script type="module">
         import * as THREE from 'three';
 
-        // --- 1. SET UP THE SCENE ---
-        const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        document.body.appendChild(renderer.domElement);
+        // --- GLOBAL STATE ---
+        let clientId = null;
+        let isInChunk = false;
+        let boxInScene = false;
+        const peers = new Map(); // peerId -> { connection, dataChannel, state }
 
-        // Add lighting
-        const light = new THREE.AmbientLight(0x404040, 0.5);
-        scene.add(light);
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-        directionalLight.position.set(5, 5, 5);
-        scene.add(directionalLight);
-
-        // Status element
+        // --- UI ELEMENTS ---
         const statusEl = document.getElementById('status');
         const connectionStatusEl = document.getElementById('connectionStatus');
-        
+        const peerInfoEl = document.getElementById('peerInfo');
+        const joinBtn = document.getElementById('joinChunkBtn');
+        const addBtn = document.getElementById('addBoxBtn');
+        const removeBtn = document.getElementById('removeBoxBtn');
+        const flashBtn = document.getElementById('flashBoxBtn');
+
         function updateStatus(msg) {
-            statusEl.innerHTML += msg + '<br>';
+            const timestamp = new Date().toLocaleTimeString();
+            statusEl.innerHTML += `[${timestamp}] ${msg}<br>`;
             statusEl.scrollTop = statusEl.scrollHeight;
-            console.log(msg);
+            console.log(`[${timestamp}] ${msg}`);
         }
 
         function updateConnectionStatus(status, message) {
@@ -117,263 +136,466 @@
             connectionStatusEl.innerHTML = message;
         }
 
-        // --- 2. CONNECT TO THE SERVER ---
-        const ws = new WebSocket('wss://multiplayer-game-dcwy.onrender.com');
-
-        // P2P variables - FIXED STRUCTURE
-        let otherClients = new Map(); // Now properly stores both peerConnection and dataChannel
-
-        function createPeerConnection(otherClientId) {
-            const configuration = {
-                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-            };
-            const peerConnection = new RTCPeerConnection(configuration);
-
-            peerConnection.onicecandidate = event => {
-                if (event.candidate) {
-                    sendMessage('webrtc_ice_candidate', {
-                        recipientId: otherClientId,
-                        candidate: event.candidate,
-                        senderId: ws.clientId
-                    });
-                }
-            };
-
-            // Handle incoming data channel (when peer creates one)
-            peerConnection.ondatachannel = event => {
-                const receivedDataChannel = event.channel;
-                updateStatus(`Data channel received from ${otherClientId}`);
-                
-                receivedDataChannel.onopen = () => {
-                    updateStatus(`Data channel with ${otherClientId} is now open (received)`);
-                };
-                
-                receivedDataChannel.onmessage = handleDataChannelMessage;
-                
-                // FIXED: Properly update the stored peer info
-                const existingPeer = otherClients.get(otherClientId) || {};
-                otherClients.set(otherClientId, {
-                    ...existingPeer,
-                    dataChannel: receivedDataChannel,
-                    peerConnection: peerConnection
-                });
-            };
-
-            peerConnection.onconnectionstatechange = () => {
-                updateStatus(`Connection state with ${otherClientId}: ${peerConnection.connectionState}`);
-            };
-
-            return peerConnection;
-        }
-
-        function handleDataChannelMessage(event) {
-            const message = JSON.parse(event.data);
-            updateStatus(`P2P Message received: ${message.type}`);
+        function updatePeerInfo() {
+            const connectedPeers = Array.from(peers.values()).filter(p => p.state === 'connected');
+            peerInfoEl.innerHTML = `P2P Connections: ${connectedPeers.length}/${peers.size}`;
             
-            if (message.type === 'flash_box') {
-                flashBox(box);
-            }
+            // Update button states
+            const hasConnectedPeers = connectedPeers.length > 0;
+            flashBtn.disabled = !boxInScene || !hasConnectedPeers;
         }
 
-        function flashBox(obj) {
-            if (!obj || !scene.children.includes(obj)) {
-                updateStatus("Cannot flash box - not present in scene");
-                return;
-            }
-            
-            const originalColor = obj.material.color.getHex();
-            obj.material.color.setHex(0xff0000);
-            setTimeout(() => {
-                obj.material.color.setHex(originalColor);
-            }, 500);
-            updateStatus("Box flashed!");
+        function updateButtonStates() {
+            addBtn.disabled = !isInChunk || boxInScene;
+            removeBtn.disabled = !isInChunk || !boxInScene;
+            flashBtn.disabled = !boxInScene || Array.from(peers.values()).filter(p => p.state === 'connected').length === 0;
         }
 
-        ws.onopen = () => {
-            updateStatus("Connected to server");
-            updateConnectionStatus('connected', '✅ Connected');
-            ws.clientId = Math.random().toString(36).substr(2, 9); // Generate client ID
-        };
+        // --- THREE.JS SCENE SETUP ---
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setClearColor(0x000011);
+        document.body.appendChild(renderer.domElement);
 
-        ws.onclose = () => {
-            updateStatus("Disconnected from server");
-            updateConnectionStatus('disconnected', '❌ Disconnected');
-        };
-        
-        ws.onerror = error => {
-            updateStatus(`WebSocket Error: ${error}`);
-            updateConnectionStatus('disconnected', '❌ Error');
-        };
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(10, 10, 5);
+        scene.add(directionalLight);
 
-        // --- Handle server messages ---
-        ws.onmessage = function(event) {
-            const data = JSON.parse(event.data);
-            updateStatus(`Server message: ${data.type}`);
-
-            if (data.type === 'webrtc_offer') {
-                const senderId = data.payload.senderId;
-                const peerConn = createPeerConnection(senderId);
-                
-                // FIXED: Store the peer connection immediately
-                otherClients.set(senderId, {
-                    peerConnection: peerConn,
-                    dataChannel: null
-                });
-
-                peerConn.setRemoteDescription(new RTCSessionDescription(data.payload.offer))
-                    .then(() => peerConn.createAnswer())
-                    .then(answer => peerConn.setLocalDescription(answer))
-                    .then(() => {
-                        sendMessage('webrtc_answer', {
-                            recipientId: senderId,
-                            senderId: ws.clientId,
-                            answer: peerConn.localDescription
-                        });
-                    });
-
-            } else if (data.type === 'webrtc_answer') {
-                const senderId = data.payload.senderId;
-                const peerInfo = otherClients.get(senderId);
-                if (peerInfo && peerInfo.peerConnection) {
-                    peerInfo.peerConnection.setRemoteDescription(new RTCSessionDescription(data.payload.answer));
-                } else {
-                    updateStatus(`No peer connection found for answer from ${senderId}`);
-                }
-
-            } else if (data.type === 'webrtc_ice_candidate') {
-                const senderId = data.payload.senderId;
-                const peerInfo = otherClients.get(senderId);
-                if (peerInfo && peerInfo.peerConnection) {
-                    peerInfo.peerConnection.addIceCandidate(new RTCIceCandidate(data.payload.candidate));
-                } else {
-                    updateStatus(`No peer connection found for ICE candidate from ${senderId}`);
-                }
-
-            } else if (data.type === 'chunk_state_change') {
-                const chunkState = data.payload.state;
-                
-                // Establish P2P connections with other players
-                chunkState.players.forEach(player => {
-                    if (player.id !== ws.clientId && !otherClients.has(player.id)) {
-                        updateStatus(`Establishing P2P connection with ${player.id}`);
-                        
-                        const peerConn = createPeerConnection(player.id);
-                        const dataChannel = peerConn.createDataChannel("game");
-                        
-                        dataChannel.onopen = () => {
-                            updateStatus(`Data channel with ${player.id} is now open (created)`);
-                        };
-                        
-                        dataChannel.onmessage = handleDataChannelMessage;
-
-                        // FIXED: Properly store both peerConnection and dataChannel
-                        otherClients.set(player.id, {
-                            peerConnection: peerConn,
-                            dataChannel: dataChannel
-                        });
-
-                        peerConn.createOffer()
-                            .then(offer => peerConn.setLocalDescription(offer))
-                            .then(() => {
-                                sendMessage('webrtc_offer', {
-                                    recipientId: player.id,
-                                    senderId: ws.clientId,
-                                    offer: peerConn.localDescription
-                                });
-                            });
-                    }
-                });
-
-                // Update box state based on server authority
-                if (chunkState.boxPresent) {
-                    if (!scene.children.includes(box)) {
-                        scene.add(box);
-                        updateStatus("Box added to scene");
-                    }
-                } else {
-                    scene.remove(box);
-                    updateStatus("Box removed from scene");
-                }
-            }
-        };
-
-        // --- 3. CREATE A SIMPLE VISUAL OBJECT ---
+        // The box that server controls
         const geometry = new THREE.BoxGeometry(1, 1, 1);
         const material = new THREE.MeshLambertMaterial({ color: 0x00ff00 });
         const box = new THREE.Mesh(geometry, material);
-        box.position.set(0, 0.5, -5);
+        box.position.set(0, 0, -3);
 
-        // --- 4. SEND MESSAGES ---
-        function sendMessage(type, payload) {
-            if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type, payload }));
-                updateStatus(`Sent: ${type}`);
+        camera.position.set(0, 2, 2);
+        camera.lookAt(0, 0, -3);
+
+        // --- WEBSOCKET CONNECTION ---
+        const ws = new WebSocket('wss://multiplayer-game-dcwy.onrender.com');
+
+        // Generate client ID immediately
+        clientId = 'client_' + Math.random().toString(36).substr(2, 12);
+        updateStatus(`Generated client ID: ${clientId}`);
+
+        ws.onopen = () => {
+            updateStatus("✅ Connected to server");
+            updateConnectionStatus('connected', '✅ Server Connected');
+            joinBtn.disabled = false;
+        };
+
+        ws.onclose = (event) => {
+            updateStatus(`❌ Server disconnected (${event.code})`);
+            updateConnectionStatus('disconnected', '❌ Server Disconnected');
+            isInChunk = false;
+            updateButtonStates();
+            // Don't clean up P2P connections - they can continue working
+        };
+
+        ws.onerror = (error) => {
+            updateStatus(`❌ Server error: ${error}`);
+            updateConnectionStatus('disconnected', '❌ Server Error');
+        };
+
+        // --- P2P CONNECTION MANAGEMENT ---
+        function createPeerConnection(peerId, isInitiator = false) {
+            updateStatus(`Creating ${isInitiator ? 'outgoing' : 'incoming'} P2P connection to ${peerId}`);
+            
+            const config = {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' }
+                ]
+            };
+
+            const connection = new RTCPeerConnection(config);
+            let dataChannel = null;
+
+            const peerState = {
+                connection,
+                dataChannel: null,
+                state: 'connecting',
+                isInitiator
+            };
+
+            peers.set(peerId, peerState);
+
+            // ICE candidate handling
+            connection.onicecandidate = (event) => {
+                if (event.candidate && ws.readyState === WebSocket.OPEN) {
+                    sendServerMessage('webrtc_ice_candidate', {
+                        recipientId: peerId,
+                        senderId: clientId,
+                        candidate: event.candidate
+                    });
+                }
+            };
+
+            // Connection state monitoring
+            connection.onconnectionstatechange = () => {
+                const state = connection.connectionState;
+                updateStatus(`P2P ${peerId}: ${state}`);
+                peerState.state = state;
+                
+                if (state === 'connected') {
+                    updateStatus(`✅ P2P connected to ${peerId}`);
+                } else if (state === 'failed' || state === 'closed') {
+                    updateStatus(`❌ P2P ${state} with ${peerId}`);
+                    cleanupPeer(peerId);
+                }
+                updatePeerInfo();
+            };
+
+            // Data channel handling
+            if (isInitiator) {
+                // Create data channel
+                dataChannel = connection.createDataChannel('game', { ordered: true });
+                setupDataChannel(dataChannel, peerId);
+                peerState.dataChannel = dataChannel;
             } else {
-                updateStatus("WebSocket not open - cannot send message");
-                updateConnectionStatus('disconnected', '❌ Not Connected');
+                // Receive data channel
+                connection.ondatachannel = (event) => {
+                    dataChannel = event.channel;
+                    setupDataChannel(dataChannel, peerId);
+                    peerState.dataChannel = dataChannel;
+                };
+            }
+
+            return connection;
+        }
+
+        function setupDataChannel(channel, peerId) {
+            channel.onopen = () => {
+                updateStatus(`📡 Data channel open with ${peerId}`);
+                const peer = peers.get(peerId);
+                if (peer) peer.state = 'connected';
+                updatePeerInfo();
+            };
+
+            channel.onclose = () => {
+                updateStatus(`📡 Data channel closed with ${peerId}`);
+                cleanupPeer(peerId);
+            };
+
+            channel.onerror = (error) => {
+                updateStatus(`❌ Data channel error with ${peerId}: ${error}`);
+                cleanupPeer(peerId);
+            };
+
+            channel.onmessage = (event) => {
+                try {
+                    const message = JSON.parse(event.data);
+                    handleP2PMessage(message, peerId);
+                } catch (error) {
+                    updateStatus(`❌ Invalid P2P message from ${peerId}`);
+                }
+            };
+        }
+
+        function cleanupPeer(peerId) {
+            const peer = peers.get(peerId);
+            if (peer) {
+                if (peer.connection) {
+                    peer.connection.close();
+                }
+                peers.delete(peerId);
+                updateStatus(`🧹 Cleaned up peer ${peerId}`);
+                updatePeerInfo();
             }
         }
 
-        // --- 5. BUTTON HANDLERS ---
-        document.getElementById('joinChunkBtn').onclick = () => {
-            sendMessage('join_chunk', { chunkId: 'chunkA' });
-        };
-
-        document.getElementById('addBoxBtn').onclick = () => {
-            sendMessage('add_box_request', { chunkId: 'chunkA', position: box.position });
-        };
-
-        document.getElementById('removeBoxBtn').onclick = () => {
-            sendMessage('remove_box_request', { chunkId: 'chunkA' });
-        };
-
-        document.getElementById('flashBoxBtn').onclick = () => {
-            // Flash locally first
-            flashBox(box);
+        function handleP2PMessage(message, fromPeer) {
+            updateStatus(`📨 P2P from ${fromPeer}: ${message.type}`);
             
-            // Send flash message via P2P
+            switch (message.type) {
+                case 'flash_box':
+                    if (boxInScene) {
+                        flashBox();
+                    }
+                    break;
+                default:
+                    updateStatus(`❓ Unknown P2P message type: ${message.type}`);
+            }
+        }
+
+        function broadcastP2P(message) {
             let sentCount = 0;
-            otherClients.forEach((peerInfo, peerId) => {
-                if (peerInfo.dataChannel && peerInfo.dataChannel.readyState === 'open') {
-                    peerInfo.dataChannel.send(JSON.stringify({ type: 'flash_box' }));
-                    sentCount++;
-                    updateStatus(`Flash sent to ${peerId}`);
-                } else {
-                    updateStatus(`Cannot send flash to ${peerId} - channel not open (state: ${peerInfo.dataChannel?.readyState || 'null'})`);
+            peers.forEach((peer, peerId) => {
+                if (peer.dataChannel && peer.dataChannel.readyState === 'open') {
+                    try {
+                        peer.dataChannel.send(JSON.stringify(message));
+                        sentCount++;
+                    } catch (error) {
+                        updateStatus(`❌ Failed to send P2P to ${peerId}: ${error}`);
+                    }
                 }
             });
+            return sentCount;
+        }
+
+        // --- BOX VISUAL EFFECTS (P2P ONLY) ---
+        function flashBox() {
+            if (!boxInScene) return;
             
-            if (sentCount === 0) {
-                updateStatus("No open P2P channels available");
+            const originalColor = box.material.color.getHex();
+            box.material.color.setHex(0xff4444);
+            
+            setTimeout(() => {
+                box.material.color.setHex(originalColor);
+            }, 300);
+            
+            updateStatus("⚡ Box flashed!");
+        }
+
+        // --- SERVER MESSAGE HANDLING ---
+        ws.onmessage = async function(event) {
+            let messageData;
+            
+            // Handle both text and blob messages
+            if (event.data instanceof Blob) {
+                messageData = await event.data.text();
             } else {
-                updateStatus(`Flash sent to ${sentCount} peer(s)`);
+                messageData = event.data;
+            }
+            
+            let data;
+            try {
+                data = JSON.parse(messageData);
+            } catch (error) {
+                updateStatus(`❌ Invalid server message: ${error.message}`);
+                return;
+            }
+
+            updateStatus(`📥 Server: ${data.type}`);
+
+            switch (data.type) {
+                case 'webrtc_offer':
+                    await handleWebRTCOffer(data.payload);
+                    break;
+                    
+                case 'webrtc_answer':
+                    await handleWebRTCAnswer(data.payload);
+                    break;
+                    
+                case 'webrtc_ice_candidate':
+                    await handleWebRTCIceCandidate(data.payload);
+                    break;
+                    
+                case 'chunk_state_change':
+                    handleChunkStateChange(data.payload);
+                    break;
+                    
+                default:
+                    updateStatus(`❓ Unknown server message: ${data.type}`);
             }
         };
 
-        // --- 6. ANIMATION LOOP ---
-        camera.position.z = 5;
-        
+        async function handleWebRTCOffer(payload) {
+            const { senderId, offer } = payload;
+            if (!senderId || !offer) return;
+            
+            const connection = createPeerConnection(senderId, false);
+            
+            try {
+                await connection.setRemoteDescription(new RTCSessionDescription(offer));
+                const answer = await connection.createAnswer();
+                await connection.setLocalDescription(answer);
+                
+                sendServerMessage('webrtc_answer', {
+                    recipientId: senderId,
+                    senderId: clientId,
+                    answer: connection.localDescription
+                });
+            } catch (error) {
+                updateStatus(`❌ WebRTC offer handling failed: ${error}`);
+                cleanupPeer(senderId);
+            }
+        }
+
+        async function handleWebRTCAnswer(payload) {
+            const { senderId, answer } = payload;
+            if (!senderId || !answer) return;
+            
+            const peer = peers.get(senderId);
+            if (!peer) {
+                updateStatus(`❌ No peer connection for answer from ${senderId}`);
+                return;
+            }
+            
+            try {
+                await peer.connection.setRemoteDescription(new RTCSessionDescription(answer));
+            } catch (error) {
+                updateStatus(`❌ WebRTC answer handling failed: ${error}`);
+                cleanupPeer(senderId);
+            }
+        }
+
+        async function handleWebRTCIceCandidate(payload) {
+            const { senderId, candidate } = payload;
+            if (!senderId || !candidate) return;
+            
+            const peer = peers.get(senderId);
+            if (!peer) {
+                updateStatus(`❌ No peer connection for ICE from ${senderId}`);
+                return;
+            }
+            
+            try {
+                await peer.connection.addIceCandidate(new RTCIceCandidate(candidate));
+            } catch (error) {
+                updateStatus(`❌ ICE candidate failed: ${error}`);
+            }
+        }
+
+        async function handleChunkStateChange(payload) {
+            const chunkState = payload.state;
+            if (!chunkState) return;
+            
+            updateStatus(`🏠 Chunk update: ${chunkState.players.length} players, box: ${chunkState.boxPresent}`);
+            
+            // Update box state - ONLY server decides this
+            if (chunkState.boxPresent && !boxInScene) {
+                scene.add(box);
+                boxInScene = true;
+                updateStatus("📦 Box added to scene (server authority)");
+            } else if (!chunkState.boxPresent && boxInScene) {
+                scene.remove(box);
+                boxInScene = false;
+                updateStatus("📦 Box removed from scene (server authority)");
+            }
+            
+            // Update P2P connections - use deterministic connection initiation
+            const otherPlayers = chunkState.players.filter(p => p.id !== clientId);
+            
+            // Clean up connections to players who left
+            peers.forEach((peer, peerId) => {
+                if (!otherPlayers.some(p => p.id === peerId)) {
+                    updateStatus(`👋 Player ${peerId} left chunk`);
+                    cleanupPeer(peerId);
+                }
+            });
+            
+            // Establish connections to new players
+            for (const player of otherPlayers) {
+                if (!peers.has(player.id)) {
+                    // Deterministic: client with smaller ID initiates connection
+                    const shouldInitiate = clientId < player.id;
+                    if (shouldInitiate) {
+                        await initiateConnection(player.id);
+                    }
+                    // If we don't initiate, we wait for them to send us an offer
+                }
+            }
+            
+            updateButtonStates();
+            updatePeerInfo();
+        }
+
+        async function initiateConnection(peerId) {
+            updateStatus(`🤝 Initiating connection to ${peerId}`);
+            
+            const connection = createPeerConnection(peerId, true);
+            
+            try {
+                const offer = await connection.createOffer();
+                await connection.setLocalDescription(offer);
+                
+                sendServerMessage('webrtc_offer', {
+                    recipientId: peerId,
+                    senderId: clientId,
+                    offer: connection.localDescription
+                });
+            } catch (error) {
+                updateStatus(`❌ Failed to create offer for ${peerId}: ${error}`);
+                cleanupPeer(peerId);
+            }
+        }
+
+        // --- SERVER COMMUNICATION ---
+        function sendServerMessage(type, payload) {
+            if (ws.readyState !== WebSocket.OPEN) {
+                updateStatus("❌ Cannot send - server disconnected");
+                updateConnectionStatus('disconnected', '❌ Server Disconnected');
+                return false;
+            }
+            
+            try {
+                ws.send(JSON.stringify({ type, payload }));
+                updateStatus(`📤 Sent to server: ${type}`);
+                return true;
+            } catch (error) {
+                updateStatus(`❌ Failed to send message: ${error}`);
+                return false;
+            }
+        }
+
+        // --- BUTTON HANDLERS ---
+        joinBtn.onclick = () => {
+            if (sendServerMessage('join_chunk', { chunkId: 'chunkA' })) {
+                isInChunk = true;
+                joinBtn.disabled = true;
+                updateButtonStates();
+            }
+        };
+
+        addBtn.onclick = () => {
+            sendServerMessage('add_box_request', { 
+                chunkId: 'chunkA',
+                position: { x: 0, y: 0, z: -3 }
+            });
+        };
+
+        removeBtn.onclick = () => {
+            sendServerMessage('remove_box_request', { chunkId: 'chunkA' });
+        };
+
+        flashBtn.onclick = () => {
+            if (!boxInScene) {
+                updateStatus("❌ Cannot flash - no box in scene");
+                return;
+            }
+            
+            // Flash locally first
+            flashBox();
+            
+            // Send via P2P to other players
+            const sentCount = broadcastP2P({ type: 'flash_box' });
+            
+            if (sentCount > 0) {
+                updateStatus(`⚡ Flash sent to ${sentCount} peer(s)`);
+            } else {
+                updateStatus("⚡ Flashed locally (no peers connected)");
+            }
+        };
+
+        // --- ANIMATION LOOP ---
         function animate() {
             requestAnimationFrame(animate);
             
-            // Add some rotation to make it more visually interesting
-            if (scene.children.includes(box)) {
-                box.rotation.x += 0.01;
+            if (boxInScene) {
+                box.rotation.x += 0.005;
                 box.rotation.y += 0.01;
             }
             
             renderer.render(scene, camera);
         }
-        animate();
 
-        // --- 7. RESIZE ---
+        // --- RESIZE HANDLING ---
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        updateStatus("Game initialized - Click 'Join Chunk' to start");
+        // --- INITIALIZATION ---
+        updateStatus("🎮 Game initialized");
+        updateStatus("📋 Click 'Join Chunk' to start");
+        updateConnectionStatus('connecting', '🔄 Connecting...');
+        animate();
     </script>
 </body>
 </html>
