@@ -157,11 +157,16 @@ class SimpleTerrainRenderer {
         }
     }
 
-    addTerrainChunk(chunkId) {
-        const [x, z] = this.chunkIdToCoords(chunkId);
-        if (this.terrainChunks.has(chunkId)) {
-            return;
+addTerrainChunk(chunkId) {
+        const coords = this.chunkIdToCoords(chunkId);
+        const [x, z] = coords;
+        
+        // ADD THIS CHECK: If the chunk already exists, simply return.
+        if (this.terrainChunks.has(`${x},${z}`)) {
+            return; 
         }
+        
+        // ... The rest of your code for terrain generation remains the same.
         const geometry = new THREE.PlaneGeometry(
             CONFIG.TERRAIN.chunkSize,
             CONFIG.TERRAIN.chunkSize,

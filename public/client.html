@@ -171,7 +171,7 @@
         const box = new THREE.Mesh(geometry, material);
         box.position.set(0, 0, -3);
 
-        camera.position.set(0, 2, 2);
+        camera.position.set(0, 4, 2);
         camera.lookAt(0, 0, -3);
 
         // Initialize terrain renderer
@@ -455,7 +455,8 @@
             
             updateStatus(`🏠 Chunk update: ${chunkState.players.length} players, box: ${chunkState.boxPresent}`);
             
-
+           terrainRenderer.removeTerrainChunk(payload.chunkId);
+            terrainRenderer.addTerrainChunk(payload.chunkId);
             
             // Update box state - ONLY server decides this
             if (chunkState.boxPresent && !boxInScene) {
