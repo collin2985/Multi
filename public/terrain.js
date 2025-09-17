@@ -176,46 +176,58 @@ class SimpleTerrainRenderer {
     }
 
     addTerrainChunk(chunkId) {
-    const coords = this.chunkIdToCoords(chunkId);
-    const [chunkX, chunkZ] = coords;
-
-    // Check if chunk already exists
-    if (this.terrainChunks.has(`${chunkX},${chunkZ}`)) {
-        return; 
+        const coords = this.chunkIdToCoords(chunkId);
+        const [chunkX, chunkZ] = coords;
+        
+        // Check if chunk already exists
+        if (this.terrainChunks.has(`${chunkX},${chunkZ}`)) {
+            return; 
+        }
+        
+        console.log(`Creating terrain chunk at (${chunkX}, ${chunkZ})`);
+        
+        const geometry = new THREE.PlaneGeometry(
+            CONFIG.TERRAIN.chunkSize,
+            CONFIG.TERRAIN.chunkSize,
+            CONFIG.TERRAIN.segments,
+            CONFIG.TERRAIN.segments
+        );
+        geometry.rotateX(-Math.PI / 2);
+        
+        const positions = geometry.attributes.position.array;
+        const pointsToCalculate = [];
+        
+        // FIXED: Process vertices in proper grid order
+        const segmentSize = CONFIG.TERRAIN.chunkSize / CONFIG.TERRAIN.segments;
+        const halfSize = CONFIG.TERRAIN.chunkSize / 2;
+        
+        for (let row = 0; row <= CONFIG.TERRAIN.segments; row++) {
+            for (let col = 0; col <= CONFIG.TERRAIN.segments; col++) {
+                const vertexIndex = (row * (CONFIG.TERRAIN.segments + 1) + col) * 3;
+                
+                // Calculate world position properly
+                const localX = -halfSize + col * segmentSize;
+                const localZ = -halfSize + row * segmentSize;
+                const worldX = chunkX + localX;
+                const worldZ = chunkZ + localZ;
+                
+                pointsToCalculate.push({ 
+                    x: worldX, 
+                    z: worldZ, 
+                    index: vertexIndex 
+                });
+            }
+        }
+        
+        if (pointsToCalculate.length > 0) {
+            const batchId = chunkId;
+            this.pendingChunks.set(batchId, { geometry, chunkX, chunkZ });
+            this.terrainWorker.postMessage({
+                type: 'calculateHeightBatch',
+                data: { points: pointsToCalculate, batchId }
+            });
+        }
     }
-
-    const geometry = new THREE.PlaneGeometry(
-        CONFIG.TERRAIN.chunkSize,
-        CONFIG.TERRAIN.chunkSize,
-        CONFIG.TERRAIN.segments,
-        CONFIG.TERRAIN.segments
-    );
-    geometry.rotateX(-Math.PI / 2);
-
-    const positions = geometry.attributes.position.array;
-    const pointsToCalculate = [];
-
-    for (let i = 0; i < positions.length; i += 3) {
-        const localX = positions[i];
-        const localZ = positions[i + 2];
-
-        // ✅ Corrected: add chunk offsets here once
-        const worldX = localX + chunkX;
-        const worldZ = localZ + chunkZ;
-
-        pointsToCalculate.push({ x: worldX, z: worldZ, index: i });
-    }
-
-    if (pointsToCalculate.length > 0) {
-        const batchId = chunkId;
-        this.pendingChunks.set(batchId, { geometry, chunkX, chunkZ });
-        this.terrainWorker.postMessage({
-            type: 'calculateHeightBatch',
-            data: { points: pointsToCalculate, batchId }
-        });
-    }
-}
-
 
     finishTerrainChunk(geometry, chunkX, chunkZ) {
         const mesh = new THREE.Mesh(geometry, this.terrainMaterial);
