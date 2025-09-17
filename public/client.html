@@ -211,9 +211,15 @@ function flashBox(obj) {
             sendMessage('remove_box_request', { chunkId: 'chunkA' });
         });
 
+
+
+
+
         // This is the corrected version of the flashBoxBtn event listener
 const flashBoxBtn = document.getElementById('flashBoxBtn');
 flashBoxBtn.addEventListener('click', () => {
+    flashBox(box);
+
     let p2pMessageSent = false;
     // Loop through all established peer connections
     otherClients.forEach(peer => {
