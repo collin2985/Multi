@@ -110,12 +110,13 @@
         import { SimpleTerrainRenderer } from './terrain.js';
 
         // --- GLOBAL STATE ---
+        // FIX: Generate the clientId immediately upon script execution.
         const clientId = 'client_' + Math.random().toString(36).substr(2, 12);
         let isInChunk = false;
         let boxInScene = false;
-        const peers = new Map();
-        let terrainRenderer = null;
-        const avatars = new Map();
+        const peers = new Map(); // peerId -> { connection, dataChannel, state, targetPosition: null }
+        let terrainRenderer = null; // Initialize terrain renderer
+        const avatars = new Map(); // peerId -> THREE.Mesh
 
         // Click-to-move state
         const raycaster = new THREE.Raycaster();
@@ -127,7 +128,7 @@
         let ws = null;
         let wsRetryAttempts = 0;
         const wsMaxRetries = 10;
-        const wsRetryInterval = 5000;
+        const wsRetryInterval = 5000; // 5 seconds
         
         // --- UI ELEMENTS ---
         const statusEl = document.getElementById('status');
@@ -175,13 +176,15 @@
         directionalLight.position.set(10, 10, 5);
         scene.add(directionalLight);
         
+        // The local player avatar
         const playerObject = new THREE.Mesh(
             new THREE.SphereGeometry(1, 32, 32),
             new THREE.MeshBasicMaterial({ color: 0x0000ff })
         );
-        playerObject.position.set(0, 5, 0);
+        playerObject.position.set(0, 5, 0); // Start player above ground
         scene.add(playerObject);
         
+        // The box that server controls
         const box = new THREE.Mesh(
             new THREE.BoxGeometry(1, 1, 1),
             new THREE.MeshLambertMaterial({ color: 0x00ff00 })
@@ -189,12 +192,14 @@
         box.position.set(0, 0, -3);
         box.name = 'serverBox';
 
+        // Initialize terrain renderer
         terrainRenderer = new SimpleTerrainRenderer(scene);
 
         // --- CLICK-TO-MOVE HANDLER ---
         window.addEventListener('pointerdown', onPointerDown);
         
         function onPointerDown(event) {
+            // Check if pointer is on UI elements
             if (event.target.tagName !== 'CANVAS') return;
 
             pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
@@ -202,6 +207,7 @@
         
             raycaster.setFromCamera(pointer, camera);
         
+            // Check for intersection with terrain chunks
             const terrainObjects = Array.from(terrainRenderer.terrainChunks.values());
             const intersects = raycaster.intersectObjects(terrainObjects, true);
         
@@ -211,6 +217,7 @@
                 isMoving = true;
                 updateStatus(`🚀 Moving to clicked position: (${playerTargetPosition.x.toFixed(2)}, ${playerTargetPosition.z.toFixed(2)})`);
                 
+                // Broadcast move event once per click
                 broadcastP2P({
                     type: 'player_move',
                     payload: {
@@ -229,11 +236,12 @@
 
             ws = new WebSocket('wss://multiplayer-game-dcwy.onrender.com');
 
+            // --- WEBSOCKET EVENT HANDLERS ---
             ws.onopen = () => {
                 updateStatus("✅ Connected to server");
                 updateConnectionStatus('connected', '✅ Server Connected');
                 joinBtn.disabled = false;
-                wsRetryAttempts = 0;
+                wsRetryAttempts = 0; // Reset retry counter on success
             };
 
             ws.onclose = (event) => {
@@ -287,6 +295,7 @@
             };
         }
         
+        // --- AUTOMATIC WEBSOCKET RECONNECTION LOGIC ---
         function attemptWsReconnect() {
             if (wsRetryAttempts < wsMaxRetries) {
                 wsRetryAttempts++;
@@ -316,12 +325,15 @@
                 dataChannel: null,
                 state: 'connecting',
                 isInitiator,
+                // Target position for local animation
                 targetPosition: null,
+                // Start time for timing the animation
                 moveStartTime: null
             };
 
             peers.set(peerId, peerState);
 
+            // ICE candidate handling
             connection.onicecandidate = (event) => {
                 if (event.candidate && ws && ws.readyState === WebSocket.OPEN) {
                     sendServerMessage('webrtc_ice_candidate', {
@@ -332,6 +344,7 @@
                 }
             };
 
+            // Connection state monitoring
             connection.onconnectionstatechange = () => {
                 const state = connection.connectionState;
                 updateStatus(`P2P ${peerId}: ${state}`);
@@ -341,10 +354,13 @@
                     updateStatus(`✅ P2P connected to ${peerId}`);
                 } else if (state === 'failed' || state === 'closed' || state === 'disconnected') {
                     updateStatus(`❌ P2P ${state} with ${peerId}`);
+                    // We don't cleanup here to allow for reconnection attempts
+                    // cleanupPeer(peerId);
                 }
                 updatePeerInfo();
             };
 
+            // Data channel handling
             if (isInitiator) {
                 dataChannel = connection.createDataChannel('game', { ordered: true });
                 setupDataChannel(dataChannel, peerId);
@@ -397,6 +413,7 @@
                 peers.delete(peerId);
                 updateStatus(`🧹 Cleaned up peer ${peerId}`);
             }
+            // Also remove the avatar
             const avatar = avatars.get(peerId);
             if (avatar) {
                 scene.remove(avatar);
@@ -503,7 +520,8 @@
             updateStatus(`🏠 Chunk update: ${chunkState.players.length} players, box: ${chunkState.boxPresent}`);
             
             terrainRenderer.addTerrainChunk(payload.chunkId);
-            
+
+            // Update box state - ONLY server decides this
             if (chunkState.boxPresent) {
                 const existingBox = scene.getObjectByName('serverBox');
                 if (!existingBox) {
@@ -520,8 +538,10 @@
                 }
             }
             
+            // Update P2P connections and avatars
             const otherPlayers = chunkState.players.filter(p => p.id !== clientId);
             
+            // Remove connections and avatars for players who have left
             peers.forEach((peer, peerId) => {
                 if (!otherPlayers.some(p => p.id === peerId)) {
                     updateStatus(`👋 Player ${peerId} left chunk`);
@@ -529,6 +549,7 @@
                 }
             });
             
+            // Establish connections and create avatars for new players
             for (const player of otherPlayers) {
                 if (!peers.has(player.id)) {
                     const shouldInitiate = clientId < player.id;
@@ -590,20 +611,8 @@
 
         // --- BUTTON HANDLERS ---
         joinBtn.onclick = () => {
-            // FIX: This section now adds a 2x2 grid of chunks.
-            const chunkCoords = [{x: 0, z: 0}, {x: 1, z: 0}, {x: 0, z: 1}, {x: -1, z: 0}];
-            let hasJoined = false;
-            for (const coords of chunkCoords) {
-                const chunkId = `chunk_${coords.x}_${coords.z}`;
-                terrainRenderer.addTerrainChunk(chunkId);
-                // We still send a join request to the server, but only for the central chunk
-                if (coords.x === 0 && coords.z === 0) {
-                    if (sendServerMessage('join_chunk', { chunkId: 'chunkA', clientId: clientId })) {
-                        hasJoined = true;
-                    }
-                }
-            }
-            if (hasJoined) {
+            // FIX: Ensure clientId is sent with the message
+            if (sendServerMessage('join_chunk', { chunkId: 'chunkA', clientId: clientId })) {
                 isInChunk = true;
                 joinBtn.disabled = true;
                 updateButtonStates();
@@ -622,14 +631,15 @@
         };
         
         // --- ANIMATION LOOP ---
-        const playerSpeed = 0.05;
-        const stopThreshold = 0.01;
+        const playerSpeed = 0.05; // Meters per millisecond
+        const stopThreshold = 0.01; // The distance to snap to the target
         
         function animate() {
             requestAnimationFrame(animate);
             const now = performance.now();
             const deltaTime = now - lastFrameTime;
 
+            // --- LOCAL PLAYER MOVEMENT ---
             if (isMoving) {
                 const distance = playerObject.position.distanceTo(playerTargetPosition);
                 
@@ -639,11 +649,12 @@
                     updateStatus("📍 Arrived at destination.");
                 } else {
                     const moveStep = playerSpeed * deltaTime;
-                    const alpha = Math.min(1, moveStep / distance);
+                    const alpha = Math.min(1, moveStep / distance); // Clamp the interpolation factor
                     playerObject.position.lerp(playerTargetPosition, alpha);
                 }
             }
 
+            // --- ANIMATE OTHER PLAYERS' AVATARS ---
             avatars.forEach((avatar, peerId) => {
                 const peer = peers.get(peerId);
                 if (peer && peer.targetPosition) {
@@ -651,18 +662,20 @@
 
                     if (distance <= stopThreshold) {
                         avatar.position.copy(peer.targetPosition);
-                        peer.targetPosition = null;
+                        peer.targetPosition = null; // Clear target to stop animation
                         updateStatus(`✅ Avatar for ${peerId} arrived at destination.`);
                     } else {
                         const moveStep = playerSpeed * deltaTime;
-                        const alpha = Math.min(1, moveStep / distance);
+                        const alpha = Math.min(1, moveStep / distance); // Clamp the interpolation factor
                         avatar.position.lerp(peer.targetPosition, alpha);
                     }
                 }
             });
 
+            // --- P2P RECONNECTION ATTEMPT ---
             checkAndReconnectPeers();
             
+            // Update camera position to follow the player
             const cameraOffset = new THREE.Vector3(-15, 20, 35);
             const cameraTargetPosition = playerObject.position.clone().add(cameraOffset);
             const smoothedCameraPosition = camera.position.lerp(cameraTargetPosition, 0.1);
@@ -681,7 +694,7 @@
         
         // --- P2P RECONNECTION LOGIC ---
         let lastPeerCheckTime = 0;
-        const peerCheckInterval = 5000;
+        const peerCheckInterval = 5000; // 5 seconds
         
         function checkAndReconnectPeers() {
             const now = performance.now();
@@ -711,7 +724,7 @@
         });
 
         // --- INITIALIZATION ---
-        let lastFrameTime = performance.now();
+        let lastFrameTime = performance.now(); // Used for frame-rate independent movement
         updateStatus("🎮 Game initialized");
         updateStatus("📋 Click 'Join Chunk' to start");
         updateConnectionStatus('connecting', '🔄 Connecting...');
