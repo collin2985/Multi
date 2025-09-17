@@ -534,13 +534,13 @@
         }
 
         // --- BUTTON HANDLERS ---
-        joinBtn.onclick = () => {
-            if (sendServerMessage('join_chunk', { chunkId: 'chunkA' })) {
-                isInChunk = true;
-                joinBtn.disabled = true;
-                updateButtonStates();
-            }
-        };
+joinBtn.onclick = () => {
+    if (sendServerMessage('join_chunk', { chunkId: 'chunkA', clientId: clientId })) {
+        isInChunk = true;
+        joinBtn.disabled = true;
+        updateButtonStates();
+    }
+};
 
         addBtn.onclick = () => {
             sendServerMessage('add_box_request', { 

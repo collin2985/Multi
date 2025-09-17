@@ -40,121 +40,127 @@ function loadChunk(chunkId) {
     }
 }
 
-// Handle new connections
-wss.on('connection', ws => {
-    ws.clientId = Date.now();
-    console.log(`A new client connected with ID: ${ws.clientId}`);
-
-    // Add the new client to our client map
-    clients.set(ws.clientId, ws);
-
-    // We can send a welcome message to the client
-    ws.send(JSON.stringify({ type: 'welcome', message: 'Welcome to the server!' }));
-
-
-
 // Broadcast a message to all clients in a specific chunk
 function broadcastToChunk(chunkId, message) {
     wss.clients.forEach(client => {
-        if (client.currentChunk === chunkId) {
+        if (client.currentChunk === chunkId && client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify(message));
         }
     });
+    console.log(`Broadcasted ${message.type} to chunk ${chunkId}`);
 }
 
-    // Handle messages from clients
+// Handle new connections
+wss.on('connection', ws => {
+    console.log('A new client connected');
+
+    // Send a welcome message
+    ws.send(JSON.stringify({ type: 'welcome', message: 'Welcome to the server!' }));
+
     ws.on('message', message => {
-        
-        const parsedMessage = JSON.parse(message);
+        let parsedMessage;
+        try {
+            parsedMessage = JSON.parse(message);
+        } catch (error) {
+            console.error('Invalid message received:', error);
+            return;
+        }
         console.log('Received message:', parsedMessage);
 
         switch (parsedMessage.type) {
-            
+            case 'join_chunk':
+                const chunkId = parsedMessage.payload.chunkId;
+                const clientId = parsedMessage.payload.clientId; // Get clientId from message
+                if (!clientId) {
+                    console.error('No clientId provided in join_chunk');
+                    ws.send(JSON.stringify({ type: 'error', message: 'No clientId provided' }));
+                    return;
+                }
+                ws.clientId = clientId; // Assign the client's ID
+                clients.set(clientId, ws); // Store in clients map
+                ws.currentChunk = chunkId;
+
+                let chunkData = loadChunk(chunkId);
+                if (!chunkData) {
+                    // Initialize chunk if it doesn't exist
+                    chunkData = { players: [], boxPresent: false };
+                    chunkCache.set(chunkId, chunkData);
+                    saveChunk(chunkId);
+                }
+
+                const isPlayerInChunk = chunkData.players.some(p => p.id === clientId);
+                if (!isPlayerInChunk) {
+                    chunkData.players.push({ id: clientId });
+                    console.log(`Client ${clientId} joined chunk: ${chunkId}`);
+                    saveChunk(chunkId);
+                }
+
+                // Broadcast to ALL clients in the chunk
+                broadcastToChunk(chunkId, {
+                    type: 'chunk_state_change',
+                    payload: { chunkId, state: chunkData }
+                });
+                break;
+
             case 'add_box_request':
-                
-        const addChunkId = parsedMessage.payload.chunkId;
-        const addChunkData = chunkCache.get(addChunkId);
+                const addChunkId = parsedMessage.payload.chunkId;
+                const addChunkData = chunkCache.get(addChunkId);
+                if (addChunkData) {
+                    addChunkData.boxPresent = true;
+                    saveChunk(addChunkId);
+                    broadcastToChunk(addChunkId, {
+                        type: 'chunk_state_change',
+                        payload: { chunkId: addChunkId, state: addChunkData }
+                    });
+                }
+                break;
 
-        if (addChunkData) {
-            addChunkData.boxPresent = true;
-            saveChunk(addChunkId);
-            // Broadcast the change to all clients in the chunk
-            broadcastToChunk(addChunkId, {
-                type: 'chunk_state_change',
-                payload: { chunkId: addChunkId, state: addChunkData }
-            });
-        }
-        break;
+            case 'remove_box_request':
+                const removeChunkId = parsedMessage.payload.chunkId;
+                const removeChunkData = chunkCache.get(removeChunkId);
+                if (removeChunkData) {
+                    removeChunkData.boxPresent = false;
+                    saveChunk(removeChunkId);
+                    broadcastToChunk(removeChunkId, {
+                        type: 'chunk_state_change',
+                        payload: { chunkId: removeChunkId, state: removeChunkData }
+                    });
+                }
+                break;
 
-        case 'webrtc_offer':
+            case 'webrtc_offer':
             case 'webrtc_answer':
             case 'webrtc_ice_candidate':
                 const recipientId = parsedMessage.payload.recipientId;
                 const recipientWs = clients.get(recipientId);
-
                 if (recipientWs) {
                     recipientWs.send(message);
                     console.log(`Forwarded ${parsedMessage.type} from ${ws.clientId} to ${recipientId}`);
                 } else {
-                    console.error(`Recipient ${recipientId} not found.`);
+                    console.error(`Recipient ${recipientId} not found`);
                 }
                 break;
 
-
-
-        
-    case 'remove_box_request':
-        const removeChunkId = parsedMessage.payload.chunkId;
-        const removeChunkData = chunkCache.get(removeChunkId);
-
-        if (removeChunkData) {
-            removeChunkData.boxPresent = false;
-            saveChunk(removeChunkId);
-            // Broadcast the change to all clients in the chunk
-            broadcastToChunk(removeChunkId, {
-                type: 'chunk_state_change',
-                payload: { chunkId: removeChunkId, state: removeChunkData }
-            });
+            default:
+                console.error('Unknown message type:', parsedMessage.type);
         }
-        break;
-      case 'join_chunk':
-                const chunkId = parsedMessage.payload.chunkId;
-                const chunkData = loadChunk(chunkId);
-
-                if (chunkData) {
-                    ws.currentChunk = chunkId;
-
-                    const isPlayerInChunk = chunkData.players.some(p => p.id === ws.clientId);
-                    if (!isPlayerInChunk) {
-                        chunkData.players.push({ id: ws.clientId });
-                        console.log(`Client ${ws.clientId} joined chunk: ${chunkId}`);
-                        // ADD THIS LINE:
-                        saveChunk(chunkId); 
-                    }
-                    
-                    ws.send(JSON.stringify({
-                        type: 'chunk_state_change',
-                        payload: { chunkId, state: chunkData }
-                    }));
-                }
-                break;
-        }
-        
     });
 
-    // Handle client disconnections
     ws.on('close', () => {
-        console.log(`Client ${ws.clientId} disconnected.`);
-        // Remove the client from our map
-        clients.delete(ws.clientId);
-
-        if (ws.currentChunk) {
-            const chunkData = chunkCache.get(ws.currentChunk);
-            if (chunkData) {
-                // Remove the player from the chunk's player list
-                chunkData.players = chunkData.players.filter(p => p.id !== ws.clientId);
-                console.log(`Client ${ws.clientId} left chunk: ${ws.currentChunk}`);
-                saveChunk(ws.currentChunk);
+        if (ws.clientId) {
+            console.log(`Client ${ws.clientId} disconnected`);
+            clients.delete(ws.clientId);
+            if (ws.currentChunk) {
+                const chunkData = chunkCache.get(ws.currentChunk);
+                if (chunkData) {
+                    chunkData.players = chunkData.players.filter(p => p.id !== ws.clientId);
+                    console.log(`Client ${ws.clientId} left chunk: ${ws.currentChunk}`);
+                    saveChunk(ws.currentChunk);
+                    broadcastToChunk(ws.currentChunk, {
+                        type: 'chunk_state_change',
+                        payload: { chunkId: ws.currentChunk, state: chunkData }
+                    });
+                }
             }
         }
     });
@@ -162,8 +168,8 @@ function broadcastToChunk(chunkId, message) {
 
 // A periodic check to verify players from the file are still connected
 const interval = setInterval(() => {
-    console.log("Starting periodic player check...");
-    const chunkId = "chunkA"; // For now, we only have one chunk to check
+    console.log('Starting periodic player check...');
+    const chunkId = 'chunkA';
     const chunkData = loadChunk(chunkId);
 
     if (chunkData) {
@@ -171,21 +177,23 @@ const interval = setInterval(() => {
         chunkData.players.forEach(player => {
             const clientWs = clients.get(player.id);
             if (!clientWs) {
-                // This player is in the file but not currently connected
-                console.log(`Removing disconnected player ${player.id} from chunk data.`);
+                console.log(`Removing disconnected player ${player.id} from chunk data`);
                 playersToRemove.push(player.id);
             }
         });
 
         if (playersToRemove.length > 0) {
-            // Filter out the players we need to remove
             chunkData.players = chunkData.players.filter(p => !playersToRemove.includes(p.id));
             saveChunk(chunkId);
+            broadcastToChunk(chunkId, {
+                type: 'chunk_state_change',
+                payload: { chunkId, state: chunkData }
+            });
         }
         
-        console.log("Periodic player check finished.");
+        console.log('Periodic player check finished');
     }
-}, 30000); // Check every 30 seconds
+}, 30000);
 
 // Clean up the interval when the server closes
 wss.on('close', () => {
