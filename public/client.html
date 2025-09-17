@@ -108,12 +108,14 @@
     </script>
     <script type="module">
         import * as THREE from 'three';
+        import { SimpleTerrainRenderer } from './terrain.js';
 
         // --- GLOBAL STATE ---
         let clientId = null;
         let isInChunk = false;
         let boxInScene = false;
         const peers = new Map(); // peerId -> { connection, dataChannel, state }
+        let terrainRenderer = null; // Initialize terrain renderer
 
         // --- UI ELEMENTS ---
         const statusEl = document.getElementById('status');
@@ -139,10 +141,7 @@
         function updatePeerInfo() {
             const connectedPeers = Array.from(peers.values()).filter(p => p.state === 'connected');
             peerInfoEl.innerHTML = `P2P Connections: ${connectedPeers.length}/${peers.size}`;
-            
-            // Update button states
-            const hasConnectedPeers = connectedPeers.length > 0;
-            flashBtn.disabled = !boxInScene || !hasConnectedPeers;
+            updateButtonStates();
         }
 
         function updateButtonStates() {
@@ -175,6 +174,9 @@
         camera.position.set(0, 2, 2);
         camera.lookAt(0, 0, -3);
 
+        // Initialize terrain renderer
+        terrainRenderer = new SimpleTerrainRenderer(scene);
+
         // --- WEBSOCKET CONNECTION ---
         const ws = new WebSocket('wss://multiplayer-game-dcwy.onrender.com');
 
@@ -193,7 +195,6 @@
             updateConnectionStatus('disconnected', '❌ Server Disconnected');
             isInChunk = false;
             updateButtonStates();
-            // Don't clean up P2P connections - they can continue working
         };
 
         ws.onerror = (error) => {
@@ -252,12 +253,10 @@
 
             // Data channel handling
             if (isInitiator) {
-                // Create data channel
                 dataChannel = connection.createDataChannel('game', { ordered: true });
                 setupDataChannel(dataChannel, peerId);
                 peerState.dataChannel = dataChannel;
             } else {
-                // Receive data channel
                 connection.ondatachannel = (event) => {
                     dataChannel = event.channel;
                     setupDataChannel(dataChannel, peerId);
@@ -355,7 +354,6 @@
         ws.onmessage = async function(event) {
             let messageData;
             
-            // Handle both text and blob messages
             if (event.data instanceof Blob) {
                 messageData = await event.data.text();
             } else {
@@ -457,6 +455,10 @@
             
             updateStatus(`🏠 Chunk update: ${chunkState.players.length} players, box: ${chunkState.boxPresent}`);
             
+            // Render terrain for the chunk
+            terrainRenderer.clearChunks();
+            terrainRenderer.addTerrainChunk(payload.chunkId);
+            
             // Update box state - ONLY server decides this
             if (chunkState.boxPresent && !boxInScene) {
                 scene.add(box);
@@ -482,12 +484,10 @@
             // Establish connections to new players
             for (const player of otherPlayers) {
                 if (!peers.has(player.id)) {
-                    // Deterministic: client with smaller ID initiates connection
                     const shouldInitiate = clientId < player.id;
                     if (shouldInitiate) {
                         await initiateConnection(player.id);
                     }
-                    // If we don't initiate, we wait for them to send us an offer
                 }
             }
             
@@ -534,13 +534,13 @@
         }
 
         // --- BUTTON HANDLERS ---
-joinBtn.onclick = () => {
-    if (sendServerMessage('join_chunk', { chunkId: 'chunkA', clientId: clientId })) {
-        isInChunk = true;
-        joinBtn.disabled = true;
-        updateButtonStates();
-    }
-};
+        joinBtn.onclick = () => {
+            if (sendServerMessage('join_chunk', { chunkId: 'chunkA', clientId: clientId })) {
+                isInChunk = true;
+                joinBtn.disabled = true;
+                updateButtonStates();
+            }
+        };
 
         addBtn.onclick = () => {
             sendServerMessage('add_box_request', { 
@@ -559,10 +559,8 @@ joinBtn.onclick = () => {
                 return;
             }
             
-            // Flash locally first
             flashBox();
             
-            // Send via P2P to other players
             const sentCount = broadcastP2P({ type: 'flash_box' });
             
             if (sentCount > 0) {
