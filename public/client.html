@@ -621,7 +621,6 @@
                 const moveStep = 0.5;
                 if (distance > 0.1) {
                     playerObject.position.lerp(playerTargetPosition, moveStep / distance);
-                    // Update P2P state on every move
                     sendPlayerState();
                 } else {
                     playerObject.position.copy(playerTargetPosition);
@@ -631,13 +630,12 @@
             }
 
             // Update camera position to follow the player
-            const cameraOffset = new THREE.Vector3(-15, 20, 25); // Above and behind
-            const targetPosition = playerObject.position.clone();
-            const smoothedCameraPosition = camera.position.lerp(targetPosition.add(cameraOffset), 0.1);
+            const cameraOffset = new THREE.Vector3(-15, 20, 25);
+            const cameraTargetPosition = playerObject.position.clone().add(cameraOffset);
+            const smoothedCameraPosition = camera.position.lerp(cameraTargetPosition, 0.1);
             camera.position.copy(smoothedCameraPosition);
-            camera.lookAt(targetPosition);
+            camera.lookAt(playerObject.position);
 
-            // The server-controlled box should still animate
             const serverBox = scene.getObjectByName('serverBox');
             if (serverBox) {
                 serverBox.rotation.x += 0.005;
