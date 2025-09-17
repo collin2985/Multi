@@ -210,7 +210,7 @@
                 isMoving = true;
                 updateStatus(`🚀 Moving to clicked position: (${playerTargetPosition.x.toFixed(2)}, ${playerTargetPosition.z.toFixed(2)})`);
                 
-                // --- ADDED: Broadcast move event once per click ---
+                // Broadcast move event once per click
                 broadcastP2P({
                     type: 'player_move',
                     payload: {
@@ -265,9 +265,9 @@
                 dataChannel: null,
                 state: 'connecting',
                 isInitiator,
-                // --- ADDED: Target position for local animation ---
+                // Target position for local animation
                 targetPosition: null,
-                // --- ADDED: Start time for timing the animation ---
+                // Start time for timing the animation
                 moveStartTime: null
             };
 
@@ -364,7 +364,7 @@
         
         function handleP2PMessage(message, fromPeer) {
             switch (message.type) {
-                // --- ADDED: Handle the new 'player_move' message ---
+                // Handle the new 'player_move' message
                 case 'player_move':
                     const peer = peers.get(fromPeer);
                     const avatar = avatars.get(fromPeer);
@@ -394,9 +394,6 @@
             });
             return sentCount;
         }
-
-        // --- REMOVED: Inefficient broadcast interval ---
-        // setInterval(sendPlayerState, 100);
 
         // --- SERVER MESSAGE HANDLING ---
         ws.onmessage = async function(event) {
@@ -615,6 +612,7 @@
         
         // --- ANIMATION LOOP ---
         const playerSpeed = 0.05; // Meters per millisecond
+        const stopThreshold = 0.01; // The distance to snap to the target
         function animate() {
             requestAnimationFrame(animate);
 
@@ -623,12 +621,13 @@
                 const distance = playerObject.position.distanceTo(playerTargetPosition);
                 const moveStep = playerSpeed * (performance.now() - lastFrameTime);
                 
-                if (distance > 0.1) {
-                    playerObject.position.lerp(playerTargetPosition, moveStep / distance);
-                } else {
+                // If we're close enough, snap to the target to prevent jitter
+                if (distance < stopThreshold) {
                     playerObject.position.copy(playerTargetPosition);
                     isMoving = false;
                     updateStatus("📍 Arrived at destination.");
+                } else {
+                    playerObject.position.lerp(playerTargetPosition, moveStep / distance);
                 }
             }
 
@@ -639,12 +638,13 @@
                     const distance = avatar.position.distanceTo(peer.targetPosition);
                     const moveStep = playerSpeed * (performance.now() - lastFrameTime);
 
-                    if (distance > 0.1) {
-                        avatar.position.lerp(peer.targetPosition, moveStep / distance);
-                    } else {
+                    // If we're close enough, snap to the target to prevent jitter
+                    if (distance < stopThreshold) {
                         avatar.position.copy(peer.targetPosition);
                         peer.targetPosition = null; // Clear target to stop animation
                         updateStatus(`✅ Avatar for ${peerId} arrived at destination.`);
+                    } else {
+                        avatar.position.lerp(peer.targetPosition, moveStep / distance);
                     }
                 }
             });
