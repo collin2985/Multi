@@ -590,15 +590,20 @@
 
         // --- BUTTON HANDLERS ---
         joinBtn.onclick = () => {
-            // FIX: This section now adds a 2x2 grid of chunks.
-            const chunkCoords = [{x: 0, z: 0}, {x: 1, z: 0}, {x: 0, z: 1}, {x: -1, z: 0}];
+            const chunkCoords = [];
+            const radius = 1; // 3x3 grid
+            for (let x = -radius; x <= radius; x++) {
+                for (let z = -radius; z <= radius; z++) {
+                    chunkCoords.push({ x, z });
+                }
+            }
             let hasJoined = false;
             for (const coords of chunkCoords) {
                 const chunkId = `chunk_${coords.x}_${coords.z}`;
                 terrainRenderer.addTerrainChunk(chunkId);
-                // We still send a join request to the server, but only for the central chunk
+                // Join only the central chunk for server state
                 if (coords.x === 0 && coords.z === 0) {
-                    if (sendServerMessage('join_chunk', { chunkId: 'chunkA', clientId: clientId })) {
+                    if (sendServerMessage('join_chunk', { chunkId: chunkId, clientId: clientId })) {
                         hasJoined = true;
                     }
                 }
@@ -612,13 +617,13 @@
 
         addBtn.onclick = () => {
             sendServerMessage('add_box_request', { 
-                chunkId: 'chunkA',
+                chunkId: 'chunk_0_0',
                 position: { x: 0, y: 0, z: -3 }
             });
         };
 
         removeBtn.onclick = () => {
-            sendServerMessage('remove_box_request', { chunkId: 'chunkA' });
+            sendServerMessage('remove_box_request', { chunkId: 'chunk_0_0' });
         };
         
         // --- ANIMATION LOOP ---

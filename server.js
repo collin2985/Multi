@@ -1,3 +1,4 @@
+// server.js
 const WebSocket = require('ws');
 const fs = require('fs');
 
@@ -170,15 +171,12 @@ wss.on('connection', ws => {
 // A periodic check to verify players from the file are still connected
 const interval = setInterval(() => {
     console.log('Starting periodic player check...');
-    const chunkId = 'chunkA';
-    const chunkData = loadChunk(chunkId);
-
-    if (chunkData) {
+    chunkCache.forEach((chunkData, chunkId) => {
         const playersToRemove = [];
         chunkData.players.forEach(player => {
             const clientWs = clients.get(player.id);
             if (!clientWs) {
-                console.log(`Removing disconnected player ${player.id} from chunk data`);
+                console.log(`Removing disconnected player ${player.id} from chunk ${chunkId}`);
                 playersToRemove.push(player.id);
             }
         });
@@ -191,9 +189,8 @@ const interval = setInterval(() => {
                 payload: { chunkId, state: chunkData }
             });
         }
-        
-        console.log('Periodic player check finished');
-    }
+    });
+    console.log('Periodic player check finished');
 }, 60000);
 
 // Clean up the interval when the server closes
