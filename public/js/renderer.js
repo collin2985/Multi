@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { SimpleTerrainRenderer } from 'terrain'; // Add this line
+
 
 export function initializeRenderer() {
     const scene = new THREE.Scene();
