@@ -13,9 +13,9 @@ const avatars = new Map();
 let currentPlayerChunkX = 0;
 let currentPlayerChunkZ = 0;
 
-const loadRadius = 2; // How many chunks to load around player
+const loadRadius = 1; // How many chunks to load around player
 let lastChunkUpdateTime = 0;
-const chunkUpdateInterval = 2000; // Check every second
+const chunkUpdateInterval = 1000; // Check every second
 let chunkLoadQueue = [];
 let isProcessingChunks = false;
 let terrainSeed = 0;
@@ -515,7 +515,7 @@ function processChunkQueue() {
 
         setTimeout(() => {
             isProcessingChunks = false;
-        }, 16);
+        }, 100);
     }
 }
 
@@ -577,7 +577,7 @@ function animate() {
     checkAndReconnectPeers();
     processChunkQueue();
 
-    const cameraOffset = new THREE.Vector3(-15, 40, 20);
+    const cameraOffset = new THREE.Vector3(-5, 20, 10);
     const cameraTargetPosition = playerObject.position.clone().add(cameraOffset);
     const smoothedCameraPosition = camera.position.lerp(cameraTargetPosition, 0.1);
     camera.position.copy(smoothedCameraPosition);
