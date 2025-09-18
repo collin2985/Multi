@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 
-export function initializeNetworking(clientId, uiElements) {
-    let ws = null;
+export function initializeNetworking(clientId, uiElements, handleChunkStateChange) {    let ws = null;
     let wsRetryAttempts = 0;
     const wsMaxRetries = 10;
     const wsRetryInterval = 5000;
@@ -330,5 +329,5 @@ export function initializeNetworking(clientId, uiElements) {
         }
     }
 
-    return { connectToServer, sendServerMessage, peers, avatars, handleChunkStateChange };
+return { connectToServer, sendServerMessage, peers, avatars };
 }

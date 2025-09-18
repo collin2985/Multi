@@ -7,7 +7,7 @@ const terrainSeed = Math.floor(Math.random() * 1000000);
 async function saveChunk(chunkId) {
     const chunkData = chunkCache.get(chunkId);
     if (chunkData) {
-        const filePath = path.join(__dirname, 'public', 'chunkA.JSON');
+        const filePath = path.join(__dirname, 'public', `chunk_${chunkId}.JSON`);
         try {
             await fs.writeFile(filePath, JSON.stringify(chunkData, null, 2));
             console.log(`Saved chunk: ${chunkId}`);
@@ -16,9 +16,8 @@ async function saveChunk(chunkId) {
         }
     }
 }
-
 async function loadChunk(chunkId) {
-    const filePath = path.join(__dirname, 'public', 'chunkA.JSON');
+    const filePath = path.join(__dirname, 'public', `chunk_${chunkId}.JSON`);
     try {
         const data = await fs.readFile(filePath, 'utf8');
         const chunkData = JSON.parse(data);

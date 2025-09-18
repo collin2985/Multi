@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 
-export function initializeGame(clientId, scene, camera, renderer, playerObject, box, uiElements, sendServerMessage, terrainRenderer, peers, avatars, handleChunkStateChange) {
-    let isInChunk = false;
+export function initializeGame(clientId, scene, camera, renderer, playerObject, box, uiElements, sendServerMessage, terrainRenderer, peers, avatars) {    let isInChunk = false;
     let boxInScene = false;
     let currentPlayerChunkX = 0;
     let currentPlayerChunkZ = 0;
@@ -160,10 +159,7 @@ export function initializeGame(clientId, scene, camera, renderer, playerObject, 
         return sentCount;
     }
 
-    // Override handleChunkStateChange to update scene and box
-    const originalHandleChunkStateChange = handleChunkStateChange;
-    handleChunkStateChange = (payload) => {
-        originalHandleChunkStateChange(payload);
+  function handleChunkStateChange(payload) {
         const chunkState = payload.state;
         if (chunkState) {
             isInChunk = true;
@@ -187,6 +183,5 @@ export function initializeGame(clientId, scene, camera, renderer, playerObject, 
             updateChunksAroundPlayer(currentPlayerChunkX, currentPlayerChunkZ, chunkState.seed || 0);
         }
     };
-
-    return { animate, updateChunksAroundPlayer };
+    return { animate, updateChunksAroundPlayer, handleChunkStateChange };
 }
