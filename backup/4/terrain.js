@@ -183,10 +183,8 @@ class SimpleTerrainRenderer {
     }
 
     addTerrainChunk({ chunkX = 0, chunkZ = 0, seed = 0 }) {
-// To use index-based coordinates for consistency:
-const chunkIndexX = Math.floor(chunkX / CONFIG.TERRAIN.chunkSize);
-const chunkIndexZ = Math.floor(chunkZ / CONFIG.TERRAIN.chunkSize);
-const key = `${chunkIndexX},${chunkIndexZ}`;        
+        const key = `${chunkX},${chunkZ}`;
+        
         // Check if chunk already exists
         if (this.terrainChunks.has(key)) {
             return; 

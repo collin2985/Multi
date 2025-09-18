@@ -116,11 +116,6 @@
         const peers = new Map();
         let terrainRenderer = null;
         const avatars = new Map();
-        let currentPlayerChunkX = 0;
-        let currentPlayerChunkZ = 0;
-        const loadRadius = 3; // How many chunks to load around player
-        let lastChunkUpdateTime = 0;
-        const chunkUpdateInterval = 1000; // Check every second
 
         // Click-to-move state
         const raycaster = new THREE.Raycaster();
@@ -602,54 +597,33 @@
         }
 
         // --- BUTTON HANDLERS ---
-        // Replace the existing joinBtn.onclick handler
-joinBtn.onclick = () => {
-    if (sendServerMessage('join_chunk', { chunkId: 'chunk_0_0', clientId })) {
-        isInChunk = true;
-        joinBtn.disabled = true;
-        updateChunksAroundPlayer(0, 0); // Load initial chunks
-        updateButtonStates();
-    }
-};
-
-// Add this new function to handle chunk loading/unloading
-function updateChunksAroundPlayer(playerChunkX, playerChunkZ) {
-    const chunkSize = 50; // Match CONFIG.TERRAIN.chunkSize
-    
-    // Calculate which chunks should be loaded
-    const shouldLoad = new Set();
-    for (let x = playerChunkX - loadRadius; x <= playerChunkX + loadRadius; x++) {
-        for (let z = playerChunkZ - loadRadius; z <= playerChunkZ + loadRadius; z++) {
-            shouldLoad.add(`${x},${z}`);
-        }
-    }
-    
-    // Remove chunks that are too far away
-    const currentChunks = new Set(terrainRenderer.terrainChunks.keys());
-    for (const chunkKey of currentChunks) {
-        if (!shouldLoad.has(chunkKey)) {
-            const [chunkX, chunkZ] = chunkKey.split(',').map(Number);
-            terrainRenderer.removeTerrainChunk({ chunkX: chunkX * chunkSize, chunkZ: chunkZ * chunkSize });
-            updateStatus(`Unloaded chunk (${chunkX}, ${chunkZ})`);
-        }
-    }
-    
-    // Add new chunks that should be loaded
-    for (const chunkKey of shouldLoad) {
-        if (!currentChunks.has(chunkKey)) {
-            const [chunkX, chunkZ] = chunkKey.split(',').map(Number);
-            // Use index-based coordinates for terrain rendering
-            terrainRenderer.addTerrainChunk({ 
-                chunkX: chunkX * chunkSize, 
-                chunkZ: chunkZ * chunkSize, 
-                seed: 0 // Will be updated from server if needed
-            });
-            updateStatus(`Loaded chunk (${chunkX}, ${chunkZ})`);
-        }
-    }
-}
-
-
+        joinBtn.onclick = () => {
+            const chunkSize = 50; // Match CONFIG.TERRAIN.chunkSize in terrain.js
+            const radius = 3; // 3x3 grid
+            let hasJoined = false;
+            for (let indexX = -radius; indexX <= radius; indexX++) {
+                for (let indexZ = -radius; indexZ <= radius; indexZ++) {
+                    const chunkX = indexX * chunkSize;
+                    const chunkZ = indexZ * chunkSize;
+                    const chunkId = `chunk_${indexX}_${indexZ}`; // Keep string ID for server compatibility
+                    
+                    // Add terrain chunk with numerical coordinates (seed will be provided later from server)
+                    terrainRenderer.addTerrainChunk({ chunkX, chunkZ });
+                    
+                    // Join only the central chunk for server state
+                    if (indexX === 0 && indexZ === 0) {
+                        if (sendServerMessage('join_chunk', { chunkId, clientId })) {
+                            hasJoined = true;
+                        }
+                    }
+                }
+            }
+            if (hasJoined) {
+                isInChunk = true;
+                joinBtn.disabled = true;
+                updateButtonStates();
+            }
+        };
 
         addBtn.onclick = () => {
             sendServerMessage('add_box_request', { 
@@ -667,60 +641,43 @@ function updateChunksAroundPlayer(playerChunkX, playerChunkZ) {
         const stopThreshold = 0.01;
         let lastFrameTime = performance.now();
         
-   function animate() {
-    requestAnimationFrame(animate);
-    const now = performance.now();
-    const deltaTime = now - lastFrameTime;
+        function animate() {
+            requestAnimationFrame(animate);
+            const now = performance.now();
+            const deltaTime = now - lastFrameTime;
 
-    // Player movement (you need this!)
-    if (isMoving) {
-        const distance = playerObject.position.distanceTo(playerTargetPosition);
-        
-        if (distance <= stopThreshold) {
-            playerObject.position.copy(playerTargetPosition);
-            isMoving = false;
-            updateStatus("🏁 Arrived at destination.");
-        } else {
-            const moveStep = playerSpeed * deltaTime;
-            const alpha = Math.min(1, moveStep / distance);
-            playerObject.position.lerp(playerTargetPosition, alpha);
-        }
-    }
-
-    // Avatar movement
-    avatars.forEach((avatar, peerId) => {
-        const peer = peers.get(peerId);
-        if (peer && peer.targetPosition) {
-            const distance = avatar.position.distanceTo(peer.targetPosition);
-
-            if (distance <= stopThreshold) {
-                avatar.position.copy(peer.targetPosition);
-                peer.targetPosition = null;
-                updateStatus(`✅ Avatar for ${peerId} arrived at destination.`);
-            } else {
-                const moveStep = playerSpeed * deltaTime;
-                const alpha = Math.min(1, moveStep / distance);
-                avatar.position.lerp(peer.targetPosition, alpha);
+            if (isMoving) {
+                const distance = playerObject.position.distanceTo(playerTargetPosition);
+                
+                if (distance <= stopThreshold) {
+                    playerObject.position.copy(playerTargetPosition);
+                    isMoving = false;
+                    updateStatus("📍 Arrived at destination.");
+                } else {
+                    const moveStep = playerSpeed * deltaTime;
+                    const alpha = Math.min(1, moveStep / distance);
+                    playerObject.position.lerp(playerTargetPosition, alpha);
+                }
             }
-        }
-    });
 
-    // Chunk loading check (your addition)
-    if (now - lastChunkUpdateTime > chunkUpdateInterval) {
-        const chunkSize = 50;
-        const newChunkX = Math.floor((playerObject.position.x + chunkSize/2) / chunkSize);
-        const newChunkZ = Math.floor((playerObject.position.z + chunkSize/2) / chunkSize);
-        
-        if (newChunkX !== currentPlayerChunkX || newChunkZ !== currentPlayerChunkZ) {
-            currentPlayerChunkX = newChunkX;
-            currentPlayerChunkZ = newChunkZ;
-            updateChunksAroundPlayer(newChunkX, newChunkZ);
-            updateStatus(`Player moved to chunk (${newChunkX}, ${newChunkZ})`);
-        }
-        lastChunkUpdateTime = now;
-    }
+            avatars.forEach((avatar, peerId) => {
+                const peer = peers.get(peerId);
+                if (peer && peer.targetPosition) {
+                    const distance = avatar.position.distanceTo(peer.targetPosition);
 
-    checkAndReconnectPeers(); // Only call once
+                    if (distance <= stopThreshold) {
+                        avatar.position.copy(peer.targetPosition);
+                        peer.targetPosition = null;
+                        updateStatus(`✅ Avatar for ${peerId} arrived at destination.`);
+                    } else {
+                        const moveStep = playerSpeed * deltaTime;
+                        const alpha = Math.min(1, moveStep / distance);
+                        avatar.position.lerp(peer.targetPosition, alpha);
+                    }
+                }
+            });
+
+            checkAndReconnectPeers();
             
             const cameraOffset = new THREE.Vector3(-15, 40, 20);
             const cameraTargetPosition = playerObject.position.clone().add(cameraOffset);
