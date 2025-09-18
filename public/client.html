@@ -118,13 +118,15 @@
         const avatars = new Map();
         let currentPlayerChunkX = 0;
         let currentPlayerChunkZ = 0;
-        const loadRadius = 1; // How many chunks to load around player
+        const loadRadius = 2; // How many chunks to load around player
         let lastChunkUpdateTime = 0;
         const chunkUpdateInterval = 2000; // Check every second
         let chunkLoadQueue = [];
         let isProcessingChunks = false;
-        let terrainSeed = 0; 
-
+        
+        // ADDED: Global state for terrain seed and initial load flag
+        let terrainSeed = 0;
+        let initialChunksLoaded = false;
 
         // Click-to-move state
         const raycaster = new THREE.Raycaster();
@@ -506,67 +508,89 @@
         }
 
         async function handleChunkStateChange(payload) {
+            updateStatus(`🔄 Chunk update received for ${payload.chunkId}`);
+            
             const chunkState = payload.state;
-                terrainSeed = chunkState.seed || 0;
-
-            if (!chunkState) return;
             
-            updateStatus(`🏠 Chunk update: ${chunkState.players.length} players, box: ${chunkState.boxPresent}`);
-            
-            // Extract seed from server payload
-            const seed = chunkState.seed || 0; // Default to 0 if not provided
-            
-            // Add terrain chunk with numerical coordinates and seed
-            // For simplicity, assuming chunkId is 'chunk_x_z', parse to get chunkX, chunkZ
-            const parts = payload.chunkId.split('_');
-            const chunkX = parseInt(parts[1]) * 50; // Assuming chunkSize=50
-            const chunkZ = parseInt(parts[2]) * 50;
-    terrainRenderer.addTerrainChunk({ chunkX, chunkZ, seed: terrainSeed });
-            
-            if (chunkState.boxPresent) {
-                const existingBox = scene.getObjectByName('serverBox');
-                if (!existingBox) {
-                    scene.add(box);
-                    boxInScene = true;
-                    updateStatus("📦 Box added to scene (server authority)");
-                }
-            } else {
-                const existingBox = scene.getObjectByName('serverBox');
-                if (existingBox) {
-                    scene.remove(existingBox);
-                    boxInScene = false;
-                    updateStatus("📦 Box removed from scene (server authority)");
+            // SET THE GLOBAL TERRAIN SEED from the server
+            if (chunkState.seed) {
+                terrainSeed = chunkState.seed;
+                
+                // TRIGGER INITIAL CHUNK LOADING ONLY ONCE, AFTER RECEIVING THE SEED
+                if (!initialChunksLoaded) {
+                    updateChunksAroundPlayer(
+                        Math.floor(playerObject.position.x / 50),
+                        Math.floor(playerObject.position.z / 50)
+                    );
+                    initialChunksLoaded = true;
                 }
             }
-            
-            const otherPlayers = chunkState.players.filter(p => p.id !== clientId);
-            
-            peers.forEach((peer, peerId) => {
-                if (!otherPlayers.some(p => p.id === peerId)) {
-                    updateStatus(`👋 Player ${peerId} left chunk`);
+
+            // Reconcile player list
+            const existingPlayers = new Set(payload.state.players.map(p => p.id));
+            const playersToKeep = new Set();
+            for (const [peerId, peer] of peers) {
+                if (existingPlayers.has(peerId)) {
+                    playersToKeep.add(peerId);
+                } else {
                     cleanupPeer(peerId);
                 }
-            });
+            }
             
-            for (const player of otherPlayers) {
-                if (!peers.has(player.id)) {
-                    const shouldInitiate = clientId < player.id;
-                    if (shouldInitiate) {
-                        await initiateConnection(player.id);
-                    }
+            // Check for new players and establish P2P connections
+            for (const player of chunkState.players) {
+                if (player.id !== clientId && !peers.has(player.id)) {
+                    updateStatus(`New player detected: ${player.id}. Establishing P2P...`);
+                    // Initiate P2P connection
+                    initiateConnection(player.id);
                 }
-                if (!avatars.has(player.id)) {
-                    const geometry = new THREE.SphereGeometry(1, 32, 32);
-                    const material = new THREE.MeshBasicMaterial({ color: Math.random() * 0xffffff });
-                    const avatar = new THREE.Mesh(geometry, material);
-                    scene.add(avatar);
-                    avatars.set(player.id, avatar);
-                    updateStatus(`🟢 Avatar for ${player.id} added.`);
+            }
+
+            // Remove box changes for players who have left
+            // Note: This assumes box changes are synchronized
+            const boxChanges = Object.keys(chunkState.boxes);
+            const boxChangesToRemove = [];
+
+            for (const boxId of boxChanges) {
+                const box = chunkState.boxes[boxId];
+                if (!existingPlayers.has(box.player) && box.player !== clientId) {
+                    boxChangesToRemove.push(box.id);
+                }
+            }
+
+            // Ensure our local boxes match the server's state
+            const serverBoxKeys = Object.keys(chunkState.boxes);
+            const serverBoxSet = new Set(serverBoxKeys);
+            
+            // Remove local boxes that are not in the server state
+            for (const [key, mesh] of boxMeshMap) {
+                if (!serverBoxSet.has(key)) {
+                    scene.remove(mesh);
+                    mesh.geometry.dispose();
+                    boxMeshMap.delete(key);
                 }
             }
             
-            updateButtonStates();
-            updatePeerInfo();
+            // Add or update boxes from the server state
+            for (const key of serverBoxKeys) {
+                const serverBox = chunkState.boxes[key];
+                const boxMesh = boxMeshMap.get(key);
+                if (!boxMesh) {
+                    // This is a new box, add it
+                    const newMesh = createBoxMesh(serverBox.x, serverBox.y, serverBox.z, serverBox.color);
+                    boxMeshMap.set(key, newMesh);
+                }
+            }
+            
+            // Handle terrain changes
+            if (chunkState.removedPoints.length > 0 || chunkState.addedPoints.length > 0) {
+                terrainRenderer.updateTerrain(chunkState.removedPoints, chunkState.addedPoints, terrainSeed, playerAvatar.position);
+            } else if (payload.chunkId.includes(currentChunk)) {
+                // If it's a full state update, remove existing terrain and re-add
+                const [chunkX, chunkZ] = payload.chunkId.split('_').slice(1).map(Number);
+                terrainRenderer.removeTerrainChunk({ chunkX: chunkX * 50, chunkZ: chunkZ * 50 });
+                terrainRenderer.addTerrainChunk({ chunkX: chunkX * 50, chunkZ: chunkZ * 50, seed: terrainSeed });
+            }
         }
 
         async function initiateConnection(peerId) {
@@ -608,66 +632,13 @@
         }
 
         // --- BUTTON HANDLERS ---
-        // Replace the existing joinBtn.onclick handler
-joinBtn.onclick = () => {
-    if (sendServerMessage('join_chunk', { chunkId: 'chunk_0_0', clientId })) {
-        isInChunk = true;
-        joinBtn.disabled = true;
-        updateChunksAroundPlayer(0, 0); // Load initial chunks
-        updateButtonStates();
-    }
-};
-
-// Add this new function to handle chunk loading/unloading
-function updateChunksAroundPlayer(playerChunkX, playerChunkZ) {
-    const chunkSize = 50;
-    
-    // Calculate which chunks should be loaded
-    const shouldLoad = new Set();
-    for (let x = playerChunkX - loadRadius; x <= playerChunkX + loadRadius; x++) {
-        for (let z = playerChunkZ - loadRadius; z <= playerChunkZ + loadRadius; z++) {
-            shouldLoad.add(`${x},${z}`);
-        }
-    }
-    
-    // Remove chunks immediately (fast operation)
-    const currentChunks = new Set(terrainRenderer.terrainChunks.keys());
-    for (const chunkKey of currentChunks) {
-        if (!shouldLoad.has(chunkKey)) {
-            const [chunkX, chunkZ] = chunkKey.split(',').map(Number);
-            terrainRenderer.removeTerrainChunk({ chunkX: chunkX * chunkSize, chunkZ: chunkZ * chunkSize });
-            updateStatus(`Unloaded chunk (${chunkX}, ${chunkZ})`);
-        }
-    }
-    
-    // Queue new chunks for gradual loading
-    for (const chunkKey of shouldLoad) {
-        if (!currentChunks.has(chunkKey)) {
-            const [chunkX, chunkZ] = chunkKey.split(',').map(Number);
-            chunkLoadQueue.push({ 
-                chunkX: chunkX * chunkSize, 
-                chunkZ: chunkZ * chunkSize, 
-                seed: terrainSeed
-            });
-        }
-    }
-}
-function processChunkQueue() {
-    if (chunkLoadQueue.length > 0 && !isProcessingChunks) {
-        isProcessingChunks = true;
-        const chunk = chunkLoadQueue.shift();
-        
-        terrainRenderer.addTerrainChunk(chunk);
-        updateStatus(`Loaded chunk at (${chunk.chunkX/50}, ${chunk.chunkZ/50})`);
-        
-        // Allow one frame before processing next chunk
-        setTimeout(() => {
-            isProcessingChunks = false;
-        }, 16);
-    }
-}
-
-
+        joinBtn.onclick = () => {
+            if (sendServerMessage('join_chunk', { chunkId: 'chunk_0_0', clientId })) {
+                isInChunk = true;
+                joinBtn.disabled = true;
+                updateButtonStates();
+            }
+        };
 
         addBtn.onclick = () => {
             sendServerMessage('add_box_request', { 
@@ -680,65 +651,120 @@ function processChunkQueue() {
             sendServerMessage('remove_box_request', { chunkId: 'chunk_0_0' });
         };
         
+        // --- CHUNK LOADING MANAGEMENT ---
+        const currentChunks = new Set();
+        const chunkSize = 50;
+
+        function updateChunksAroundPlayer(playerChunkX, playerChunkZ) {
+            const shouldLoad = new Set();
+            for (let x = playerChunkX - loadRadius; x <= playerChunkX + loadRadius; x++) {
+                for (let z = playerChunkZ - loadRadius; z <= playerChunkZ + loadRadius; z++) {
+                    shouldLoad.add(`${x},${z}`);
+                }
+            }
+            
+            // Remove chunks that are no longer in range
+            for (const chunkKey of currentChunks) {
+                if (!shouldLoad.has(chunkKey)) {
+                    currentChunks.delete(chunkKey);
+                    const [chunkX, chunkZ] = chunkKey.split(',').map(Number);
+                    terrainRenderer.removeTerrainChunk({ 
+                        chunkX: chunkX * chunkSize, 
+                        chunkZ: chunkZ * chunkSize 
+                    });
+                    updateStatus(`Unloaded chunk (${chunkX}, ${chunkZ})`);
+                }
+            }
+            
+            // Add new chunks that have entered the range
+            for (const chunkKey of shouldLoad) {
+                if (!currentChunks.has(chunkKey)) {
+                    const [chunkX, chunkZ] = chunkKey.split(',').map(Number);
+                    currentChunks.add(chunkKey);
+                    
+                    // Queue chunk for loading
+                    chunkLoadQueue.push({ 
+                        chunkX: chunkX * chunkSize, 
+                        chunkZ: chunkZ * chunkSize, 
+                        seed: terrainSeed // Use the global seed
+                    });
+                }
+            }
+        }
+
+        function processChunkQueue() {
+            if (chunkLoadQueue.length > 0 && !isProcessingChunks) {
+                isProcessingChunks = true;
+                const chunk = chunkLoadQueue.shift();
+                
+                terrainRenderer.addTerrainChunk(chunk);
+                updateStatus(`Loaded chunk at (${chunk.chunkX/50}, ${chunk.chunkZ/50})`);
+                
+                // Allow one frame before processing next chunk
+                setTimeout(() => {
+                    isProcessingChunks = false;
+                }, 16);
+            }
+        }
+
         // --- ANIMATION LOOP ---
         const playerSpeed = 0.05;
         const stopThreshold = 0.01;
         let lastFrameTime = performance.now();
         
-   function animate() {
-    requestAnimationFrame(animate);
-    const now = performance.now();
-    const deltaTime = now - lastFrameTime;
+        function animate() {
+            requestAnimationFrame(animate);
+            const now = performance.now();
+            const deltaTime = now - lastFrameTime;
 
-    // Player movement (you need this!)
-    if (isMoving) {
-        const distance = playerObject.position.distanceTo(playerTargetPosition);
-        
-        if (distance <= stopThreshold) {
-            playerObject.position.copy(playerTargetPosition);
-            isMoving = false;
-            updateStatus("🏁 Arrived at destination.");
-        } else {
-            const moveStep = playerSpeed * deltaTime;
-            const alpha = Math.min(1, moveStep / distance);
-            playerObject.position.lerp(playerTargetPosition, alpha);
-        }
-    }
-
-    // Avatar movement
-    avatars.forEach((avatar, peerId) => {
-        const peer = peers.get(peerId);
-        if (peer && peer.targetPosition) {
-            const distance = avatar.position.distanceTo(peer.targetPosition);
-
-            if (distance <= stopThreshold) {
-                avatar.position.copy(peer.targetPosition);
-                peer.targetPosition = null;
-                updateStatus(`✅ Avatar for ${peerId} arrived at destination.`);
-            } else {
-                const moveStep = playerSpeed * deltaTime;
-                const alpha = Math.min(1, moveStep / distance);
-                avatar.position.lerp(peer.targetPosition, alpha);
+            // Player movement
+            if (isMoving) {
+                const distance = playerObject.position.distanceTo(playerTargetPosition);
+                
+                if (distance <= stopThreshold) {
+                    playerObject.position.copy(playerTargetPosition);
+                    isMoving = false;
+                    updateStatus("🏁 Arrived at destination.");
+                } else {
+                    const moveStep = playerSpeed * deltaTime;
+                    const alpha = Math.min(1, moveStep / distance);
+                    playerObject.position.lerp(playerTargetPosition, alpha);
+                }
             }
-        }
-    });
 
-    // Chunk loading check (your addition)
-    if (now - lastChunkUpdateTime > chunkUpdateInterval) {
-        const chunkSize = 50;
-        const newChunkX = Math.floor((playerObject.position.x + chunkSize/2) / chunkSize);
-        const newChunkZ = Math.floor((playerObject.position.z + chunkSize/2) / chunkSize);
-        
-        if (newChunkX !== currentPlayerChunkX || newChunkZ !== currentPlayerChunkZ) {
-            currentPlayerChunkX = newChunkX;
-            currentPlayerChunkZ = newChunkZ;
-            updateChunksAroundPlayer(newChunkX, newChunkZ);
-            updateStatus(`Player moved to chunk (${newChunkX}, ${newChunkZ})`);
-        }
-        lastChunkUpdateTime = now;
-    }
+            // Avatar movement
+            avatars.forEach((avatar, peerId) => {
+                const peer = peers.get(peerId);
+                if (peer && peer.targetPosition) {
+                    const distance = avatar.position.distanceTo(peer.targetPosition);
 
-    checkAndReconnectPeers(); // Only call once
+                    if (distance <= stopThreshold) {
+                        avatar.position.copy(peer.targetPosition);
+                        peer.targetPosition = null;
+                        updateStatus(`✅ Avatar for ${peerId} arrived at destination.`);
+                    } else {
+                        const moveStep = playerSpeed * deltaTime;
+                        const alpha = Math.min(1, moveStep / distance);
+                        avatar.position.lerp(peer.targetPosition, alpha);
+                    }
+                }
+            });
+
+            // Chunk loading check
+            if (now - lastChunkUpdateTime > chunkUpdateInterval) {
+                const newChunkX = Math.floor((playerObject.position.x + chunkSize/2) / chunkSize);
+                const newChunkZ = Math.floor((playerObject.position.z + chunkSize/2) / chunkSize);
+                
+                if (newChunkX !== currentPlayerChunkX || newChunkZ !== currentPlayerChunkZ) {
+                    currentPlayerChunkX = newChunkX;
+                    currentPlayerChunkZ = newChunkZ;
+                    updateChunksAroundPlayer(newChunkX, newChunkZ);
+                    updateStatus(`Player moved to chunk (${newChunkX}, ${newChunkZ})`);
+                }
+                lastChunkUpdateTime = now;
+            }
+
+            checkAndReconnectPeers(); 
             processChunkQueue(); 
 
             const cameraOffset = new THREE.Vector3(-15, 40, 20);

@@ -12,7 +12,7 @@ const chunkCache = new Map();
 const clients = new Map();
 
 // Define a global terrain seed (can be fixed or dynamically generated)
-const terrainSeed = Math.floor(Math.random() * 1000000); // Example: Random seed per server start
+const terrainSeed = 12345; // Example: Random seed per server start
 
 // Save the chunk state to its file
 function saveChunk(chunkId) {
