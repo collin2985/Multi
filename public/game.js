@@ -11,6 +11,8 @@ const peers = new Map();
 let terrainRenderer = null;
 const avatars = new Map();
 let currentPlayerChunkX = 0;
+let currentPlayerChunkZ = 0;
+
 const loadRadius = 2; // How many chunks to load around player
 let lastChunkUpdateTime = 0;
 const chunkUpdateInterval = 2000; // Check every second
