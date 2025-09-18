@@ -108,8 +108,11 @@
         };
 
         const { scene, camera, renderer, playerObject, box, terrainRenderer } = initializeRenderer();
-        const { connectToServer, sendServerMessage, peers, avatars } = initializeNetworking(clientId, uiElements);
-const { animate, updateChunksAroundPlayer, handleChunkStateChange } = initializeGame(clientId, scene, camera, renderer, playerObject, box, uiElements, sendServerMessage, terrainRenderer, peers, avatars);        initializeUI(uiElements, sendServerMessage, updateChunksAroundPlayer, clientId);
+
+const { animate, updateChunksAroundPlayer, handleChunkStateChange } = initializeGame(clientId, scene, camera, renderer, playerObject, box, uiElements, sendServerMessage, terrainRenderer, peers, avatars);
+const { connectToServer, sendServerMessage, peers, avatars } = initializeNetworking(clientId, uiElements, handleChunkStateChange);
+initializeUI(uiElements, sendServerMessage, updateChunksAroundPlayer, clientId);
+
 
         connectToServer();
         animate();
