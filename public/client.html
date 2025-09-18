@@ -107,10 +107,10 @@
             removeBtn: document.getElementById('removeBoxBtn')
         };
 
-        const { scene, camera, renderer, playerObject, box } = initializeRenderer();
-        const { connectToServer, sendServerMessage } = initializeNetworking(clientId, uiElements);
-        const { animate, updateChunksAroundPlayer } = initializeGame(clientId, scene, camera, renderer, playerObject, box, uiElements, sendServerMessage);
-        initializeUI(uiElements, sendServerMessage, updateChunksAroundPlayer);
+        const { scene, camera, renderer, playerObject, box, terrainRenderer } = initializeRenderer();
+        const { connectToServer, sendServerMessage, peers, avatars, handleChunkStateChange } = initializeNetworking(clientId, uiElements);
+        const { animate, updateChunksAroundPlayer } = initializeGame(clientId, scene, camera, renderer, playerObject, box, uiElements, sendServerMessage, terrainRenderer, peers, avatars, handleChunkStateChange);
+        initializeUI(uiElements, sendServerMessage, updateChunksAroundPlayer, clientId);
 
         connectToServer();
         animate();

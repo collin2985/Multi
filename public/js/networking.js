@@ -59,6 +59,9 @@ export function initializeNetworking(clientId, uiElements) {
             }
             updateStatus(`📥 Server: ${data.type}`);
             switch (data.type) {
+                case 'welcome':
+                    updateStatus(`🎉 ${data.message}`);
+                    break;
                 case 'webrtc_offer':
                     await handleWebRTCOffer(data.payload);
                     break;

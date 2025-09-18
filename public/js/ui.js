@@ -1,4 +1,4 @@
-export function initializeUI(uiElements, sendServerMessage, updateChunksAroundPlayer) {
+export function initializeUI(uiElements, sendServerMessage, updateChunksAroundPlayer, clientId) {
     uiElements.joinBtn.onclick = () => {
         if (sendServerMessage('join_chunk', { chunkId: 'chunk_0_0', clientId })) {
             uiElements.joinBtn.disabled = true;
