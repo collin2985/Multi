@@ -78,14 +78,12 @@ class SimpleTerrainRenderer {
                     float height = vWorldPosition.y;
                     float slope = 1.0 - vNormal.y;
                     
-                    // Use world position for texture sampling
                     vec2 texCoord = vWorldPosition.xz * 0.1;
                     vec3 dirtColor = texture2D(uDirt, texCoord).rgb;
                     vec3 grassColor = texture2D(uGrass, texCoord).rgb;
                     vec3 rockColor = texture2D(uRock, texCoord).rgb;
                     vec3 snowColor = texture2D(uSnow, texCoord).rgb;
                     
-                    // Terrain mixing
                     float dirtMix = clamp(1.0 - height * 0.1, 0.0, 1.0);
                     float grassMix = clamp(height * 0.1 - slope, 0.0, 1.0);
                     float rockMix = clamp(slope * 0.5, 0.0, 1.0);
@@ -135,21 +133,44 @@ class SimpleTerrainRenderer {
                 x -= Math.floor(x); y -= Math.floor(y); z -= Math.floor(z);
                 const u = fade(x), v = fade(y), w = fade(z);
                 const A = perm[X] + Y, AA = perm[A] + Z, AB = perm[A + 1] + Z,
-                      B = perm[X + 1] + Y, BA = perm[B] + Z, BB = perm[B + 1] + Z;
+                        B = perm[X + 1] + Y, BA = perm[B] + Z, BB = perm[B + 1] + Z;
                 return lerp(w, lerp(v, lerp(u, grad(perm[AA], x, y, z), grad(perm[BA], x - 1, y, z)),
-                                      lerp(u, grad(perm[AB], x, y - 1, z), grad(perm[BB], x - 1, y - 1, z))),
-                              lerp(v, lerp(u, grad(perm[AA + 1], x, y, z - 1), grad(perm[BA + 1], x - 1, y, z - 1)),
-                                      lerp(u, grad(perm[AB + 1], x, y - 1, z - 1), grad(perm[BB + 1], x - 1, y - 1, z - 1))));
+                                        lerp(u, grad(perm[AB], x, y - 1, z), grad(perm[BB], x - 1, y - 1, z))),
+                                 lerp(v, lerp(u, grad(perm[AA + 1], x, y, z - 1), grad(perm[BA + 1], x - 1, y, z - 1)),
+                                         lerp(u, grad(perm[AB + 1], x, y - 1, z - 1), grad(perm[BB + 1], x - 1, y - 1, z - 1))));
             }
+            
+            function calculateNormal(x, y, z, seed, perlinFn) {
+                const offset = seed * 0.001;
+                const hx = perlinFn(x + 0.02 + offset, 0, z + offset) * 10 - perlinFn(x - 0.02 + offset, 0, z + offset) * 10;
+                const hz = perlinFn(x + offset, 0, z + 0.02 + offset) * 10 - perlinFn(x + offset, 0, z - 0.02 + offset) * 10;
+                const nx = -hx;
+                const ny = 1.0;
+                const nz = -hz;
+                const length = Math.sqrt(nx * nx + ny * ny + nz * nz);
+                return [nx / length, ny / length, nz / length];
+            }
+            
             self.onmessage = function(e) {
                 if (e.data.type === 'calculateHeightBatch') {
                     const { points, batchId, seed } = e.data.data;
-                    const results = points.map(point => {
-                        // Apply seed as offset to coordinates for seeded noise
+                    const results = [];
+                    for(const point of points) {
                         const offset = seed * 0.001;
                         const height = perlin(point.x * 0.02 + offset, 0, point.z * 0.02 + offset) * 10;
-                        return { x: point.x, z: point.z, height, index: point.index };
-                    });
+                        
+                        const normal = calculateNormal(point.x, point.z, 0, seed, perlin);
+                        
+                        results.push({
+                            x: point.x,
+                            z: point.z,
+                            height,
+                            normalX: normal[0],
+                            normalY: normal[1],
+                            normalZ: normal[2],
+                            index: point.index
+                        });
+                    }
                     self.postMessage({ type: 'heightBatchResult', data: { results, batchId } });
                 }
             };
@@ -169,27 +190,30 @@ class SimpleTerrainRenderer {
             
             const { geometry, chunkX, chunkZ } = pending;
             const positions = geometry.attributes.position.array;
+            const normals = geometry.attributes.normal.array;
             
             for (let i = 0; i < results.length; i++) {
-                const { height, index } = results[i];
+                const { height, normalX, normalY, normalZ, index } = results[i];
                 positions[index + 1] = height; // y is height
+                normals[index] = normalX;
+                normals[index + 1] = normalY;
+                normals[index + 2] = normalZ;
             }
             
             geometry.attributes.position.needsUpdate = true;
-            geometry.computeVertexNormals();
+            geometry.attributes.normal.needsUpdate = true;
             this.finishTerrainChunk(geometry, chunkX, chunkZ);
             this.pendingChunks.delete(batchId);
         }
     }
 
     addTerrainChunk({ chunkX = 0, chunkZ = 0, seed = 0 }) {
-// To use index-based coordinates for consistency:
-const chunkIndexX = Math.floor(chunkX / CONFIG.TERRAIN.chunkSize);
-const chunkIndexZ = Math.floor(chunkZ / CONFIG.TERRAIN.chunkSize);
-const key = `${chunkIndexX},${chunkIndexZ}`;        
-        // Check if chunk already exists
+        const chunkIndexX = Math.floor(chunkX / CONFIG.TERRAIN.chunkSize);
+        const chunkIndexZ = Math.floor(chunkZ / CONFIG.TERRAIN.chunkSize);
+        const key = `${chunkIndexX},${chunkIndexZ}`;
+        
         if (this.terrainChunks.has(key)) {
-            return; 
+            return;
         }
         
         console.log(`Creating terrain chunk at (${chunkX}, ${chunkZ}) with seed ${seed}`);
@@ -200,8 +224,10 @@ const key = `${chunkIndexX},${chunkIndexZ}`;
             CONFIG.TERRAIN.segments,
             CONFIG.TERRAIN.segments
         );
-        // No rotation: PlaneGeometry is now in xz-plane, with y as height
         
+        // Add a normal attribute to the geometry
+        geometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(geometry.attributes.position.count * 3), 3));
+
         const positions = geometry.attributes.position.array;
         const pointsToCalculate = [];
         
@@ -212,23 +238,20 @@ const key = `${chunkIndexX},${chunkIndexZ}`;
             for (let col = 0; col <= CONFIG.TERRAIN.segments; col++) {
                 const vertexIndex = (row * (CONFIG.TERRAIN.segments + 1) + col) * 3;
                 
-                // Calculate local position (x, 0, z) - y will be set to height later
                 const localX = -halfSize + col * segmentSize;
-                const localZ = -halfSize + row * segmentSize; // Note: row increases z positively
+                const localZ = -halfSize + row * segmentSize;
                 
-                // World positions for noise
                 const worldX = chunkX + localX;
                 const worldZ = chunkZ + localZ;
                 
-                // Set initial position (y=0)
-                positions[vertexIndex] = localX;     // x
-                positions[vertexIndex + 1] = 0;      // y (height to be computed)
-                positions[vertexIndex + 2] = localZ; // z
+                positions[vertexIndex] = localX;
+                positions[vertexIndex + 1] = 0;
+                positions[vertexIndex + 2] = localZ;
                 
-                pointsToCalculate.push({ 
-                    x: worldX, 
-                    z: worldZ, 
-                    index: vertexIndex 
+                pointsToCalculate.push({
+                    x: worldX,
+                    z: worldZ,
+                    index: vertexIndex
                 });
             }
         }
@@ -243,32 +266,30 @@ const key = `${chunkIndexX},${chunkIndexZ}`;
         }
     }
 
-finishTerrainChunk(geometry, chunkX, chunkZ) {
-    const chunkIndexX = Math.floor(chunkX / CONFIG.TERRAIN.chunkSize);
-    const chunkIndexZ = Math.floor(chunkZ / CONFIG.TERRAIN.chunkSize);
-    const key = `${chunkIndexX},${chunkIndexZ}`;
+    finishTerrainChunk(geometry, chunkX, chunkZ) {
+        const chunkIndexX = Math.floor(chunkX / CONFIG.TERRAIN.chunkSize);
+        const chunkIndexZ = Math.floor(chunkZ / CONFIG.TERRAIN.chunkSize);
+        const key = `${chunkIndexX},${chunkIndexZ}`;
 
-    const mesh = new THREE.Mesh(geometry, this.terrainMaterial);
-    mesh.position.set(chunkX, 0, chunkZ);
-    this.scene.add(mesh);
-    this.terrainChunks.set(key, mesh); // ✅ use index key
-    console.log(`Added terrain chunk at (${chunkX}, ${chunkZ})`);
-}
-
-
-removeTerrainChunk({ chunkX, chunkZ }) {
-    const chunkIndexX = Math.floor(chunkX / CONFIG.TERRAIN.chunkSize);
-    const chunkIndexZ = Math.floor(chunkZ / CONFIG.TERRAIN.chunkSize);
-    const key = `${chunkIndexX},${chunkIndexZ}`;
-    const mesh = this.terrainChunks.get(key);
-    if (mesh) {
-        this.scene.remove(mesh);
-        this.terrainChunks.delete(key);
-        mesh.geometry.dispose();
-        console.log(`Removed chunk at (${chunkIndexX}, ${chunkIndexZ})`);
+        const mesh = new THREE.Mesh(geometry, this.terrainMaterial);
+        mesh.position.set(chunkX, 0, chunkZ);
+        this.scene.add(mesh);
+        this.terrainChunks.set(key, mesh);
+        console.log(`Added terrain chunk at (${chunkX}, ${chunkZ})`);
     }
-}
 
+    removeTerrainChunk({ chunkX, chunkZ }) {
+        const chunkIndexX = Math.floor(chunkX / CONFIG.TERRAIN.chunkSize);
+        const chunkIndexZ = Math.floor(chunkZ / CONFIG.TERRAIN.chunkSize);
+        const key = `${chunkIndexX},${chunkIndexZ}`;
+        const mesh = this.terrainChunks.get(key);
+        if (mesh) {
+            this.scene.remove(mesh);
+            this.terrainChunks.delete(key);
+            mesh.geometry.dispose();
+            console.log(`Removed chunk at (${chunkIndexX}, ${chunkIndexZ})`);
+        }
+    }
 
     clearChunks() {
         this.terrainChunks.forEach((mesh) => {
