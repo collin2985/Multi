@@ -1,7 +1,5 @@
-// game.js
 import * as THREE from 'three';
 import { SimpleTerrainRenderer } from './terrain.js';
-import { ui } from './ui.js'; // NEW: Import the UI module
 
 // --- GLOBAL STATE ---
 const clientId = 'client_' + Math.random().toString(36).substr(2, 12);
@@ -11,13 +9,14 @@ const peers = new Map();
 let terrainRenderer = null;
 const avatars = new Map();
 let currentPlayerChunkX = 0;
+let currentPlayerChunkZ = 0;
 const loadRadius = 2; // How many chunks to load around player
 let lastChunkUpdateTime = 0;
 const chunkUpdateInterval = 2000; // Check every second
 let chunkLoadQueue = [];
 let isProcessingChunks = false;
 let terrainSeed = 0;
-let initialChunksLoaded = false;
+let initialChunksLoaded = false; // NEW: Flag to control initial chunk loading
 
 // Click-to-move state
 const raycaster = new THREE.Raycaster();
@@ -30,6 +29,37 @@ let ws = null;
 let wsRetryAttempts = 0;
 const wsMaxRetries = 10;
 const wsRetryInterval = 5000;
+
+// --- UI ELEMENTS ---
+const statusEl = document.getElementById('status');
+const connectionStatusEl = document.getElementById('connectionStatus');
+const peerInfoEl = document.getElementById('peerInfo');
+const joinBtn = document.getElementById('joinChunkBtn');
+const addBtn = document.getElementById('addBoxBtn');
+const removeBtn = document.getElementById('removeBoxBtn');
+
+function updateStatus(msg) {
+    const timestamp = new Date().toLocaleTimeString();
+    statusEl.innerHTML += `[${timestamp}] ${msg}<br>`;
+    statusEl.scrollTop = statusEl.scrollHeight;
+    console.log(`[${timestamp}] ${msg}`);
+}
+
+function updateConnectionStatus(status, message) {
+    connectionStatusEl.className = `status-${status}`;
+    connectionStatusEl.innerHTML = message;
+}
+
+function updatePeerInfo() {
+    const connectedPeers = Array.from(peers.values()).filter(p => p.state === 'connected');
+    peerInfoEl.innerHTML = `P2P Connections: ${connectedPeers.length}/${peers.size}<br>Avatars: ${avatars.size}`;
+    updateButtonStates();
+}
+
+function updateButtonStates() {
+    addBtn.disabled = !isInChunk || boxInScene;
+    removeBtn.disabled = !isInChunk || !boxInScene;
+}
 
 // --- THREE.JS SCENE SETUP ---
 const scene = new THREE.Scene();
@@ -80,7 +110,7 @@ function onPointerDown(event) {
         const intersect = intersects[0];
         playerTargetPosition.copy(intersect.point);
         isMoving = true;
-        ui.updateStatus(`🚀 Moving to clicked position: (${playerTargetPosition.x.toFixed(2)}, ${playerTargetPosition.z.toFixed(2)})`);
+        updateStatus(`🚀 Moving to clicked position: (${playerTargetPosition.x.toFixed(2)}, ${playerTargetPosition.z.toFixed(2)})`);
 
         broadcastP2P({
             type: 'player_move',
@@ -101,23 +131,23 @@ function connectToServer() {
     ws = new WebSocket('wss://multiplayer-game-dcwy.onrender.com');
 
     ws.onopen = () => {
-        ui.updateStatus("✅ Connected to server");
-        ui.updateConnectionStatus('connected', '✅ Server Connected');
-        ui.updateButtonStates(isInChunk, boxInScene);
+        updateStatus("✅ Connected to server");
+        updateConnectionStatus('connected', '✅ Server Connected');
+        joinBtn.disabled = false;
         wsRetryAttempts = 0;
     };
 
     ws.onclose = (event) => {
-        ui.updateStatus(`❌ Server disconnected (${event.code})`);
-        ui.updateConnectionStatus('disconnected', '❌ Server Disconnected');
+        updateStatus(`❌ Server disconnected (${event.code})`);
+        updateConnectionStatus('disconnected', '❌ Server Disconnected');
         isInChunk = false;
-        ui.updateButtonStates(isInChunk, boxInScene);
+        updateButtonStates();
         attemptWsReconnect();
     };
 
     ws.onerror = (error) => {
-        ui.updateStatus(`❌ Server error: ${error}`);
-        ui.updateConnectionStatus('disconnected', '❌ Server Error');
+        updateStatus(`❌ Server error: ${error}`);
+        updateConnectionStatus('disconnected', '❌ Server Error');
     };
 
     ws.onmessage = async function(event) {
@@ -133,11 +163,11 @@ function connectToServer() {
         try {
             data = JSON.parse(messageData);
         } catch (error) {
-            ui.updateStatus(`❌ Invalid server message: ${error.message}`);
+            updateStatus(`❌ Invalid server message: ${error.message}`);
             return;
         }
 
-        ui.updateStatus(`📥 Server: ${data.type}`);
+        updateStatus(`📥 Server: ${data.type}`);
 
         switch (data.type) {
             case 'webrtc_offer':
@@ -153,7 +183,7 @@ function connectToServer() {
                 handleChunkStateChange(data.payload);
                 break;
             default:
-                ui.updateStatus(`❓ Unknown server message: ${data.type}`);
+                updateStatus(`❓ Unknown server message: ${data.type}`);
         }
     };
 }
@@ -161,16 +191,16 @@ function connectToServer() {
 function attemptWsReconnect() {
     if (wsRetryAttempts < wsMaxRetries) {
         wsRetryAttempts++;
-        ui.updateStatus(`Attempting server reconnect... (${wsRetryAttempts}/${wsMaxRetries})`);
+        updateStatus(`Attempting server reconnect... (${wsRetryAttempts}/${wsMaxRetries})`);
         setTimeout(connectToServer, wsRetryInterval);
     } else {
-        ui.updateStatus("❌ Max server reconnection attempts reached. Please refresh.");
+        updateStatus("❌ Max server reconnection attempts reached. Please refresh.");
     }
 }
 
 // --- P2P CONNECTION MANAGEMENT ---
 function createPeerConnection(peerId, isInitiator = false) {
-    ui.updateStatus(`Creating ${isInitiator ? 'outgoing' : 'incoming'} P2P connection to ${peerId}`);
+    updateStatus(`Creating ${isInitiator ? 'outgoing' : 'incoming'} P2P connection to ${peerId}`);
 
     const config = {
         iceServers: [
@@ -205,15 +235,15 @@ function createPeerConnection(peerId, isInitiator = false) {
 
     connection.onconnectionstatechange = () => {
         const state = connection.connectionState;
-        ui.updateStatus(`P2P ${peerId}: ${state}`);
+        updateStatus(`P2P ${peerId}: ${state}`);
         peerState.state = state;
 
         if (state === 'connected') {
-            ui.updateStatus(`✅ P2P connected to ${peerId}`);
+            updateStatus(`✅ P2P connected to ${peerId}`);
         } else if (state === 'failed' || state === 'closed' || state === 'disconnected') {
-            ui.updateStatus(`❌ P2P ${state} with ${peerId}`);
+            updateStatus(`❌ P2P ${state} with ${peerId}`);
         }
-        ui.updatePeerInfo(peers, avatars);
+        updatePeerInfo();
     };
 
     if (isInitiator) {
@@ -233,20 +263,20 @@ function createPeerConnection(peerId, isInitiator = false) {
 
 function setupDataChannel(channel, peerId) {
     channel.onopen = () => {
-        ui.updateStatus(`📡 Data channel open with ${peerId}`);
+        updateStatus(`📡 Data channel open with ${peerId}`);
         const peer = peers.get(peerId);
         if (peer) peer.state = 'connected';
-        ui.updatePeerInfo(peers, avatars);
+        updatePeerInfo();
     };
 
     channel.onclose = () => {
-        ui.updateStatus(`📡 Data channel closed with ${peerId}`);
+        updateStatus(`📡 Data channel closed with ${peerId}`);
         const peer = peers.get(peerId);
         if(peer) peer.state = 'disconnected';
     };
 
     channel.onerror = (error) => {
-        ui.updateStatus(`❌ Data channel error with ${peerId}: ${error}`);
+        updateStatus(`❌ Data channel error with ${peerId}: ${error}`);
     };
 
     channel.onmessage = (event) => {
@@ -254,7 +284,7 @@ function setupDataChannel(channel, peerId) {
             const message = JSON.parse(event.data);
             handleP2PMessage(message, peerId);
         } catch (error) {
-            ui.updateStatus(`❌ Invalid P2P message from ${peerId}`);
+            updateStatus(`❌ Invalid P2P message from ${peerId}`);
         }
     };
 }
@@ -266,15 +296,15 @@ function cleanupPeer(peerId) {
             peer.connection.close();
         }
         peers.delete(peerId);
-        ui.updateStatus(`🧹 Cleaned up peer ${peerId}`);
+        updateStatus(`🧹 Cleaned up peer ${peerId}`);
     }
     const avatar = avatars.get(peerId);
     if (avatar) {
         scene.remove(avatar);
         avatars.delete(peerId);
-        ui.updateStatus(`👋 Avatar for ${peerId} removed.`);
+        updateStatus(`👋 Avatar for ${peerId} removed.`);
     }
-    ui.updatePeerInfo(peers, avatars);
+    updatePeerInfo();
 }
 
 function handleP2PMessage(message, fromPeer) {
@@ -286,11 +316,11 @@ function handleP2PMessage(message, fromPeer) {
                 avatar.position.fromArray(message.payload.start);
                 peer.targetPosition = new THREE.Vector3().fromArray(message.payload.target);
                 peer.moveStartTime = performance.now();
-                ui.updateStatus(`🕺 Avatar for ${fromPeer} is now moving`);
+                updateStatus(`🕺 Avatar for ${fromPeer} is now moving`);
             }
             break;
         default:
-            ui.updateStatus(`❓ Unknown P2P message type: ${message.type}`);
+            updateStatus(`❓ Unknown P2P message type: ${message.type}`);
     }
 }
 
@@ -302,7 +332,7 @@ function broadcastP2P(message) {
                 peer.dataChannel.send(JSON.stringify(message));
                 sentCount++;
             } catch (error) {
-                ui.updateStatus(`❌ Failed to send P2P to ${peerId}: ${error}`);
+                updateStatus(`❌ Failed to send P2P to ${peerId}: ${error}`);
             }
         }
     });
@@ -327,7 +357,7 @@ async function handleWebRTCOffer(payload) {
             answer: connection.localDescription
         });
     } catch (error) {
-        ui.updateStatus(`❌ WebRTC offer handling failed: ${error}`);
+        updateStatus(`❌ WebRTC offer handling failed: ${error}`);
         cleanupPeer(senderId);
     }
 }
@@ -338,14 +368,14 @@ async function handleWebRTCAnswer(payload) {
 
     const peer = peers.get(senderId);
     if (!peer) {
-        ui.updateStatus(`❌ No peer connection for answer from ${senderId}`);
+        updateStatus(`❌ No peer connection for answer from ${senderId}`);
         return;
     }
 
     try {
         await peer.connection.setRemoteDescription(new RTCSessionDescription(answer));
     } catch (error) {
-        ui.updateStatus(`❌ WebRTC answer handling failed: ${error}`);
+        updateStatus(`❌ WebRTC answer handling failed: ${error}`);
         cleanupPeer(senderId);
     }
 }
@@ -356,14 +386,14 @@ async function handleWebRTCIceCandidate(payload) {
 
     const peer = peers.get(senderId);
     if (!peer) {
-        ui.updateStatus(`❌ No peer connection for ICE from ${senderId}`);
+        updateStatus(`❌ No peer connection for ICE from ${senderId}`);
         return;
     }
 
     try {
         await peer.connection.addIceCandidate(new RTCIceCandidate(candidate));
     } catch (error) {
-        ui.updateStatus(`❌ ICE candidate failed: ${error}`);
+        updateStatus(`❌ ICE candidate failed: ${error}`);
     }
 }
 
@@ -371,8 +401,10 @@ async function handleChunkStateChange(payload) {
     const chunkState = payload.state;
     if (!chunkState) return;
 
+    // Corrected to save the terrain seed
     terrainSeed = chunkState.seed || 0;
 
+    // NEW: Trigger initial chunk loading only once, after receiving the seed
     if (!initialChunksLoaded) {
         updateChunksAroundPlayer(
             Math.floor(playerObject.position.x / 50),
@@ -381,26 +413,27 @@ async function handleChunkStateChange(payload) {
         initialChunksLoaded = true;
     }
 
-    ui.updateStatus(`🏠 Chunk update: ${chunkState.players.length} players, box: ${chunkState.boxPresent}`);
+    updateStatus(`🏠 Chunk update: ${chunkState.players.length} players, box: ${chunkState.boxPresent}`);
 
+    // For simplicity, assuming chunkId is 'chunk_x_z', parse to get chunkX, chunkZ
     const parts = payload.chunkId.split('_');
-    const chunkX = parseInt(parts[1]) * 50;
+    const chunkX = parseInt(parts[1]) * 50; // Assuming chunkSize=50
     const chunkZ = parseInt(parts[2]) * 50;
-    terrainRenderer.addTerrainChunk({ chunkX, chunkZ, seed: terrainSeed });
+    terrainRenderer.addTerrainChunk({ chunkX, chunkZ, seed: terrainSeed }); // Use the saved seed
 
     if (chunkState.boxPresent) {
         const existingBox = scene.getObjectByName('serverBox');
         if (!existingBox) {
             scene.add(box);
             boxInScene = true;
-            ui.updateStatus("📦 Box added to scene (server authority)");
+            updateStatus("📦 Box added to scene (server authority)");
         }
     } else {
         const existingBox = scene.getObjectByName('serverBox');
         if (existingBox) {
             scene.remove(existingBox);
             boxInScene = false;
-            ui.updateStatus("📦 Box removed from scene (server authority)");
+            updateStatus("📦 Box removed from scene (server authority)");
         }
     }
 
@@ -408,7 +441,7 @@ async function handleChunkStateChange(payload) {
 
     peers.forEach((peer, peerId) => {
         if (!otherPlayers.some(p => p.id === peerId)) {
-            ui.updateStatus(`👋 Player ${peerId} left chunk`);
+            updateStatus(`👋 Player ${peerId} left chunk`);
             cleanupPeer(peerId);
         }
     });
@@ -426,16 +459,16 @@ async function handleChunkStateChange(payload) {
             const avatar = new THREE.Mesh(geometry, material);
             scene.add(avatar);
             avatars.set(player.id, avatar);
-            ui.updateStatus(`🟢 Avatar for ${player.id} added.`);
+            updateStatus(`🟢 Avatar for ${player.id} added.`);
         }
     }
 
-    ui.updateButtonStates(isInChunk, boxInScene);
-    ui.updatePeerInfo(peers, avatars);
+    updateButtonStates();
+    updatePeerInfo();
 }
 
 async function initiateConnection(peerId) {
-    ui.updateStatus(`🤝 Initiating connection to ${peerId}`);
+    updateStatus(`🤝 Initiating connection to ${peerId}`);
 
     const connection = createPeerConnection(peerId, true);
 
@@ -449,7 +482,7 @@ async function initiateConnection(peerId) {
             offer: connection.localDescription
         });
     } catch (error) {
-        ui.updateStatus(`❌ Failed to create offer for ${peerId}: ${error}`);
+        updateStatus(`❌ Failed to create offer for ${peerId}: ${error}`);
         cleanupPeer(peerId);
     }
 }
@@ -457,20 +490,29 @@ async function initiateConnection(peerId) {
 // --- SERVER COMMUNICATION ---
 function sendServerMessage(type, payload) {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
-        ui.updateStatus("❌ Cannot send - server disconnected");
-        ui.updateConnectionStatus('disconnected', '❌ Server Disconnected');
+        updateStatus("❌ Cannot send - server disconnected");
+        updateConnectionStatus('disconnected', '❌ Server Disconnected');
         return false;
     }
 
     try {
         ws.send(JSON.stringify({ type, payload }));
-        ui.updateStatus(`📤 Sent to server: ${type}`);
+        updateStatus(`📤 Sent to server: ${type}`);
         return true;
     } catch (error) {
-        ui.updateStatus(`❌ Failed to send message: ${error}`);
+        updateStatus(`❌ Failed to send message: ${error}`);
         return false;
     }
 }
+
+// --- BUTTON HANDLERS ---
+joinBtn.onclick = () => {
+    if (sendServerMessage('join_chunk', { chunkId: 'chunk_0_0', clientId })) {
+        isInChunk = true;
+        joinBtn.disabled = true;
+        updateButtonStates();
+    }
+};
 
 function updateChunksAroundPlayer(playerChunkX, playerChunkZ) {
     const chunkSize = 50;
@@ -487,7 +529,7 @@ function updateChunksAroundPlayer(playerChunkX, playerChunkZ) {
         if (!shouldLoad.has(chunkKey)) {
             const [chunkX, chunkZ] = chunkKey.split(',').map(Number);
             terrainRenderer.removeTerrainChunk({ chunkX: chunkX * chunkSize, chunkZ: chunkZ * chunkSize });
-            ui.updateStatus(`Unloaded chunk (${chunkX}, ${chunkZ})`);
+            updateStatus(`Unloaded chunk (${chunkX}, ${chunkZ})`);
         }
     }
 
@@ -497,7 +539,7 @@ function updateChunksAroundPlayer(playerChunkX, playerChunkZ) {
             chunkLoadQueue.push({
                 chunkX: chunkX * chunkSize,
                 chunkZ: chunkZ * chunkSize,
-                seed: terrainSeed
+                seed: terrainSeed // Use the global terrain seed
             });
         }
     }
@@ -509,13 +551,24 @@ function processChunkQueue() {
         const chunk = chunkLoadQueue.shift();
 
         terrainRenderer.addTerrainChunk(chunk);
-        ui.updateStatus(`Loaded chunk at (${chunk.chunkX/50}, ${chunk.chunkZ/50})`);
+        updateStatus(`Loaded chunk at (${chunk.chunkX/50}, ${chunk.chunkZ/50})`);
 
         setTimeout(() => {
             isProcessingChunks = false;
         }, 16);
     }
 }
+
+addBtn.onclick = () => {
+    sendServerMessage('add_box_request', {
+        chunkId: 'chunk_0_0',
+        position: { x: 0, y: 0, z: -3 }
+    });
+};
+
+removeBtn.onclick = () => {
+    sendServerMessage('remove_box_request', { chunkId: 'chunk_0_0' });
+};
 
 // --- ANIMATION LOOP ---
 const playerSpeed = 0.05;
@@ -533,7 +586,7 @@ function animate() {
         if (distance <= stopThreshold) {
             playerObject.position.copy(playerTargetPosition);
             isMoving = false;
-            ui.updateStatus("🏁 Arrived at destination.");
+            updateStatus("🏁 Arrived at destination.");
         } else {
             const moveStep = playerSpeed * deltaTime;
             const alpha = Math.min(1, moveStep / distance);
@@ -549,7 +602,7 @@ function animate() {
             if (distance <= stopThreshold) {
                 avatar.position.copy(peer.targetPosition);
                 peer.targetPosition = null;
-                ui.updateStatus(`✅ Avatar for ${peerId} arrived at destination.`);
+                updateStatus(`✅ Avatar for ${peerId} arrived at destination.`);
             } else {
                 const moveStep = playerSpeed * deltaTime;
                 const alpha = Math.min(1, moveStep / distance);
@@ -567,7 +620,7 @@ function animate() {
             currentPlayerChunkX = newChunkX;
             currentPlayerChunkZ = newChunkZ;
             updateChunksAroundPlayer(newChunkX, newChunkZ);
-            ui.updateStatus(`Player moved to chunk (${newChunkX}, ${newChunkZ})`);
+            updateStatus(`Player moved to chunk (${newChunkX}, ${newChunkZ})`);
         }
         lastChunkUpdateTime = now;
     }
@@ -608,29 +661,23 @@ function checkAndReconnectPeers() {
         if (peer && (peer.state === 'disconnected' || peer.state === 'failed')) {
             const shouldInitiate = clientId < peerId;
             if (shouldInitiate) {
-                ui.updateStatus(`Attempting P2P reconnect to ${peerId}...`);
+                updateStatus(`Attempting P2P reconnect to ${peerId}...`);
                 initiateConnection(peerId);
             }
         }
     }
 }
 
-// --- INITIALIZATION ---
-ui.updateStatus("🎮 Game initialized");
-ui.updateStatus("📋 Click 'Join Chunk' to start");
-ui.updateConnectionStatus('connecting', '🔄 Connecting...');
-ui.initializeUI({
-    sendServerMessage: sendServerMessage,
-    clientId: clientId,
-    onJoinSuccess: () => {
-        isInChunk = true;
-        ui.updateButtonStates(isInChunk, boxInScene);
-    },
-    onResize: () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-    }
+// --- RESIZE HANDLING ---
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
 });
+
+// --- INITIALIZATION ---
+updateStatus("🎮 Game initialized");
+updateStatus("📋 Click 'Join Chunk' to start");
+updateConnectionStatus('connecting', '🔄 Connecting...');
 connectToServer();
 animate();
