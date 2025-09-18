@@ -243,24 +243,32 @@ const key = `${chunkIndexX},${chunkIndexZ}`;
         }
     }
 
-    finishTerrainChunk(geometry, chunkX, chunkZ) {
-        const mesh = new THREE.Mesh(geometry, this.terrainMaterial);
-        mesh.position.set(chunkX, 0, chunkZ);
-        this.scene.add(mesh);
-        this.terrainChunks.set(`${chunkX},${chunkZ}`, mesh);
-        console.log(`Added terrain chunk at (${chunkX}, ${chunkZ})`);
-    }
+finishTerrainChunk(geometry, chunkX, chunkZ) {
+    const chunkIndexX = Math.floor(chunkX / CONFIG.TERRAIN.chunkSize);
+    const chunkIndexZ = Math.floor(chunkZ / CONFIG.TERRAIN.chunkSize);
+    const key = `${chunkIndexX},${chunkIndexZ}`;
 
-    removeTerrainChunk({ chunkX, chunkZ }) {
-        const key = `${chunkX},${chunkZ}`;
-        const mesh = this.terrainChunks.get(key);
-        if (mesh) {
-            this.scene.remove(mesh);
-            this.terrainChunks.delete(key);
-            mesh.geometry.dispose();
-            console.log(`Removed chunk at (${chunkX}, ${chunkZ})`);
-        }
+    const mesh = new THREE.Mesh(geometry, this.terrainMaterial);
+    mesh.position.set(chunkX, 0, chunkZ);
+    this.scene.add(mesh);
+    this.terrainChunks.set(key, mesh); // ✅ use index key
+    console.log(`Added terrain chunk at (${chunkX}, ${chunkZ})`);
+}
+
+
+removeTerrainChunk({ chunkX, chunkZ }) {
+    const chunkIndexX = Math.floor(chunkX / CONFIG.TERRAIN.chunkSize);
+    const chunkIndexZ = Math.floor(chunkZ / CONFIG.TERRAIN.chunkSize);
+    const key = `${chunkIndexX},${chunkIndexZ}`;
+    const mesh = this.terrainChunks.get(key);
+    if (mesh) {
+        this.scene.remove(mesh);
+        this.terrainChunks.delete(key);
+        mesh.geometry.dispose();
+        console.log(`Removed chunk at (${chunkIndexX}, ${chunkIndexZ})`);
     }
+}
+
 
     clearChunks() {
         this.terrainChunks.forEach((mesh) => {
