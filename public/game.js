@@ -15,7 +15,8 @@ let lastChunkUpdateTime = 0;
 const chunkUpdateInterval = 2000; // Check every second
 let chunkLoadQueue = [];
 let isProcessingChunks = false;
-let terrainSeed = 0; // New variable to store the terrain seed
+let terrainSeed = 0;
+let initialChunksLoaded = false; // NEW: Flag to control initial chunk loading
 
 // Click-to-move state
 const raycaster = new THREE.Raycaster();
@@ -403,6 +404,15 @@ async function handleChunkStateChange(payload) {
     // Corrected to save the terrain seed
     terrainSeed = chunkState.seed || 0;
 
+    // NEW: Trigger initial chunk loading only once, after receiving the seed
+    if (!initialChunksLoaded) {
+        updateChunksAroundPlayer(
+            Math.floor(playerObject.position.x / 50),
+            Math.floor(playerObject.position.z / 50)
+        );
+        initialChunksLoaded = true;
+    }
+
     updateStatus(`🏠 Chunk update: ${chunkState.players.length} players, box: ${chunkState.boxPresent}`);
 
     // For simplicity, assuming chunkId is 'chunk_x_z', parse to get chunkX, chunkZ
@@ -500,7 +510,6 @@ joinBtn.onclick = () => {
     if (sendServerMessage('join_chunk', { chunkId: 'chunk_0_0', clientId })) {
         isInChunk = true;
         joinBtn.disabled = true;
-        updateChunksAroundPlayer(0, 0);
         updateButtonStates();
     }
 };
@@ -530,7 +539,7 @@ function updateChunksAroundPlayer(playerChunkX, playerChunkZ) {
             chunkLoadQueue.push({
                 chunkX: chunkX * chunkSize,
                 chunkZ: chunkZ * chunkSize,
-                seed: terrainSeed // Corrected: use the global terrain seed
+                seed: terrainSeed // Use the global terrain seed
             });
         }
     }
