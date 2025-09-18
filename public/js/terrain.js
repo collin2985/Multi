@@ -11,7 +11,8 @@ const CONFIG = Object.freeze({
     }
 });
 
-export function initializeTerrain(scene) {
+export function SimpleTerrainRenderer(scene) {
+
     const terrainChunks = new Map();
     let terrainMaterial = null;
     let terrainWorker = null;
