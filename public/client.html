@@ -122,7 +122,9 @@
         let lastChunkUpdateTime = 0;
         const chunkUpdateInterval = 2000; // Check every second
         let chunkLoadQueue = [];
-let isProcessingChunks = false;
+        let isProcessingChunks = false;
+        let terrainSeed = 0; 
+
 
         // Click-to-move state
         const raycaster = new THREE.Raycaster();
@@ -505,6 +507,8 @@ let isProcessingChunks = false;
 
         async function handleChunkStateChange(payload) {
             const chunkState = payload.state;
+                terrainSeed = chunkState.seed || 0;
+
             if (!chunkState) return;
             
             updateStatus(`🏠 Chunk update: ${chunkState.players.length} players, box: ${chunkState.boxPresent}`);
@@ -517,7 +521,7 @@ let isProcessingChunks = false;
             const parts = payload.chunkId.split('_');
             const chunkX = parseInt(parts[1]) * 50; // Assuming chunkSize=50
             const chunkZ = parseInt(parts[2]) * 50;
-            terrainRenderer.addTerrainChunk({ chunkX, chunkZ, seed });
+    terrainRenderer.addTerrainChunk({ chunkX, chunkZ, seed: terrainSeed });
             
             if (chunkState.boxPresent) {
                 const existingBox = scene.getObjectByName('serverBox');
@@ -643,7 +647,7 @@ function updateChunksAroundPlayer(playerChunkX, playerChunkZ) {
             chunkLoadQueue.push({ 
                 chunkX: chunkX * chunkSize, 
                 chunkZ: chunkZ * chunkSize, 
-                seed: 0 
+                seed: terrainSeed
             });
         }
     }
