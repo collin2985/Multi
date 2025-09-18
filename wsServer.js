@@ -19,13 +19,13 @@ function startWebSocketServer(wss) {
 
             switch (parsedMessage.type) {
                 case 'join_chunk':
-                    handleJoinChunk(ws, parsedMessage.payload);
+                    handleJoinChunk(wss, ws, parsedMessage.payload);
                     break;
                 case 'add_box_request':
-                    handleBoxRequest(parsedMessage.payload, true);
+                    handleBoxRequest(wss, parsedMessage.payload, true);
                     break;
                 case 'remove_box_request':
-                    handleBoxRequest(parsedMessage.payload, false);
+                    handleBoxRequest(wss, parsedMessage.payload, false);
                     break;
                 case 'webrtc_offer':
                 case 'webrtc_answer':
@@ -84,7 +84,7 @@ function startWebSocketServer(wss) {
     });
 }
 
-function handleJoinChunk(ws, payload) {
+function handleJoinChunk(wss, ws, payload) {
     const { chunkId, clientId } = payload;
     if (!clientId) {
         console.error('No clientId provided in join_chunk');
@@ -108,7 +108,7 @@ function handleJoinChunk(ws, payload) {
     });
 }
 
-function handleBoxRequest(payload, add) {
+function handleBoxRequest(wss, payload, add) {
     const { chunkId } = payload;
     const chunkData = chunkCache.get(chunkId);
     if (chunkData) {

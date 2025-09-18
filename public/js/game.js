@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-export function initializeGame(clientId, scene, camera, renderer, playerObject, box, uiElements, sendServerMessage) {
+export function initializeGame(clientId, scene, camera, renderer, playerObject, box, uiElements, sendServerMessage, terrainRenderer, peers, avatars, handleChunkStateChange) {
     let isInChunk = false;
     let boxInScene = false;
     let currentPlayerChunkX = 0;
@@ -22,7 +22,7 @@ export function initializeGame(clientId, scene, camera, renderer, playerObject, 
         console.log(`[${timestamp}] ${msg}`);
     }
 
-    function updateChunksAroundPlayer(playerChunkX, playerChunkZ, terrainRenderer) {
+    function updateChunksAroundPlayer(playerChunkX, playerChunkZ, seed = 0) {
         const chunkSize = 50;
         const shouldLoad = new Set();
         for (let x = playerChunkX - loadRadius; x <= playerChunkX + loadRadius; x++) {
@@ -44,13 +44,13 @@ export function initializeGame(clientId, scene, camera, renderer, playerObject, 
                 chunkLoadQueue.push({ 
                     chunkX: chunkX * chunkSize, 
                     chunkZ: chunkZ * chunkSize, 
-                    seed: 0 
+                    seed 
                 });
             }
         }
     }
 
-    function processChunkQueue(terrainRenderer) {
+    function processChunkQueue() {
         if (chunkLoadQueue.length > 0 && !isProcessingChunks) {
             isProcessingChunks = true;
             const chunk = chunkLoadQueue.shift();
@@ -97,6 +97,19 @@ export function initializeGame(clientId, scene, camera, renderer, playerObject, 
 
         processChunkQueue();
 
+        peers.forEach((peer, peerId) => {
+            const avatar = avatars.get(peerId);
+            if (peer.targetPosition && avatar) {
+                const timeSinceMove = (now - (peer.moveStartTime || now)) / 1000;
+                const moveDuration = 2;
+                const alpha = Math.min(timeSinceMove / moveDuration, 1);
+                avatar.position.lerp(peer.targetPosition, alpha);
+                if (alpha >= 1) {
+                    peer.targetPosition = null;
+                }
+            }
+        });
+
         const cameraOffset = new THREE.Vector3(-15, 40, 20);
         const cameraTargetPosition = playerObject.position.clone().add(cameraOffset);
         camera.position.lerp(cameraTargetPosition, 0.1);
@@ -131,6 +144,49 @@ export function initializeGame(clientId, scene, camera, renderer, playerObject, 
             });
         }
     });
+
+    function broadcastP2P(message) {
+        let sentCount = 0;
+        peers.forEach((peer, peerId) => {
+            if (peer.dataChannel && peer.dataChannel.readyState === 'open') {
+                try {
+                    peer.dataChannel.send(JSON.stringify(message));
+                    sentCount++;
+                } catch (error) {
+                    updateStatus(`❌ Failed to send P2P to ${peerId}: ${error}`);
+                }
+            }
+        });
+        return sentCount;
+    }
+
+    // Override handleChunkStateChange to update scene and box
+    const originalHandleChunkStateChange = handleChunkStateChange;
+    handleChunkStateChange = (payload) => {
+        originalHandleChunkStateChange(payload);
+        const chunkState = payload.state;
+        if (chunkState) {
+            isInChunk = true;
+            if (chunkState.boxPresent && !boxInScene) {
+                scene.add(box);
+                avatars.set('serverBox', box);
+                boxInScene = true;
+                updateStatus('📍 Added box to scene');
+            } else if (!chunkState.boxPresent && boxInScene) {
+                scene.remove(box);
+                avatars.delete('serverBox');
+                boxInScene = false;
+                updateStatus('📍 Removed box from scene');
+            }
+            // Add avatars to scene
+            avatars.forEach((avatar, id) => {
+                if (id !== 'serverBox' && !scene.getObjectByProperty('uuid', avatar.uuid)) {
+                    scene.add(avatar);
+                }
+            });
+            updateChunksAroundPlayer(currentPlayerChunkX, currentPlayerChunkZ, chunkState.seed || 0);
+        }
+    };
 
     return { animate, updateChunksAroundPlayer };
 }
