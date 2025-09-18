@@ -18,7 +18,7 @@ let lastChunkUpdateTime = 0;
 const chunkUpdateInterval = 1000; // Check every second
 let chunkLoadQueue = [];
 let isProcessingChunks = false;
-let terrainSeed = 0;
+const terrainSeed = 12345; // Fixed, client-side terrain seed
 let initialChunksLoaded = false;
 
 // Click-to-move state
@@ -107,6 +107,11 @@ function connectToServer() {
         ui.updateConnectionStatus('connected', '✅ Server Connected');
         ui.updateButtonStates(isInChunk, boxInScene);
         wsRetryAttempts = 0;
+        // Trigger initial chunk loading right after connecting
+        updateChunksAroundPlayer(
+            Math.floor(playerObject.position.x / 50),
+            Math.floor(playerObject.position.z / 50)
+        );
     };
 
     ws.onclose = (event) => {
@@ -372,16 +377,6 @@ async function handleWebRTCIceCandidate(payload) {
 async function handleChunkStateChange(payload) {
     const chunkState = payload.state;
     if (!chunkState) return;
-
-    terrainSeed = chunkState.seed || 0;
-
-    if (!initialChunksLoaded) {
-        updateChunksAroundPlayer(
-            Math.floor(playerObject.position.x / 50),
-            Math.floor(playerObject.position.z / 50)
-        );
-        initialChunksLoaded = true;
-    }
 
     ui.updateStatus(`🏠 Chunk update: ${chunkState.players.length} players, box: ${chunkState.boxPresent}`);
 
