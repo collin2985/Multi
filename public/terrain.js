@@ -4,7 +4,7 @@ import * as THREE from 'three';
 const CONFIG = Object.freeze({
     TERRAIN: {
         chunkSize: 50,
-        segments: 100
+        segments: 25
     },
     GRAPHICS: {
         textureSize: 24,

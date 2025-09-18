@@ -120,7 +120,9 @@
         let currentPlayerChunkZ = 0;
         const loadRadius = 1; // How many chunks to load around player
         let lastChunkUpdateTime = 0;
-        const chunkUpdateInterval = 1000; // Check every second
+        const chunkUpdateInterval = 2000; // Check every second
+        let chunkLoadQueue = [];
+let isProcessingChunks = false;
 
         // Click-to-move state
         const raycaster = new THREE.Raycaster();
@@ -614,7 +616,7 @@ joinBtn.onclick = () => {
 
 // Add this new function to handle chunk loading/unloading
 function updateChunksAroundPlayer(playerChunkX, playerChunkZ) {
-    const chunkSize = 50; // Match CONFIG.TERRAIN.chunkSize
+    const chunkSize = 50;
     
     // Calculate which chunks should be loaded
     const shouldLoad = new Set();
@@ -624,7 +626,7 @@ function updateChunksAroundPlayer(playerChunkX, playerChunkZ) {
         }
     }
     
-    // Remove chunks that are too far away
+    // Remove chunks immediately (fast operation)
     const currentChunks = new Set(terrainRenderer.terrainChunks.keys());
     for (const chunkKey of currentChunks) {
         if (!shouldLoad.has(chunkKey)) {
@@ -634,18 +636,30 @@ function updateChunksAroundPlayer(playerChunkX, playerChunkZ) {
         }
     }
     
-    // Add new chunks that should be loaded
+    // Queue new chunks for gradual loading
     for (const chunkKey of shouldLoad) {
         if (!currentChunks.has(chunkKey)) {
             const [chunkX, chunkZ] = chunkKey.split(',').map(Number);
-            // Use index-based coordinates for terrain rendering
-            terrainRenderer.addTerrainChunk({ 
+            chunkLoadQueue.push({ 
                 chunkX: chunkX * chunkSize, 
                 chunkZ: chunkZ * chunkSize, 
-                seed: 0 // Will be updated from server if needed
+                seed: 0 
             });
-            updateStatus(`Loaded chunk (${chunkX}, ${chunkZ})`);
         }
+    }
+}
+function processChunkQueue() {
+    if (chunkLoadQueue.length > 0 && !isProcessingChunks) {
+        isProcessingChunks = true;
+        const chunk = chunkLoadQueue.shift();
+        
+        terrainRenderer.addTerrainChunk(chunk);
+        updateStatus(`Loaded chunk at (${chunk.chunkX/50}, ${chunk.chunkZ/50})`);
+        
+        // Allow one frame before processing next chunk
+        setTimeout(() => {
+            isProcessingChunks = false;
+        }, 16);
     }
 }
 
@@ -721,7 +735,8 @@ function updateChunksAroundPlayer(playerChunkX, playerChunkZ) {
     }
 
     checkAndReconnectPeers(); // Only call once
-            
+            processChunkQueue(); 
+
             const cameraOffset = new THREE.Vector3(-15, 40, 20);
             const cameraTargetPosition = playerObject.position.clone().add(cameraOffset);
             const smoothedCameraPosition = camera.position.lerp(cameraTargetPosition, 0.1);
