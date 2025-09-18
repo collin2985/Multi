@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
-export function initializeGame(clientId, scene, camera, renderer, playerObject, box, uiElements, sendServerMessage, terrainRenderer, peers, avatars) {    let isInChunk = false;
+export function initializeGame(clientId, scene, camera, renderer, playerObject, box, uiElements, sendServerMessage, terrainRenderer, peers, avatars) {
+    let isInChunk = false;
     let boxInScene = false;
     let currentPlayerChunkX = 0;
     let currentPlayerChunkZ = 0;
@@ -29,122 +30,55 @@ export function initializeGame(clientId, scene, camera, renderer, playerObject, 
                 shouldLoad.add(`${x},${z}`);
             }
         }
-        const currentChunks = new Set(terrainRenderer.terrainChunks.keys());
-        for (const chunkKey of currentChunks) {
-            if (!shouldLoad.has(chunkKey)) {
-                const [chunkX, chunkZ] = chunkKey.split(',').map(Number);
-                terrainRenderer.removeTerrainChunk({ chunkX: chunkX * chunkSize, chunkZ: chunkZ * chunkSize });
-                updateStatus(`Unloaded chunk (${chunkX}, ${chunkZ})`);
-            }
-        }
-        for (const chunkKey of shouldLoad) {
-            if (!currentChunks.has(chunkKey)) {
-                const [chunkX, chunkZ] = chunkKey.split(',').map(Number);
-                chunkLoadQueue.push({ 
-                    chunkX: chunkX * chunkSize, 
-                    chunkZ: chunkZ * chunkSize, 
-                    seed 
-                });
-            }
-        }
-    }
+        const currentChunks = new Set(terrainRenderer.getLoadedChunks());
+        const chunksToLoad = [...shouldLoad].filter(key => !currentChunks.has(key));
+        const chunksToRemove = [...currentChunks].filter(key => !shouldLoad.has(key));
+        
+        chunksToRemove.forEach(key => {
+            const [chunkX, chunkZ] = key.split(',').map(Number);
+            terrainRenderer.removeTerrainChunk({ chunkX, chunkZ });
+        });
 
-    function processChunkQueue() {
-        if (chunkLoadQueue.length > 0 && !isProcessingChunks) {
-            isProcessingChunks = true;
-            const chunk = chunkLoadQueue.shift();
-            terrainRenderer.addTerrainChunk(chunk);
-            updateStatus(`Loaded chunk at (${chunk.chunkX/50}, ${chunk.chunkZ/50})`);
-            setTimeout(() => {
-                isProcessingChunks = false;
-            }, 16);
-        }
+        chunksToLoad.forEach(key => {
+            const [chunkX, chunkZ] = key.split(',').map(Number);
+            terrainRenderer.addTerrainChunk({ chunkX, chunkZ, seed });
+        });
     }
 
     function animate() {
         requestAnimationFrame(animate);
-        const now = performance.now();
-        const deltaTime = now - lastChunkUpdateTime;
+        // P2P position update
+        const message = {
+            type: 'player_update',
+            payload: {
+                position: playerObject.position,
+                rotation: playerObject.rotation
+            }
+        };
+        const sentCount = sendP2PMessage(message);
 
+        // Movement logic
         if (isMoving) {
-            const distance = playerObject.position.distanceTo(playerTargetPosition);
-            const playerSpeed = 0.05;
-            const stopThreshold = 0.01;
-            if (distance <= stopThreshold) {
-                playerObject.position.copy(playerTargetPosition);
+            playerObject.position.lerp(playerTargetPosition, 0.05);
+            camera.position.copy(playerObject.position);
+            if (playerObject.position.distanceTo(playerTargetPosition) < 0.1) {
                 isMoving = false;
-                updateStatus("🏁 Arrived at destination.");
-            } else {
-                const moveStep = playerSpeed * deltaTime;
-                const alpha = Math.min(1, moveStep / distance);
-                playerObject.position.lerp(playerTargetPosition, alpha);
             }
         }
-
-        if (now - lastChunkUpdateTime > chunkUpdateInterval) {
-            const chunkSize = 50;
-            const newChunkX = Math.floor((playerObject.position.x + chunkSize/2) / chunkSize);
-            const newChunkZ = Math.floor((playerObject.position.z + chunkSize/2) / chunkSize);
-            if (newChunkX !== currentPlayerChunkX || newChunkZ !== currentPlayerChunkZ) {
-                currentPlayerChunkX = newChunkX;
-                currentPlayerChunkZ = newChunkZ;
-                updateChunksAroundPlayer(newChunkX, newChunkZ);
-                updateStatus(`Player moved to chunk (${newChunkX}, ${newChunkZ})`);
-            }
-            lastChunkUpdateTime = now;
-        }
-
-        processChunkQueue();
-
-        peers.forEach((peer, peerId) => {
-            const avatar = avatars.get(peerId);
-            if (peer.targetPosition && avatar) {
-                const timeSinceMove = (now - (peer.moveStartTime || now)) / 1000;
-                const moveDuration = 2;
-                const alpha = Math.min(timeSinceMove / moveDuration, 1);
-                avatar.position.lerp(peer.targetPosition, alpha);
-                if (alpha >= 1) {
-                    peer.targetPosition = null;
-                }
-            }
-        });
-
-        const cameraOffset = new THREE.Vector3(-15, 40, 20);
-        const cameraTargetPosition = playerObject.position.clone().add(cameraOffset);
-        camera.position.lerp(cameraTargetPosition, 0.1);
-        camera.lookAt(playerObject.position);
-
-        if (boxInScene) {
-            box.rotation.x += 0.005;
-            box.rotation.y += 0.01;
+        
+        // Chunk management update
+        const playerChunkX = Math.floor(playerObject.position.x / 50);
+        const playerChunkZ = Math.floor(playerObject.position.z / 50);
+        if (playerChunkX !== currentPlayerChunkX || playerChunkZ !== currentPlayerChunkZ) {
+            currentPlayerChunkX = playerChunkX;
+            currentPlayerChunkZ = playerChunkZ;
+            updateChunksAroundPlayer(currentPlayerChunkX, currentPlayerChunkZ);
         }
 
         renderer.render(scene, camera);
     }
 
-    window.addEventListener('pointerdown', (event) => {
-        if (event.target.tagName !== 'CANVAS') return;
-        pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
-        pointer.y = - (event.clientY / window.innerHeight) * 2 + 1;
-        raycaster.setFromCamera(pointer, camera);
-        const terrainObjects = Array.from(terrainRenderer.terrainChunks.values());
-        const intersects = raycaster.intersectObjects(terrainObjects, true);
-        if (intersects.length > 0) {
-            const intersect = intersects[0];
-            playerTargetPosition.copy(intersect.point);
-            isMoving = true;
-            updateStatus(`🚀 Moving to clicked position: (${playerTargetPosition.x.toFixed(2)}, ${playerTargetPosition.z.toFixed(2)})`);
-            broadcastP2P({
-                type: 'player_move',
-                payload: {
-                    start: playerObject.position.toArray(),
-                    target: playerTargetPosition.toArray()
-                }
-            });
-        }
-    });
-
-    function broadcastP2P(message) {
+    function sendP2PMessage(message) {
         let sentCount = 0;
         peers.forEach((peer, peerId) => {
             if (peer.dataChannel && peer.dataChannel.readyState === 'open') {

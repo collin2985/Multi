@@ -29,204 +29,134 @@ export function SimpleTerrainRenderer(scene) {
         return textures;
     }
 
-    function createProceduralTexture(color1, color2, size) {
+    function createProceduralTexture(c1, c2, size) {
         const canvas = document.createElement('canvas');
-        canvas.width = canvas.height = size;
-        const ctx = canvas.getContext('2d');
-        const imgData = ctx.createImageData(size, size);
-        const data = imgData.data;
-        for (let i = 0; i < data.length; i += 4) {
-            const noise = Math.random();
-            const c = noise > 0.5 ? color1 : color2;
-            data[i] = c.r; data[i + 1] = c.g; data[i + 2] = c.b; data[i + 3] = 255;
+        canvas.width = size;
+        canvas.height = size;
+        const context = canvas.getContext('2d');
+        const imageData = context.createImageData(size, size);
+        const data = imageData.data;
+        const color1 = new THREE.Color(`rgb(${c1.r}, ${c1.g}, ${c1.b})`);
+        const color2 = new THREE.Color(`rgb(${c2.r}, ${c2.g}, ${c2.b})`);
+
+        for (let x = 0; x < size; x++) {
+            for (let y = 0; y < size; y++) {
+                const i = (x + y * size) * 4;
+                const blend = Math.random() * 0.4 + 0.6;
+                const r = Math.floor(color1.r * 255 * blend + color2.r * 255 * (1 - blend));
+                const g = Math.floor(color1.g * 255 * blend + color2.g * 255 * (1 - blend));
+                const b = Math.floor(color1.b * 255 * blend + color2.b * 255 * (1 - blend));
+                data[i] = r;
+                data[i + 1] = g;
+                data[i + 2] = b;
+                data[i + 3] = 255;
+            }
         }
-        ctx.putImageData(imgData, 0, 0);
-        const tex = new THREE.CanvasTexture(canvas);
-        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-        tex.repeat.set(CONFIG.GRAPHICS.textureRepeat, CONFIG.GRAPHICS.textureRepeat);
-        return tex;
+        context.putImageData(imageData, 0, 0);
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(CONFIG.GRAPHICS.textureRepeat, CONFIG.GRAPHICS.textureRepeat);
+        texture.anisotropy = 16;
+        return texture;
     }
 
-    function initialize() {
-        try {
-            terrainWorker = new Worker('/js/workers/terrainWorker.js', { type: 'module' });
-            terrainWorker.onmessage = handleWorkerMessage;
-            terrainWorker.onerror = (error) => {
-                console.error('Terrain worker error:', error);
-                // Fallback: Generate flat terrain for pending chunks
-                pendingChunks.forEach(({ geometry, chunkX, chunkZ }, batchId) => {
-                    console.warn(`Falling back to flat terrain for chunk (${chunkX}, ${chunkZ})`);
-                    geometry.attributes.position.needsUpdate = true;
-                    geometry.computeVertexNormals();
-                    finishTerrainChunk(geometry, chunkX, chunkZ);
-                    pendingChunks.delete(batchId);
-                });
-            };
-        } catch (error) {
-            console.error('Failed to initialize terrain worker:', error);
-        }
+    function createMaterial(height) {
+        if (height < 0.2) return textures.dirt;
+        if (height < 0.5) return textures.grass;
+        if (height < 0.8) return textures.rock;
+        return textures.snow;
+    }
 
-        terrainMaterial = new THREE.ShaderMaterial({
-            vertexShader: `
-                varying vec3 vNormal;
-                varying vec3 vPosition;
-                varying vec3 vWorldPosition;
-                void main() {
-                    vNormal = normal;
-                    vPosition = position;
-                    vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
-                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-                }
-            `,
-            fragmentShader: `
-                uniform sampler2D uDirt;
-                uniform sampler2D uGrass;
-                uniform sampler2D uRock;
-                uniform sampler2D uSnow;
-                uniform vec3 uLightDir;
-                varying vec3 vNormal;
-                varying vec3 vPosition;
-                varying vec3 vWorldPosition;
-                void main() {
-                    float height = vWorldPosition.y;
-                    float slope = 1.0 - vNormal.y;
-                    vec2 texCoord = vWorldPosition.xz * 0.1;
-                    vec3 dirtColor = texture2D(uDirt, texCoord).rgb;
-                    vec3 grassColor = texture2D(uGrass, texCoord).rgb;
-                    vec3 rockColor = texture2D(uRock, texCoord).rgb;
-                    vec3 snowColor = texture2D(uSnow, texCoord).rgb;
-                    float dirtMix = clamp(1.0 - height * 0.1, 0.0, 1.0);
-                    float grassMix = clamp(height * 0.1 - slope, 0.0, 1.0);
-                    float rockMix = clamp(slope * 0.5, 0.0, 1.0);
-                    float snowMix = clamp(height * 0.05 - 0.5, 0.0, 1.0);
-                    float sum = dirtMix + grassMix + rockMix + snowMix;
-                    if (sum > 0.0) {
-                        dirtMix /= sum; grassMix /= sum; rockMix /= sum; snowMix /= sum;
-                    } else {
-                        grassMix = 1.0;
-                    }
-                    vec3 color = dirtColor * dirtMix + grassColor * grassMix + rockColor * rockMix + snowColor * snowMix;
-                    float light = max(dot(vNormal, uLightDir), 0.0) * 0.7 + 0.3;
-                    gl_FragColor = vec4(color * light, 1.0);
-                }
-            `,
-            uniforms: {
-                uDirt: { value: textures.dirt },
-                uGrass: { value: textures.grass },
-                uRock: { value: textures.rock },
-                uSnow: { value: textures.snow },
-                uLightDir: { value: new THREE.Vector3(1, 1, 1).normalize() }
-            },
-            side: THREE.FrontSide
+    function initializeTerrainWorker(seed) {
+        terrainWorker = new Worker('js/terrainWorker.js');
+        terrainWorker.onmessage = function(e) {
+            const { type, data } = e.data;
+            if (type === 'heightBatchResult') {
+                processHeightBatch(data);
+            }
+        };
+        terrainWorker.onerror = function(e) {
+            console.error('Terrain worker error:', e);
+            // This is a placeholder, you should handle the error more gracefully.
+        };
+    }
+
+    function processHeightBatch(data) {
+        const { results, batchId } = data;
+        const chunkData = pendingChunks.get(batchId);
+        if (!chunkData) return;
+
+        const { geometry, chunkX, chunkZ, positionMap, resolve } = chunkData;
+
+        for (const { height, index } of results) {
+            if (geometry.attributes.position.array[index * 3 + 1] !== undefined) {
+                geometry.attributes.position.array[index * 3 + 1] = height;
+                const pos = geometry.attributes.position.array;
+                const uv = geometry.attributes.uv.array;
+                const materialIndex = Math.floor(height * 4); // Simple index based on height
+                uv[index * 2] = pos[index * 3] / CONFIG.GRAPHICS.textureSize;
+                uv[index * 2 + 1] = pos[index * 3 + 2] / CONFIG.GRAPHICS.textureSize;
+            }
+        }
+        geometry.attributes.position.needsUpdate = true;
+        geometry.computeVertexNormals();
+
+        const terrainMaterial = new THREE.MeshStandardMaterial({
+            map: textures.dirt,
+            side: THREE.DoubleSide
         });
-    }
-
-    function handleWorkerMessage(e) {
-        const { type, data } = e.data;
-        if (type === 'heightBatchResult') {
-            const { results, batchId } = data;
-            const pending = pendingChunks.get(batchId);
-            if (!pending) {
-                console.warn(`No pending chunk for batchId ${batchId}`);
-                return;
-            }
-            const { geometry, chunkX, chunkZ } = pending;
-            const positions = geometry.attributes.position.array;
-            for (let i = 0; i < results.length; i++) {
-                const { height, index } = results[i];
-                positions[index + 1] = height;
-            }
-            geometry.attributes.position.needsUpdate = true;
-            geometry.computeVertexNormals();
-            finishTerrainChunk(geometry, chunkX, chunkZ);
-            pendingChunks.delete(batchId);
-        }
-    }
-
-    async function addTerrainChunk({ chunkX = 0, chunkZ = 0, seed = 0 }) {
-        const chunkIndexX = Math.floor(chunkX / CONFIG.TERRAIN.chunkSize);
-        const chunkIndexZ = Math.floor(chunkZ / CONFIG.TERRAIN.chunkSize);
-        const key = `${chunkIndexX},${chunkIndexZ}`;
-        if (terrainChunks.has(key)) {
-            return;
-        }
-        console.log(`Creating terrain chunk at (${chunkX}, ${chunkZ}) with seed ${seed}`);
-        let chunkData = { seed };
-        try {
-            const response = await fetch('/chunkA.JSON');
-            if (response.ok) {
-                chunkData = await response.json();
-                console.log(`Loaded chunk data for chunkA.JSON:`, chunkData);
-            } else {
-                console.warn(`No chunkA.JSON found, using default seed ${seed}`);
-            }
-        } catch (error) {
-            console.error(`Failed to fetch chunkA.JSON: ${error}`);
-        }
-
-        const geometry = new THREE.PlaneGeometry(
-            CONFIG.TERRAIN.chunkSize,
-            CONFIG.TERRAIN.chunkSize,
-            CONFIG.TERRAIN.segments,
-            CONFIG.TERRAIN.segments
-        );
-        const positions = geometry.attributes.position.array;
-        const pointsToCalculate = [];
-        const segmentSize = CONFIG.TERRAIN.chunkSize / CONFIG.TERRAIN.segments;
-        const halfSize = CONFIG.TERRAIN.chunkSize / 2;
-        for (let row = 0; row <= CONFIG.TERRAIN.segments; row++) {
-            for (let col = 0; col <= CONFIG.TERRAIN.segments; col++) {
-                const vertexIndex = (row * (CONFIG.TERRAIN.segments + 1) + col) * 3;
-                const localX = -halfSize + col * segmentSize;
-                const localZ = -halfSize + row * segmentSize;
-                const worldX = chunkX + localX;
-                const worldZ = chunkZ + localZ;
-                positions[vertexIndex] = localX;
-                positions[vertexIndex + 1] = 0;
-                positions[vertexIndex + 2] = localZ;
-                pointsToCalculate.push({ 
-                    x: worldX, 
-                    z: worldZ, 
-                    index: vertexIndex 
-                });
-            }
-        }
-        if (pointsToCalculate.length > 0 && terrainWorker) {
-            const batchId = key;
-            pendingChunks.set(batchId, { geometry, chunkX, chunkZ });
-            terrainWorker.postMessage({
-                type: 'calculateHeightBatch',
-                data: { points: pointsToCalculate, batchId, seed: chunkData.seed || seed }
-            });
-        } else {
-            console.warn(`No terrain worker or points, using flat terrain for (${chunkX}, ${chunkZ})`);
-            geometry.attributes.position.needsUpdate = true;
-            geometry.computeVertexNormals();
-            finishTerrainChunk(geometry, chunkX, chunkZ);
-        }
-    }
-
-    function finishTerrainChunk(geometry, chunkX, chunkZ) {
-        const chunkIndexX = Math.floor(chunkX / CONFIG.TERRAIN.chunkSize);
-        const chunkIndexZ = Math.floor(chunkZ / CONFIG.TERRAIN.chunkSize);
-        const key = `${chunkIndexX},${chunkIndexZ}`;
         const mesh = new THREE.Mesh(geometry, terrainMaterial);
         mesh.position.set(chunkX, 0, chunkZ);
         scene.add(mesh);
-        terrainChunks.set(key, mesh);
-        console.log(`Added terrain chunk at (${chunkX}, ${chunkZ})`);
+        terrainChunks.set(`${chunkX},${chunkZ}`, mesh);
+        pendingChunks.delete(batchId);
+        resolve();
+    }
+
+    function loadTerrainChunk({ chunkX, chunkZ, seed }) {
+        const key = `${chunkX},${chunkZ}`;
+        if (terrainChunks.has(key) || pendingChunks.has(key)) return;
+
+        return new Promise((resolve) => {
+            const geometry = new THREE.PlaneGeometry(
+                CONFIG.TERRAIN.chunkSize,
+                CONFIG.TERRAIN.chunkSize,
+                CONFIG.TERRAIN.segments,
+                CONFIG.TERRAIN.segments
+            );
+            const positions = geometry.attributes.position.array;
+            const points = [];
+            const positionMap = new Map();
+
+            for (let i = 0; i < positions.length / 3; i++) {
+                const x = positions[i * 3];
+                const z = positions[i * 3 + 2];
+                points.push({ x, z, index: i });
+                positionMap.set(JSON.stringify({ x, z }), i);
+            }
+
+            const batchId = key;
+            pendingChunks.set(batchId, { geometry, chunkX, chunkZ, positionMap, resolve });
+            
+            terrainWorker.postMessage({
+                type: 'calculateHeightBatch',
+                data: {
+                    points,
+                    batchId,
+                    seed
+                }
+            });
+        });
     }
 
     function removeTerrainChunk({ chunkX, chunkZ }) {
-        const chunkIndexX = Math.floor(chunkX / CONFIG.TERRAIN.chunkSize);
-        const chunkIndexZ = Math.floor(chunkZ / CONFIG.TERRAIN.chunkSize);
-        const key = `${chunkIndexX},${chunkIndexZ}`;
+        const key = `${chunkX},${chunkZ}`;
         const mesh = terrainChunks.get(key);
         if (mesh) {
             scene.remove(mesh);
             mesh.geometry.dispose();
             terrainChunks.delete(key);
-            console.log(`Removed chunk at (${chunkIndexX}, ${chunkIndexZ})`);
         }
     }
 
@@ -240,11 +170,9 @@ export function SimpleTerrainRenderer(scene) {
             terrainMaterial.dispose();
             Object.values(textures).forEach(tex => tex.dispose());
         }
-        if (terrainWorker) {
-            terrainWorker.terminate();
-        }
     }
 
-    initialize();
-    return { addTerrainChunk, removeTerrainChunk, terrainChunks, clearChunks };
+    initializeTerrainWorker();
+
+    return { loadTerrainChunk, removeTerrainChunk, clearChunks };
 }
