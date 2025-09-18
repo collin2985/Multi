@@ -41,60 +41,31 @@
             position: absolute;
             top: 10px;
             right: 10px;
-            background: rgba(0,0,0,0.8);
-            color: white;
-            padding: 10px;
+            padding: 5px 10px;
             border-radius: 4px;
+            color: white;
             font-family: monospace;
         }
-        #connectionStatus.status-connecting {
-            background-color: #ff9800;
-        }
-        #connectionStatus.status-connected {
-            background-color: #4CAF50;
-        }
-        #connectionStatus.status-disconnected {
-            background-color: #f44336;
-        }
-        #peerInfo {
-            position: absolute;
-            top: 50px;
-            right: 10px;
-            background: rgba(0,0,0,0.8);
-            color: white;
-            padding: 10px;
-            border-radius: 4px;
-            font-family: monospace;
-        }
+        .status-disconnected { background: red; }
+        .status-connected { background: green; }
+        .status-retrying { background: orange; }
     </style>
 </head>
 <body>
     <div class="controls">
-        <button id="joinChunkBtn">Join Chunk</button>
+        <button id="joinChunkBtn">Join Chunk 0,0</button>
         <button id="addBoxBtn">Add Box</button>
         <button id="removeBoxBtn">Remove Box</button>
     </div>
-    <div id="connectionStatus" class="status-disconnected">Disconnected</div>
-    <div id="peerInfo">P2P Connections: 0/0<br>Avatars: 0</div>
     <div id="status"></div>
+    <div id="connectionStatus" class="status-disconnected">Disconnected</div>
+    <div id="peerInfo"></div>
 
-    <script type="importmap">
-        {
-          "imports": {
-            "three": "https://unpkg.com/three@0.138.0/build/three.module.js",
-            "renderer": "./js/renderer.js",
-            "networking": "./js/networking.js",
-            "game": "./js/game.js",
-            "ui": "./js/ui.js",
-            "terrain": "./js/terrain.js"
-          }
-        }
-    </script>
     <script type="module">
-        import { initializeRenderer } from 'renderer';
-        import { initializeNetworking } from 'networking';
-        import { initializeGame } from 'game';
-        import { initializeUI } from 'ui';
+        import { initializeRenderer } from './renderer.js';
+        import { initializeNetworking } from './networking.js';
+        import { initializeGame } from './game.js';
+        import { initializeUI } from './ui.js';
 
         const clientId = 'client_' + Math.random().toString(36).substr(2, 12);
         const uiElements = {
@@ -108,15 +79,18 @@
 
         const { scene, camera, renderer, playerObject, box, terrainRenderer } = initializeRenderer();
 
-        // Initialize game first to get handleChunkStateChange
-        const { animate, updateChunksAroundPlayer, handleChunkStateChange } = initializeGame(clientId, scene, camera, renderer, playerObject, box, uiElements, sendServerMessage, terrainRenderer, peers, avatars);
-        
-        // Now, initialize networking with the handleChunkStateChange function from game.js
-        const { connectToServer, sendServerMessage, peers, avatars } = initializeNetworking(clientId, uiElements, handleChunkStateChange);
-        
-        initializeUI(uiElements, sendServerMessage, updateChunksAroundPlayer, clientId);
+        // 1. Initialize networking first. The handleChunkStateChange function will be set later.
+        const networking = initializeNetworking(clientId, uiElements);
 
-        connectToServer();
+        // 2. Initialize the game, passing the necessary functions and objects from networking.
+        const { animate, updateChunksAroundPlayer, handleChunkStateChange } = initializeGame(clientId, scene, camera, renderer, playerObject, box, uiElements, networking.sendServerMessage, terrainRenderer, networking.peers, networking.avatars);
+        
+        // 3. Set the handleChunkStateChange on the networking object.
+        networking.setChunkHandler(handleChunkStateChange);
+        
+        initializeUI(uiElements, networking.sendServerMessage, updateChunksAroundPlayer, clientId);
+
+        networking.connectToServer();
         animate();
     </script>
 </body>

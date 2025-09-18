@@ -28,55 +28,62 @@ export function initializeGame(clientId, scene, camera, renderer, playerObject, 
         for (let x = playerChunkX - loadRadius; x <= playerChunkX + loadRadius; x++) {
             for (let z = playerChunkZ - loadRadius; z <= playerChunkZ + loadRadius; z++) {
                 shouldLoad.add(`${x},${z}`);
+                terrainRenderer.addTerrainChunk({ chunkX: x, chunkZ: z, seed });
             }
         }
-        const currentChunks = new Set(terrainRenderer.getLoadedChunks());
-        const chunksToLoad = [...shouldLoad].filter(key => !currentChunks.has(key));
-        const chunksToRemove = [...currentChunks].filter(key => !shouldLoad.has(key));
-        
-        chunksToRemove.forEach(key => {
-            const [chunkX, chunkZ] = key.split(',').map(Number);
-            terrainRenderer.removeTerrainChunk({ chunkX, chunkZ });
-        });
-
-        chunksToLoad.forEach(key => {
-            const [chunkX, chunkZ] = key.split(',').map(Number);
-            terrainRenderer.addTerrainChunk({ chunkX, chunkZ, seed });
-        });
     }
-
+    
     function animate() {
         requestAnimationFrame(animate);
-        // P2P position update
-        const message = {
-            type: 'player_update',
-            payload: {
-                position: playerObject.position,
-                rotation: playerObject.rotation
-            }
-        };
-        const sentCount = sendP2PMessage(message);
-
-        // Movement logic
+        renderer.render(scene, camera);
+        
+        // Update player movement logic
         if (isMoving) {
-            playerObject.position.lerp(playerTargetPosition, 0.05);
-            camera.position.copy(playerObject.position);
-            if (playerObject.position.distanceTo(playerTargetPosition) < 0.1) {
+            const currentPosition = playerObject.position.clone();
+            const direction = playerTargetPosition.clone().sub(currentPosition).normalize();
+            const distance = currentPosition.distanceTo(playerTargetPosition);
+            const moveSpeed = 0.1;
+            
+            if (distance > moveSpeed) {
+                playerObject.position.add(direction.multiplyScalar(moveSpeed));
+            } else {
+                playerObject.position.copy(playerTargetPosition);
                 isMoving = false;
             }
         }
-        
-        // Chunk management update
-        const playerChunkX = Math.floor(playerObject.position.x / 50);
-        const playerChunkZ = Math.floor(playerObject.position.z / 50);
-        if (playerChunkX !== currentPlayerChunkX || playerChunkZ !== currentPlayerChunkZ) {
-            currentPlayerChunkX = playerChunkX;
-            currentPlayerChunkZ = playerChunkZ;
-            updateChunksAroundPlayer(currentPlayerChunkX, currentPlayerChunkZ);
+
+        // Check if player has moved to a new chunk
+        const newPlayerChunkX = Math.floor(playerObject.position.x / 50);
+        const newPlayerChunkZ = Math.floor(playerObject.position.z / 50);
+
+        if (newPlayerChunkX !== currentPlayerChunkX || newPlayerChunkZ !== currentPlayerChunkZ) {
+            currentPlayerChunkX = newPlayerChunkX;
+            currentPlayerChunkZ = newPlayerChunkZ;
+            updateStatus(`Player moved to chunk: ${currentPlayerChunkX}, ${currentPlayerChunkZ}`);
         }
 
-        renderer.render(scene, camera);
+        // Update camera position to follow player
+        camera.position.set(playerObject.position.x, playerObject.position.y + 10, playerObject.position.z + 20);
+        camera.lookAt(playerObject.position);
+
+        // Update avatars
+        avatars.forEach((avatar, id) => {
+            // Placeholder: Update avatar position based on P2P data if available
+        });
     }
+
+    window.addEventListener('click', (event) => {
+        pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+        pointer.y = - (event.clientY / window.innerHeight) * 2 + 1;
+        raycaster.setFromCamera(pointer, camera);
+        const intersects = raycaster.intersectObjects(scene.children);
+        if (intersects.length > 0) {
+            const intersect = intersects[0];
+            const point = intersect.point;
+            playerTargetPosition.set(point.x, playerObject.position.y, point.z);
+            isMoving = true;
+        }
+    });
 
     function sendP2PMessage(message) {
         let sentCount = 0;

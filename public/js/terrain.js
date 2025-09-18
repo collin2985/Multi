@@ -29,102 +29,112 @@ export function SimpleTerrainRenderer(scene) {
         return textures;
     }
 
-    function createProceduralTexture(c1, c2, size) {
+    function createProceduralTexture(color1, color2, size) {
         const canvas = document.createElement('canvas');
         canvas.width = size;
         canvas.height = size;
         const context = canvas.getContext('2d');
-        const imageData = context.createImageData(size, size);
-        const data = imageData.data;
-        const color1 = new THREE.Color(`rgb(${c1.r}, ${c1.g}, ${c1.b})`);
-        const color2 = new THREE.Color(`rgb(${c2.r}, ${c2.g}, ${c2.b})`);
-
-        for (let x = 0; x < size; x++) {
-            for (let y = 0; y < size; y++) {
-                const i = (x + y * size) * 4;
-                const blend = Math.random() * 0.4 + 0.6;
-                const r = Math.floor(color1.r * 255 * blend + color2.r * 255 * (1 - blend));
-                const g = Math.floor(color1.g * 255 * blend + color2.g * 255 * (1 - blend));
-                const b = Math.floor(color1.b * 255 * blend + color2.b * 255 * (1 - blend));
-                data[i] = r;
-                data[i + 1] = g;
-                data[i + 2] = b;
-                data[i + 3] = 255;
+        context.fillStyle = `rgb(${color1.r}, ${color1.g}, ${color1.b})`;
+        context.fillRect(0, 0, size, size);
+        context.fillStyle = `rgb(${color2.r}, ${color2.g}, ${color2.b})`;
+        for (let i = 0; i < size; i++) {
+            for (let j = 0; j < size; j++) {
+                if (Math.random() < 0.1) {
+                    context.fillRect(i, j, 1, 1);
+                }
             }
         }
-        context.putImageData(imageData, 0, 0);
         const texture = new THREE.CanvasTexture(canvas);
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
         texture.repeat.set(CONFIG.GRAPHICS.textureRepeat, CONFIG.GRAPHICS.textureRepeat);
-        texture.anisotropy = 16;
         return texture;
     }
 
-    function createMaterial(height) {
-        if (height < 0.2) return textures.dirt;
-        if (height < 0.5) return textures.grass;
-        if (height < 0.8) return textures.rock;
-        return textures.snow;
-    }
-
-    function initializeTerrainWorker(seed) {
-        terrainWorker = new Worker('js/terrainWorker.js');
-        terrainWorker.onmessage = function(e) {
-            const { type, data } = e.data;
-            if (type === 'heightBatchResult') {
-                processHeightBatch(data);
-            }
-        };
-        terrainWorker.onerror = function(e) {
-            console.error('Terrain worker error:', e);
-            // This is a placeholder, you should handle the error more gracefully.
-        };
-    }
-
-    function processHeightBatch(data) {
-        const { results, batchId } = data;
-        const chunkData = pendingChunks.get(batchId);
-        if (!chunkData) return;
-
-        const { geometry, chunkX, chunkZ, positionMap, resolve } = chunkData;
-
-        for (const { height, index } of results) {
-            if (geometry.attributes.position.array[index * 3 + 1] !== undefined) {
-                geometry.attributes.position.array[index * 3 + 1] = height;
-                const pos = geometry.attributes.position.array;
-                const uv = geometry.attributes.uv.array;
-                const materialIndex = Math.floor(height * 4); // Simple index based on height
-                uv[index * 2] = pos[index * 3] / CONFIG.GRAPHICS.textureSize;
-                uv[index * 2 + 1] = pos[index * 3 + 2] / CONFIG.GRAPHICS.textureSize;
-            }
+    function getTerrainMaterial() {
+        if (!terrainMaterial) {
+            terrainMaterial = new THREE.MeshLambertMaterial({
+                vertexColors: true,
+                transparent: false
+            });
         }
-        geometry.attributes.position.needsUpdate = true;
-        geometry.computeVertexNormals();
-
-        const terrainMaterial = new THREE.MeshStandardMaterial({
-            map: textures.dirt,
-            side: THREE.DoubleSide
-        });
-        const mesh = new THREE.Mesh(geometry, terrainMaterial);
-        mesh.position.set(chunkX, 0, chunkZ);
-        scene.add(mesh);
-        terrainChunks.set(`${chunkX},${chunkZ}`, mesh);
-        pendingChunks.delete(batchId);
-        resolve();
+        return terrainMaterial;
     }
 
-    function loadTerrainChunk({ chunkX, chunkZ, seed }) {
-        const key = `${chunkX},${chunkZ}`;
-        if (terrainChunks.has(key) || pendingChunks.has(key)) return;
+    function initializeWorker() {
+        if (!terrainWorker) {
+            terrainWorker = new Worker('terrainWorker.js');
+            terrainWorker.onmessage = handleWorkerMessage;
+            terrainWorker.onerror = handleWorkerError;
+        }
+    }
+    
+    function handleWorkerMessage(e) {
+        const { type, data } = e.data;
+        if (type === 'heightBatchResult') {
+            const { results, batchId } = data;
+            const pending = pendingChunks.get(batchId);
+            if (!pending) return;
 
-        return new Promise((resolve) => {
+            const { geometry, positionMap, resolve } = pending;
+            const positions = geometry.attributes.position.array;
+            const colors = geometry.attributes.color.array;
+            const { grass, dirt, rock, snow } = textures;
+
+            results.forEach(({ height, index }) => {
+                positions[index * 3 + 1] = height;
+
+                let color = dirt;
+                if (height > 5) {
+                    color = snow;
+                } else if (height > 2) {
+                    color = rock;
+                } else if (height > 0.5) {
+                    color = grass;
+                }
+
+                colors[index * 3] = color.image.data[0] / 255;
+                colors[index * 3 + 1] = color.image.data[1] / 255;
+                colors[index * 3 + 2] = color.image.data[2] / 255;
+            });
+
+            geometry.attributes.position.needsUpdate = true;
+            geometry.computeVertexNormals();
+
+            const mesh = new THREE.Mesh(geometry, getTerrainMaterial());
+            mesh.position.set(pending.chunkX * CONFIG.TERRAIN.chunkSize, 0, pending.chunkZ * CONFIG.TERRAIN.chunkSize);
+            mesh.receiveShadow = true;
+            scene.add(mesh);
+            terrainChunks.set(batchId, mesh);
+            pendingChunks.delete(batchId);
+            resolve(mesh);
+        }
+    }
+    
+    function handleWorkerError(e) {
+        console.error('Terrain worker error:', e);
+    }
+
+    function addTerrainChunk({ chunkX, chunkZ, seed = 0 }) {
+        initializeWorker();
+
+        const key = `${chunkX},${chunkZ}`;
+        if (terrainChunks.has(key) || pendingChunks.has(key)) {
+            console.log(`Chunk ${key} already exists or is pending.`);
+            return;
+        }
+
+        return new Promise(resolve => {
             const geometry = new THREE.PlaneGeometry(
                 CONFIG.TERRAIN.chunkSize,
                 CONFIG.TERRAIN.chunkSize,
                 CONFIG.TERRAIN.segments,
                 CONFIG.TERRAIN.segments
             );
+            geometry.rotateX(-Math.PI / 2);
+            geometry.attributes.position.needsUpdate = true;
+            geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(geometry.attributes.position.count * 3), 3));
+
             const positions = geometry.attributes.position.array;
             const points = [];
             const positionMap = new Map();
@@ -170,9 +180,16 @@ export function SimpleTerrainRenderer(scene) {
             terrainMaterial.dispose();
             Object.values(textures).forEach(tex => tex.dispose());
         }
+        if (terrainWorker) {
+            terrainWorker.terminate();
+            terrainWorker = null;
+        }
     }
 
-    initializeTerrainWorker();
-
-    return { loadTerrainChunk, removeTerrainChunk, clearChunks };
+    return {
+        addTerrainChunk,
+        removeTerrainChunk,
+        clearChunks,
+        getLoadedChunks: () => Array.from(terrainChunks.keys()) // This function was missing but is useful for debugging/state management.
+    };
 }

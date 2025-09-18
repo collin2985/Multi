@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 
-export function initializeNetworking(clientId, uiElements, handleChunkStateChange) {
+export function initializeNetworking(clientId, uiElements) {
     let ws = null;
     let wsRetryAttempts = 0;
     const wsMaxRetries = 10;
     const wsRetryInterval = 5000;
     const peers = new Map();
     const avatars = new Map();
+    let handleChunkStateChangeCallback = null;
 
     function updateStatus(msg) {
         const timestamp = new Date().toLocaleTimeString();
@@ -33,35 +34,58 @@ export function initializeNetworking(clientId, uiElements, handleChunkStateChang
             return;
         }
 
-        updateConnectionStatus('connecting', 'Connecting...');
+        updateConnectionStatus('retrying', `Connecting... Attempt ${wsRetryAttempts + 1}`);
         ws = new WebSocket('ws://localhost:8080');
 
         ws.onopen = () => {
-            updateStatus('✅ WebSocket connection established.');
+            updateStatus('✅ Connected to server.');
             updateConnectionStatus('connected', 'Connected');
             wsRetryAttempts = 0;
         };
 
-        ws.onmessage = (event) => {
+        ws.onmessage = async (event) => {
             const message = JSON.parse(event.data);
-            handleServerMessage(message);
+            switch (message.type) {
+                case 'welcome':
+                    updateStatus(message.message);
+                    break;
+                case 'chunk_state_change':
+                    if (handleChunkStateChangeCallback) {
+                        handleChunkStateChangeCallback(message.payload);
+                    }
+                    if (message.payload.state.players) {
+                        await updatePeerConnections(message.payload.state.players);
+                    }
+                    break;
+                case 'webrtc_offer':
+                    await handleOffer(message.payload);
+                    break;
+                case 'webrtc_answer':
+                    await handleAnswer(message.payload);
+                    break;
+                case 'webrtc_ice_candidate':
+                    await handleIceCandidate(message.payload);
+                    break;
+                case 'error':
+                    updateStatus(`⚠️ Server error: ${message.message}`);
+                    break;
+                default:
+                    updateStatus(`⚠️ Unknown server message type: ${message.type}`);
+            }
         };
 
         ws.onclose = (event) => {
-            updateStatus(`❌ WebSocket connection closed: ${event.code} ${event.reason}`);
+            updateStatus(`❌ Disconnected from server: ${event.code}`);
             updateConnectionStatus('disconnected', 'Disconnected');
-            cleanupPeers();
             if (wsRetryAttempts < wsMaxRetries) {
                 wsRetryAttempts++;
-                updateStatus(`Retrying connection in ${wsRetryInterval / 1000}s... (Attempt ${wsRetryAttempts})`);
                 setTimeout(connectToServer, wsRetryInterval);
-            } else {
-                updateStatus('Max retries reached. Please refresh.');
             }
         };
 
         ws.onerror = (error) => {
             updateStatus(`❌ WebSocket error: ${error.message}`);
+            ws.close();
         };
     }
 
@@ -71,91 +95,17 @@ export function initializeNetworking(clientId, uiElements, handleChunkStateChang
             ws.send(JSON.stringify(message));
             return true;
         } else {
-            updateStatus(`❌ Cannot send message: ${type}. WebSocket is not open.`);
+            updateStatus('❌ Cannot send message: Not connected to server.');
             return false;
         }
     }
-    
-    function handleServerMessage(message) {
-        const { type, payload } = message;
-        updateStatus(`🌐 Received: ${type}`);
 
-        switch (type) {
-            case 'welcome':
-                // Initial message, maybe set up client ID
-                break;
-            case 'chunk_state_change':
-                handleChunkStateChange(payload);
-                break;
-            case 'webrtc_offer':
-                handleWebRTCOffer(payload);
-                break;
-            case 'webrtc_answer':
-                handleWebRTCAnswer(payload);
-                break;
-            case 'webrtc_ice_candidate':
-                handleIceCandidate(payload);
-                break;
-            default:
-                updateStatus(`⚠️ Unknown message type from server: ${type}`);
-        }
-    }
-
-    function handleWebRTCOffer(payload) {
-        const { senderId, offer } = payload;
-        updateStatus(`💌 Received offer from ${senderId}`);
-        const connection = createPeerConnection(senderId, false);
-        connection.setRemoteDescription(new RTCSessionDescription(offer))
-            .then(() => connection.createAnswer())
-            .then(answer => connection.setLocalDescription(answer))
-            .then(() => {
-                sendServerMessage('webrtc_answer', {
-                    recipientId: senderId,
-                    senderId: clientId,
-                    answer: connection.localDescription
-                });
-            })
-            .catch(e => updateStatus(`❌ Failed to handle offer from ${senderId}: ${e}`));
-    }
-    
-    function handleWebRTCAnswer(payload) {
-        const { senderId, answer } = payload;
-        updateStatus(`🤝 Received answer from ${senderId}`);
-        const connection = peers.get(senderId);
-        if (connection) {
-            connection.setRemoteDescription(new RTCSessionDescription(answer))
-                .catch(e => updateStatus(`❌ Failed to set remote description for ${senderId}: ${e}`));
-        }
-    }
-
-    function handleIceCandidate(payload) {
-        const { senderId, candidate } = payload;
-        const connection = peers.get(senderId);
-        if (connection) {
-            connection.addIceCandidate(new RTCIceCandidate(candidate))
-                .catch(e => updateStatus(`❌ Failed to add ICE candidate for ${senderId}: ${e}`));
-        }
-    }
-
-    function createPeerConnection(peerId, isInitiator) {
-        const config = {
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' }
-            ]
-        };
-        const connection = new RTCPeerConnection(config);
-        peers.set(peerId, connection);
-
-        if (isInitiator) {
-            connection.dataChannel = connection.createDataChannel('data');
-            setupDataChannelEvents(connection.dataChannel, peerId);
-        } else {
-            connection.ondatachannel = (event) => {
-                connection.dataChannel = event.channel;
-                setupDataChannelEvents(connection.dataChannel, peerId);
-            };
-        }
-
+    function createPeerConnection(peerId, isInitiator = false) {
+        updateStatus(`Creating peer connection for ${peerId}, initiator: ${isInitiator}`);
+        const connection = new RTCPeerConnection({
+            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+        });
+        
         connection.onicecandidate = (event) => {
             if (event.candidate) {
                 sendServerMessage('webrtc_ice_candidate', {
@@ -167,47 +117,94 @@ export function initializeNetworking(clientId, uiElements, handleChunkStateChang
         };
 
         connection.onconnectionstatechange = () => {
+            updateStatus(`Peer ${peerId} state: ${connection.connectionState}`);
+            if (connection.connectionState === 'disconnected' || connection.connectionState === 'closed') {
+                cleanupPeer(peerId);
+            }
             updatePeerInfo();
         };
 
+        const dataChannel = connection.createDataChannel("chat");
+        dataChannel.onopen = () => {
+            updateStatus(`✅ Data channel opened with ${peerId}`);
+            updatePeerInfo();
+        };
+        dataChannel.onmessage = (event) => {
+            const message = JSON.parse(event.data);
+            updateStatus(`📦 P2P from ${peerId}: ${JSON.stringify(message)}`);
+        };
+        dataChannel.onclose = () => {
+            updateStatus(`❌ Data channel with ${peerId} closed`);
+            cleanupPeer(peerId);
+        };
+
+        const peerInfo = { connection, dataChannel, state: 'connecting' };
+        peers.set(peerId, peerInfo);
+        updatePeerInfo();
         return connection;
     }
 
-    function setupDataChannelEvents(dataChannel, peerId) {
-        dataChannel.onopen = () => updateStatus(`✅ Data channel opened with ${peerId}.`);
-        dataChannel.onclose = () => updateStatus(`❌ Data channel closed with ${peerId}.`);
-        dataChannel.onerror = (e) => updateStatus(`❌ Data channel error with ${peerId}: ${e}.`);
-        dataChannel.onmessage = (event) => {
-            try {
-                const message = JSON.parse(event.data);
-                if (message.type === 'player_update' && avatars.has(peerId)) {
-                    const avatar = avatars.get(peerId);
-                    avatar.position.copy(message.payload.position);
-                    avatar.rotation.copy(message.payload.rotation);
-                }
-            } catch (error) {
-                updateStatus(`❌ Failed to parse P2P message from ${peerId}: ${error}`);
-            }
-        };
+    async function handleOffer(payload) {
+        const { senderId, offer } = payload;
+        updateStatus(`Received offer from ${senderId}`);
+        const connection = createPeerConnection(senderId, false);
+        try {
+            await connection.setRemoteDescription(new RTCSessionDescription(offer));
+            const answer = await connection.createAnswer();
+            await connection.setLocalDescription(answer);
+            sendServerMessage('webrtc_answer', {
+                recipientId: senderId,
+                senderId: clientId,
+                answer: connection.localDescription
+            });
+        } catch (error) {
+            updateStatus(`❌ Failed to handle offer from ${senderId}: ${error}`);
+            cleanupPeer(senderId);
+        }
     }
 
-    function cleanupPeers() {
-        peers.forEach(peer => {
-            peer.close();
-        });
-        peers.clear();
-        avatars.clear();
-        updatePeerInfo();
+    async function handleAnswer(payload) {
+        const { senderId, answer } = payload;
+        const peer = peers.get(senderId);
+        if (peer && peer.connection.signalingState !== 'stable') {
+            try {
+                await peer.connection.setRemoteDescription(new RTCSessionDescription(answer));
+                updateStatus(`✅ Answer received from ${senderId}`);
+            } catch (error) {
+                updateStatus(`❌ Failed to handle answer from ${senderId}: ${error}`);
+                cleanupPeer(senderId);
+            }
+        }
+    }
+
+    async function handleIceCandidate(payload) {
+        const { senderId, candidate } = payload;
+        const peer = peers.get(senderId);
+        if (peer) {
+            try {
+                await peer.connection.addIceCandidate(new RTCIceCandidate(candidate));
+            } catch (error) {
+                updateStatus(`❌ Failed to add ICE candidate from ${senderId}: ${error}`);
+            }
+        }
     }
     
-    function findOtherPlayers(players, myId) {
-        return players.filter(p => p.id !== myId);
+    function cleanupPeer(peerId) {
+        const peer = peers.get(peerId);
+        if (peer) {
+            peer.connection.close();
+            peers.delete(peerId);
+            avatars.delete(peerId);
+        }
+        updateStatus(`Peer ${peerId} cleaned up.`);
+        updatePeerInfo();
     }
 
-    function updatePeerConnections(chunkState) {
-        const otherPlayers = findOtherPlayers(chunkState.players, clientId);
+    async function updatePeerConnections(players) {
+        const otherPlayers = players.filter(p => p.id !== clientId);
+        const playerIds = new Set(otherPlayers.map(p => p.id));
         peers.forEach((peer, peerId) => {
-            if (!otherPlayers.some(p => p.id === peerId)) {
+            if (!playerIds.has(peerId)) {
                 cleanupPeer(peerId);
             }
         });
@@ -245,6 +242,16 @@ export function initializeNetworking(clientId, uiElements, handleChunkStateChang
             cleanupPeer(peerId);
         }
     }
+    
+    function setChunkHandler(callback) {
+        handleChunkStateChangeCallback = callback;
+    }
 
-return { connectToServer, sendServerMessage, peers, avatars };
+    return { 
+        connectToServer, 
+        sendServerMessage, 
+        peers, 
+        avatars,
+        setChunkHandler // Export the new function
+    };
 }
