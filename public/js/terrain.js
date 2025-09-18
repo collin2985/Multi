@@ -11,28 +11,24 @@ const CONFIG = Object.freeze({
     }
 });
 
-class SimpleTerrainRenderer {
-    constructor(scene) {
-        this.scene = scene;
-        this.terrainChunks = new Map();
-        this.terrainMaterial = null;
-        this.terrainWorker = null;
-        this.pendingChunks = new Map();
-        this.textures = this.initializeTextures();
-        this.initialize();
-    }
+export function initializeTerrain(scene) {
+    const terrainChunks = new Map();
+    let terrainMaterial = null;
+    let terrainWorker = null;
+    const pendingChunks = new Map();
+    const textures = initializeTextures();
 
-    initializeTextures() {
+    function initializeTextures() {
         const size = CONFIG.GRAPHICS.textureSize;
         const textures = {};
-        textures.dirt = this.createProceduralTexture({ r: 101, g: 67, b: 33 }, { r: 139, g: 90, b: 43 }, size);
-        textures.grass = this.createProceduralTexture({ r: 34, g: 139, b: 34 }, { r: 0, g: 100, b: 0 }, size);
-        textures.rock = this.createProceduralTexture({ r: 105, g: 105, b: 105 }, { r: 128, g: 128, b: 128 }, size);
-        textures.snow = this.createProceduralTexture({ r: 255, g: 250, b: 250 }, { r: 240, g: 248, b: 255 }, size);
+        textures.dirt = createProceduralTexture({ r: 101, g: 67, b: 33 }, { r: 139, g: 90, b: 43 }, size);
+        textures.grass = createProceduralTexture({ r: 34, g: 139, b: 34 }, { r: 0, g: 100, b: 0 }, size);
+        textures.rock = createProceduralTexture({ r: 105, g: 105, b: 105 }, { r: 128, g: 128, b: 128 }, size);
+        textures.snow = createProceduralTexture({ r: 255, g: 250, b: 250 }, { r: 240, g: 248, b: 255 }, size);
         return textures;
     }
 
-    createProceduralTexture(color1, color2, size) {
+    function createProceduralTexture(color1, color2, size) {
         const canvas = document.createElement('canvas');
         canvas.width = canvas.height = size;
         const ctx = canvas.getContext('2d');
@@ -50,10 +46,26 @@ class SimpleTerrainRenderer {
         return tex;
     }
 
-    initialize() {
-        this.terrainWorker = new Worker('./js/workers/terrainWorker.js');
-        this.terrainWorker.onmessage = this.handleWorkerMessage.bind(this);
-        this.terrainMaterial = new THREE.ShaderMaterial({
+    function initialize() {
+        try {
+            terrainWorker = new Worker('/js/workers/terrainWorker.js', { type: 'module' });
+            terrainWorker.onmessage = handleWorkerMessage;
+            terrainWorker.onerror = (error) => {
+                console.error('Terrain worker error:', error);
+                // Fallback: Generate flat terrain for pending chunks
+                pendingChunks.forEach(({ geometry, chunkX, chunkZ }, batchId) => {
+                    console.warn(`Falling back to flat terrain for chunk (${chunkX}, ${chunkZ})`);
+                    geometry.attributes.position.needsUpdate = true;
+                    geometry.computeVertexNormals();
+                    finishTerrainChunk(geometry, chunkX, chunkZ);
+                    pendingChunks.delete(batchId);
+                });
+            };
+        } catch (error) {
+            console.error('Failed to initialize terrain worker:', error);
+        }
+
+        terrainMaterial = new THREE.ShaderMaterial({
             vertexShader: `
                 varying vec3 vNormal;
                 varying vec3 vPosition;
@@ -98,22 +110,25 @@ class SimpleTerrainRenderer {
                 }
             `,
             uniforms: {
-                uDirt: { value: this.textures.dirt },
-                uGrass: { value: this.textures.grass },
-                uRock: { value: this.textures.rock },
-                uSnow: { value: this.textures.snow },
+                uDirt: { value: textures.dirt },
+                uGrass: { value: textures.grass },
+                uRock: { value: textures.rock },
+                uSnow: { value: textures.snow },
                 uLightDir: { value: new THREE.Vector3(1, 1, 1).normalize() }
             },
             side: THREE.FrontSide
         });
     }
 
-    handleWorkerMessage(e) {
+    function handleWorkerMessage(e) {
         const { type, data } = e.data;
         if (type === 'heightBatchResult') {
             const { results, batchId } = data;
-            const pending = this.pendingChunks.get(batchId);
-            if (!pending) return;
+            const pending = pendingChunks.get(batchId);
+            if (!pending) {
+                console.warn(`No pending chunk for batchId ${batchId}`);
+                return;
+            }
             const { geometry, chunkX, chunkZ } = pending;
             const positions = geometry.attributes.position.array;
             for (let i = 0; i < results.length; i++) {
@@ -122,19 +137,32 @@ class SimpleTerrainRenderer {
             }
             geometry.attributes.position.needsUpdate = true;
             geometry.computeVertexNormals();
-            this.finishTerrainChunk(geometry, chunkX, chunkZ);
-            this.pendingChunks.delete(batchId);
+            finishTerrainChunk(geometry, chunkX, chunkZ);
+            pendingChunks.delete(batchId);
         }
     }
 
-    addTerrainChunk({ chunkX = 0, chunkZ = 0, seed = 0 }) {
+    async function addTerrainChunk({ chunkX = 0, chunkZ = 0, seed = 0 }) {
         const chunkIndexX = Math.floor(chunkX / CONFIG.TERRAIN.chunkSize);
         const chunkIndexZ = Math.floor(chunkZ / CONFIG.TERRAIN.chunkSize);
         const key = `${chunkIndexX},${chunkIndexZ}`;
-        if (this.terrainChunks.has(key)) {
+        if (terrainChunks.has(key)) {
             return;
         }
         console.log(`Creating terrain chunk at (${chunkX}, ${chunkZ}) with seed ${seed}`);
+        let chunkData = { seed };
+        try {
+            const response = await fetch('/chunkA.JSON');
+            if (response.ok) {
+                chunkData = await response.json();
+                console.log(`Loaded chunk data for chunkA.JSON:`, chunkData);
+            } else {
+                console.warn(`No chunkA.JSON found, using default seed ${seed}`);
+            }
+        } catch (error) {
+            console.error(`Failed to fetch chunkA.JSON: ${error}`);
+        }
+
         const geometry = new THREE.PlaneGeometry(
             CONFIG.TERRAIN.chunkSize,
             CONFIG.TERRAIN.chunkSize,
@@ -162,53 +190,60 @@ class SimpleTerrainRenderer {
                 });
             }
         }
-        if (pointsToCalculate.length > 0) {
+        if (pointsToCalculate.length > 0 && terrainWorker) {
             const batchId = key;
-            this.pendingChunks.set(batchId, { geometry, chunkX, chunkZ });
-            this.terrainWorker.postMessage({
+            pendingChunks.set(batchId, { geometry, chunkX, chunkZ });
+            terrainWorker.postMessage({
                 type: 'calculateHeightBatch',
-                data: { points: pointsToCalculate, batchId, seed }
+                data: { points: pointsToCalculate, batchId, seed: chunkData.seed || seed }
             });
+        } else {
+            console.warn(`No terrain worker or points, using flat terrain for (${chunkX}, ${chunkZ})`);
+            geometry.attributes.position.needsUpdate = true;
+            geometry.computeVertexNormals();
+            finishTerrainChunk(geometry, chunkX, chunkZ);
         }
     }
 
-    finishTerrainChunk(geometry, chunkX, chunkZ) {
+    function finishTerrainChunk(geometry, chunkX, chunkZ) {
         const chunkIndexX = Math.floor(chunkX / CONFIG.TERRAIN.chunkSize);
         const chunkIndexZ = Math.floor(chunkZ / CONFIG.TERRAIN.chunkSize);
         const key = `${chunkIndexX},${chunkIndexZ}`;
-        const mesh = new THREE.Mesh(geometry, this.terrainMaterial);
+        const mesh = new THREE.Mesh(geometry, terrainMaterial);
         mesh.position.set(chunkX, 0, chunkZ);
-        this.scene.add(mesh);
-        this.terrainChunks.set(key, mesh);
+        scene.add(mesh);
+        terrainChunks.set(key, mesh);
         console.log(`Added terrain chunk at (${chunkX}, ${chunkZ})`);
     }
 
-    removeTerrainChunk({ chunkX, chunkZ }) {
+    function removeTerrainChunk({ chunkX, chunkZ }) {
         const chunkIndexX = Math.floor(chunkX / CONFIG.TERRAIN.chunkSize);
         const chunkIndexZ = Math.floor(chunkZ / CONFIG.TERRAIN.chunkSize);
         const key = `${chunkIndexX},${chunkIndexZ}`;
-        const mesh = this.terrainChunks.get(key);
+        const mesh = terrainChunks.get(key);
         if (mesh) {
-            this.scene.remove(mesh);
-            this.terrainChunks.delete(key);
+            scene.remove(mesh);
             mesh.geometry.dispose();
+            terrainChunks.delete(key);
             console.log(`Removed chunk at (${chunkIndexX}, ${chunkIndexZ})`);
         }
     }
 
-    clearChunks() {
-        this.terrainChunks.forEach((mesh) => {
-            this.scene.remove(mesh);
+    function clearChunks() {
+        terrainChunks.forEach((mesh) => {
+            scene.remove(mesh);
             mesh.geometry.dispose();
         });
-        this.terrainChunks.clear();
-        if (this.terrainMaterial) {
-            this.terrainMaterial.dispose();
+        terrainChunks.clear();
+        if (terrainMaterial) {
+            terrainMaterial.dispose();
+            Object.values(textures).forEach(tex => tex.dispose());
         }
-        if (this.terrainWorker) {
-            this.terrainWorker.terminate();
+        if (terrainWorker) {
+            terrainWorker.terminate();
         }
     }
-}
 
-export { SimpleTerrainRenderer };
+    initialize();
+    return { addTerrainChunk, removeTerrainChunk, terrainChunks, clearChunks };
+}

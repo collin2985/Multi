@@ -1,30 +1,32 @@
-const fs = require('fs');
+const fs = require('fs').promises;
+const path = require('path');
 
 const chunkCache = new Map();
 const terrainSeed = Math.floor(Math.random() * 1000000);
 
-function saveChunk(chunkId) {
-    if (chunkCache.has(chunkId)) {
-        const filePath = `./public/${chunkId}.JSON`;
-        const chunkData = chunkCache.get(chunkId);
-        fs.writeFileSync(filePath, JSON.stringify(chunkData, null, 2), 'utf8');
-        console.log(`Saved chunk: ${chunkId}`);
+async function saveChunk(chunkId) {
+    const chunkData = chunkCache.get(chunkId);
+    if (chunkData) {
+        const filePath = path.join(__dirname, 'public', 'chunkA.JSON');
+        try {
+            await fs.writeFile(filePath, JSON.stringify(chunkData, null, 2));
+            console.log(`Saved chunk: ${chunkId}`);
+        } catch (error) {
+            console.error(`Failed to save chunk ${chunkId}: ${error}`);
+        }
     }
 }
 
-function loadChunk(chunkId) {
-    if (chunkCache.has(chunkId)) {
-        return chunkCache.get(chunkId);
-    }
-    const filePath = `./public/${chunkId}.JSON`;
+async function loadChunk(chunkId) {
+    const filePath = path.join(__dirname, 'public', 'chunkA.JSON');
     try {
-        const fileData = fs.readFileSync(filePath, 'utf8');
-        const chunkData = JSON.parse(fileData);
+        const data = await fs.readFile(filePath, 'utf8');
+        const chunkData = JSON.parse(data);
         chunkCache.set(chunkId, chunkData);
         console.log(`Loaded chunk: ${chunkId}`);
         return chunkData;
     } catch (error) {
-        console.error(`Failed to load chunk ${chunkId}:`, error);
+        console.error(`Failed to load chunk ${chunkId}: ${error}`);
         return null;
     }
 }
@@ -37,12 +39,15 @@ function initializeChunk(chunkId) {
 }
 
 function broadcastToChunk(wss, chunkId, message) {
-    wss.clients.forEach(client => {
-        if (client.currentChunk === chunkId && client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify(message));
-        }
-    });
-    console.log(`Broadcasted ${message.type} to chunk ${chunkId}`);
+    const chunkData = chunkCache.get(chunkId);
+    if (chunkData) {
+        wss.clients.forEach(client => {
+            if (client.currentChunk === chunkId && client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify(message));
+            }
+        });
+        console.log(`Broadcasted ${message.type} to chunk ${chunkId}`);
+    }
 }
 
 module.exports = { saveChunk, loadChunk, initializeChunk, broadcastToChunk, chunkCache };
