@@ -205,7 +205,7 @@ class SimpleTerrainRenderer {
 
             const BIOME_PARAMS = {
                 [BIOMES.MOUNTAINS]: {
-                    amplitude: 18,
+                    amplitude: 60,
                     frequency: 0.02,
                     octaves: 4,
                     persistence: 0.6,
