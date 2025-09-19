@@ -1,3 +1,4 @@
+```javascript
 // terrain.js
 import * as THREE from 'three';
 
@@ -7,8 +8,8 @@ const CONFIG = Object.freeze({
         segments: 25
     },
     GRAPHICS: {
-        textureSize: 48,
-        textureRepeat: 2
+        textureSize: 256, // Increased for sharper textures
+        textureRepeat: 4 // Increased for smaller texture tiles
     },
     BIOMES: {
         MOUNTAINS: 0,
@@ -32,10 +33,10 @@ class SimpleTerrainRenderer {
     initializeTextures() {
         const size = CONFIG.GRAPHICS.textureSize;
         const textures = {};
-        textures.dirt = this.createProceduralTexture({ r: 101, g: 67, b: 33 }, { r: 139, g: 90, b: 43 }, size);
-        textures.grass = this.createProceduralTexture({ r: 34, g: 139, b: 34 }, { r: 0, g: 100, b: 0 }, size);
-        textures.rock = this.createProceduralTexture({ r: 105, g: 105, b: 105 }, { r: 128, g: 128, b: 128 }, size);
-        textures.snow = this.createProceduralTexture({ r: 255, g: 250, b: 250 }, { r: 240, g: 248, b: 255 }, size);
+        textures.dirt = this.createProceduralTexture({ r: 120, g: 80, b: 40 }, { r: 160, g: 110, b: 60 }, size);
+        textures.grass = this.createProceduralTexture({ r: 40, g: 160, b: 40 }, { r: 20, g: 120, b: 20 }, size);
+        textures.rock = this.createProceduralTexture({ r: 80, g: 80, b: 80 }, { r: 140, g: 140, b: 160 }, size);
+        textures.snow = this.createProceduralTexture({ r: 240, g: 245, b: 255 }, { r: 200, g: 220, b: 240 }, size);
         return textures;
     }
 
@@ -45,11 +46,38 @@ class SimpleTerrainRenderer {
         const ctx = canvas.getContext('2d');
         const imgData = ctx.createImageData(size, size);
         const data = imgData.data;
-        for (let i = 0; i < data.length; i += 4) {
-            // low-cost stipple / noise pattern
-            const noise = Math.random();
-            const c = noise > 0.5 ? color1 : color2;
-            data[i] = c.r; data[i + 1] = c.g; data[i + 2] = c.b; data[i + 3] = 255;
+
+        // Simple 2D noise function (similar to fragment shader)
+        function rand(vec2) {
+            return (Math.sin(vec2[0] * 12.9898 + vec2[1] * 78.233) * 43758.5453123) % 1;
+        }
+        function noise2d(x, y) {
+            const i = [Math.floor(x), Math.floor(y)];
+            const f = [x % 1, y % 1];
+            const u = [f[0] * f[0] * (3 - 2 * f[0]), f[1] * f[1] * (3 - 2 * f[1])];
+            const a = rand(i);
+            const b = rand([i[0] + 1, i[1]]);
+            const c = rand([i[0], i[1] + 1]);
+            const d = rand([i[0] + 1, i[1] + 1]);
+            return a + (b - a) * u[0] + (c - a) * u[1] * (1 - u[0]) + (d - b) * u[0] * u[1];
+        }
+
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                const i = (y * size + x) * 4;
+                // Multi-octave noise for natural texture
+                const n = (
+                    noise2d(x / size * 4, y / size * 4) * 0.5 +
+                    noise2d(x / size * 8, y / size * 8) * 0.25 +
+                    noise2d(x / size * 16, y / size * 16) * 0.125
+                ) / 0.875; // Normalize
+                const c = {
+                    r: color1.r + (color2.r - color1.r) * n,
+                    g: color1.g + (color2.g - color1.g) * n,
+                    b: color1.b + (color2.b - color1.b) * n
+                };
+                data[i] = c.r; data[i + 1] = c.g; data[i + 2] = c.b; data[i + 3] = 255;
+            }
         }
         ctx.putImageData(imgData, 0, 0);
         const tex = new THREE.CanvasTexture(canvas);
@@ -112,7 +140,7 @@ class SimpleTerrainRenderer {
                     int biome = int(vBiomeType + 0.5); // round to nearest int
 
                     // world-space tex coords (tiled)
-                    vec2 texCoord = vWorldPosition.xz * 0.1;
+                    vec2 texCoord = vWorldPosition.xz * 0.2; // Increased for finer texture scaling
 
                     // sample per-layer procedural canvas textures (cheap, mipmapped)
                     vec3 dirtColor = texture2D(uDirt, texCoord).rgb;
@@ -121,40 +149,40 @@ class SimpleTerrainRenderer {
                     vec3 snowColor = texture2D(uSnow, texCoord).rgb;
 
                     // Add low-frequency noise to break banding
-                    float lowNoise = noise2d(vWorldPosition.xz * 0.05) * 0.15;
+                    float lowNoise = noise2d(vWorldPosition.xz * 0.05) * 0.3; // Increased noise impact
 
                     // Base texture blending: dirt -> grass -> rock -> snow by elevation
                     // Steep slopes override with rock
                     
-                    // Primary elevation-based blending (same for all biomes)
-                    float dirtWeight = smoothstep(-5.0, 2.0, -height + lowNoise);  // Low elevations
-                    float grassWeight = smoothstep(-2.0, 8.0, height + lowNoise) * smoothstep(12.0, 6.0, height + lowNoise); // Mid elevations  
-                    float snowWeight = smoothstep(10.0, 15.0, height + lowNoise * 0.5); // High elevations
+                    // Primary elevation-based blending (adjusted for height range -10 to 20)
+                    float dirtWeight = smoothstep(-10.0, 0.0, -height + lowNoise);  // Low elevations
+                    float grassWeight = smoothstep(-2.0, 10.0, height + lowNoise) * smoothstep(15.0, 8.0, height + lowNoise); // Mid elevations  
+                    float snowWeight = smoothstep(12.0, 18.0, height + lowNoise * 0.5); // High elevations
                     
                     // Rock on steep slopes (overrides elevation-based texturing)
-                    float slopeRock = smoothstep(0.3, 0.7, slope + lowNoise * 0.1);
+                    float slopeRock = smoothstep(0.3, 0.7, slope + lowNoise * 0.2);
                     
                     // Biome modifications to base blending
                     if (biome == 0) { // MOUNTAINS - more rock, snow starts lower
-                        snowWeight = smoothstep(8.0, 12.0, height + lowNoise * 0.5);
-                        slopeRock = smoothstep(0.25, 0.6, slope + lowNoise * 0.1); // More sensitive to slope
+                        snowWeight = smoothstep(10.0, 15.0, height + lowNoise * 0.5);
+                        slopeRock = smoothstep(0.2, 0.55, slope + lowNoise * 0.2); // More sensitive to slope
                     } else if (biome == 1) { // HILLS - standard blending
-                        // Use base values
+                        grassWeight *= 1.2; // Slightly boost grass
                     } else if (biome == 2) { // PLAINS - less rock, more grass
-                        grassWeight *= 1.3; // Boost grass
-                        slopeRock = smoothstep(0.5, 0.8, slope + lowNoise * 0.1); // Less slope rock
-                        snowWeight = smoothstep(12.0, 18.0, height + lowNoise * 0.5); // Snow higher up
+                        grassWeight *= 1.5; // Stronger grass boost
+                        slopeRock = smoothstep(0.5, 0.9, slope + lowNoise * 0.2); // Less slope rock
+                        snowWeight = smoothstep(15.0, 20.0, height + lowNoise * 0.5); // Snow higher up
                     } else { // CANYONS - more exposed rock
-                        dirtWeight *= 1.2; // More dirt in low areas
-                        slopeRock = smoothstep(0.2, 0.5, slope + lowNoise * 0.1); // Very slope-sensitive
-                        snowWeight = smoothstep(6.0, 10.0, height + lowNoise * 0.5); // Snow lower (high peaks)
+                        dirtWeight *= 1.5; // Stronger dirt
+                        slopeRock = smoothstep(0.15, 0.45, slope + lowNoise * 0.2); // Very slope-sensitive
+                        snowWeight = smoothstep(8.0, 12.0, height + lowNoise * 0.5); // Snow lower
                     }
                     
                     // Mix rock based on slope (rock overrides other textures on steep slopes)
                     float dirtMix = dirtWeight * (1.0 - slopeRock);
                     float grassMix = grassWeight * (1.0 - slopeRock);
-                    float rockMix = slopeRock + (1.0 - slopeRock) * smoothstep(6.0, 10.0, height + lowNoise); // Some rock at high elevation too
-                    float snowMix = snowWeight; // Snow can appear on steep slopes
+                    float rockMix = slopeRock + (1.0 - slopeRock) * smoothstep(8.0, 12.0, height + lowNoise); // Some rock at high elevation
+                    float snowMix = snowWeight;
                     
                     // Normalize weights
                     float sum = dirtMix + grassMix + rockMix + snowMix;
@@ -599,3 +627,4 @@ class SimpleTerrainRenderer {
 }
 
 export { SimpleTerrainRenderer };
+```
