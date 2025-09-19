@@ -37,7 +37,7 @@ export const ui = {
     // accepting callbacks for actions that affect game state.
     initializeUI(callbacks) {
         joinBtn.onclick = () => {
-            const success = callbacks.sendServerMessage('join_chunk', { clientId: callbacks.clientId });
+            const success = callbacks.sendServerMessage('join_chunk', { chunkId: 'chunk_0_0', clientId: callbacks.clientId });
             if (success) {
                 callbacks.onJoinSuccess();
             }
