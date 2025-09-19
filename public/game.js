@@ -574,7 +574,7 @@ function animate() {
 
     const cameraOffset = new THREE.Vector3(-5, 20, 10);
     const cameraTargetPosition = playerObject.position.clone().add(cameraOffset);
-    const smoothedCameraPosition = camera.position.lerp(cameraTargetPosition, 0.1);
+    const smoothedCameraPosition = camera.position.lerp(cameraTargetPosition, 0.5);
     camera.position.copy(smoothedCameraPosition);
     camera.lookAt(playerObject.position);
 
