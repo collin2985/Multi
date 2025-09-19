@@ -117,8 +117,8 @@ class SimpleTerrainRenderer {
                     float heightFactor = height * 0.05; // Even gentler scaling
 
                     // Smooth transitions with smoothstep + noise offset
-                    float dirtMix = 1.0 - smoothstep(-1.0, 1.0, heightFactor + lowNoise * 0.3);
-                    float grassMix = smoothstep(-0.5, 1.5, heightFactor - slope + lowNoise * 0.2);
+                    float dirtMix = smoothstep(0.5, 2.0, height * 0.1 + lowNoise * 0.5);
+                    float grassMix = smoothstep(-2.0, 0.5, height * 0.1 - slope * 0.3 + lowNoise * 0.4);
                     float rockMix = smoothstep(0.3, 0.8, slope * 0.8 + lowNoise * 0.1);
                     float snowMix = smoothstep(1.0, 2.0, heightFactor + lowNoise * 0.2);
 
