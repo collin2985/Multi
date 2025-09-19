@@ -4,7 +4,6 @@
 const statusEl = document.getElementById('status');
 const connectionStatusEl = document.getElementById('connectionStatus');
 const peerInfoEl = document.getElementById('peerInfo');
-const joinBtn = document.getElementById('joinChunkBtn');
 const addBtn = document.getElementById('addBoxBtn');
 const removeBtn = document.getElementById('removeBoxBtn');
 
@@ -30,28 +29,21 @@ export const ui = {
     updateButtonStates(isInChunk, boxInScene) {
         addBtn.disabled = !isInChunk || boxInScene;
         removeBtn.disabled = !isInChunk || !boxInScene;
-        joinBtn.disabled = isInChunk;
     },
 
-    // This function sets up all the event listeners,
-    // accepting callbacks for actions that affect game state.
+    // Sets up event listeners, accepting callbacks for actions
     initializeUI(callbacks) {
-        joinBtn.onclick = () => {
-            const success = callbacks.sendServerMessage('join_chunk', { chunkId: 'chunk_0_0', clientId: callbacks.clientId });
-            if (success) {
-                callbacks.onJoinSuccess();
-            }
-        };
-
         addBtn.onclick = () => {
             callbacks.sendServerMessage('add_box_request', {
-                chunkId: 'chunk_0_0',
+                chunkId: `chunk_${callbacks.currentChunkX}_${callbacks.currentChunkZ}`, // Updated to use current chunk
                 position: { x: 0, y: 0, z: -3 }
             });
         };
 
         removeBtn.onclick = () => {
-            callbacks.sendServerMessage('remove_box_request', { chunkId: 'chunk_0_0' });
+            callbacks.sendServerMessage('remove_box_request', {
+                chunkId: `chunk_${callbacks.currentChunkX}_${callbacks.currentChunkZ}` // Updated to use current chunk
+            });
         };
         
         // --- RESIZE HANDLING ---

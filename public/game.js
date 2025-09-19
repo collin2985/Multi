@@ -1,7 +1,7 @@
 // game.js
 import * as THREE from 'three';
 import { SimpleTerrainRenderer } from './terrain.js';
-import { ui } from './ui.js'; // NEW: Import the UI module
+import { ui } from './ui.js';
 
 // --- GLOBAL STATE ---
 const clientId = 'client_' + Math.random().toString(36).substr(2, 12);
@@ -12,8 +12,8 @@ let terrainRenderer = null;
 const avatars = new Map();
 let currentPlayerChunkX = 0;
 let currentPlayerChunkZ = 0;
-let lastChunkX = null; // NEW: Track previous chunk for change detection
-let lastChunkZ = null; // NEW: Track previous chunk for change detection
+let lastChunkX = null;
+let lastChunkZ = null;
 
 const loadRadius = 1; // How many chunks to load around player
 let lastChunkUpdateTime = 0;
@@ -109,7 +109,7 @@ function connectToServer() {
         ui.updateConnectionStatus('connected', '✅ Server Connected');
         ui.updateButtonStates(isInChunk, boxInScene);
         wsRetryAttempts = 0;
-        // NEW: Send join_chunk with initial chunk
+        // Send join_chunk with initial chunk
         const chunkSize = 50;
         const initialChunkX = Math.floor((playerObject.position.x + chunkSize/2) / chunkSize);
         const initialChunkZ = Math.floor((playerObject.position.z + chunkSize/2) / chunkSize);
@@ -123,7 +123,6 @@ function connectToServer() {
             lastChunkZ = initialChunkZ;
             ui.updateButtonStates(isInChunk, boxInScene);
         }
-        // Trigger initial chunk loading
         updateChunksAroundPlayer(initialChunkX, initialChunkZ);
     };
 
@@ -241,6 +240,20 @@ function createPeerConnection(peerId, isInitiator = false) {
 function setupDataChannel(dataChannel, peerId) {
     dataChannel.onopen = () => {
         ui.updateStatus(`P2P data channel opened with ${peerId}`);
+        // Send current position and target on open
+        const syncMessage = {
+            type: 'player_sync',
+            payload: {
+                position: playerObject.position.toArray(),
+                target: isMoving ? playerTargetPosition.toArray() : null
+            }
+        };
+        try {
+            dataChannel.send(JSON.stringify(syncMessage));
+            ui.updateStatus(`📤 Sent player_sync to ${peerId}`);
+        } catch (error) {
+            ui.updateStatus(`❌ Failed to send player_sync to ${peerId}: ${error}`);
+        }
         ui.updatePeerInfo(peers, avatars);
     };
 
@@ -271,6 +284,20 @@ function handleP2PMessage(message, fromPeer) {
                 peer.targetPosition = new THREE.Vector3().fromArray(message.payload.target);
                 peer.moveStartTime = performance.now();
                 ui.updateStatus(`🕺 Avatar for ${fromPeer} is now moving`);
+            }
+            break;
+        case 'player_sync': // Handle initial position sync
+            const syncPeer = peers.get(fromPeer);
+            const syncAvatar = avatars.get(fromPeer);
+            if (syncPeer && syncAvatar) {
+                syncAvatar.position.fromArray(message.payload.position);
+                if (message.payload.target) {
+                    syncPeer.targetPosition = new THREE.Vector3().fromArray(message.payload.target);
+                    syncPeer.moveStartTime = performance.now();
+                    ui.updateStatus(`📍 Synced ${fromPeer} to ${message.payload.position}, moving to ${message.payload.target}`);
+                } else {
+                    ui.updateStatus(`📍 Synced ${fromPeer} to ${message.payload.position}`);
+                }
             }
             break;
         default:
@@ -380,6 +407,7 @@ function handleChunkStateChange(payload) {
     const chunkX = parseInt(parts[1]) * 50;
     const chunkZ = parseInt(parts[2]) * 50;
     terrainRenderer.addTerrainChunk({ chunkX, chunkZ, seed: terrainSeed });
+    boxInScene = chunkState.boxPresent; // Update boxInScene
     ui.updateButtonStates(isInChunk, boxInScene);
     ui.updatePeerInfo(peers, avatars);
 }
@@ -445,7 +473,6 @@ function updateChunksAroundPlayer(chunkX, chunkZ) {
         }
     }
 
-    // NEW: Only send chunk_update if joined
     if (isInChunk && (chunkX !== lastChunkX || chunkZ !== lastChunkZ)) {
         const newChunkId = `chunk_${chunkX}_${chunkZ}`;
         const lastChunkId = lastChunkX !== null ? `chunk_${lastChunkX}_${lastChunkZ}` : null;
@@ -573,18 +600,12 @@ function checkAndReconnectPeers() {
 
 // --- INITIALIZATION ---
 ui.updateStatus("🎮 Game initialized");
-ui.updateStatus("📋 Click 'Join Chunk' to start");
 ui.updateConnectionStatus('connecting', '🔄 Connecting...');
 ui.initializeUI({
     sendServerMessage: sendServerMessage,
     clientId: clientId,
-    onJoinSuccess: () => {
-        isInChunk = true;
-        // NEW: Set last chunk on join
-        lastChunkX = currentPlayerChunkX;
-        lastChunkZ = currentPlayerChunkZ;
-        ui.updateButtonStates(isInChunk, boxInScene);
-    },
+    currentChunkX: currentPlayerChunkX, // Added for dynamic chunk in add/remove
+    currentChunkZ: currentPlayerChunkZ, // Added for dynamic chunk in add/remove
     onResize: () => {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
