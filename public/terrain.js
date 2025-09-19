@@ -1,21 +1,13 @@
-// terrain.js
-// Procedural terrain renderer using Three.js with biome-based height generation
-// and height/slope-based texture blending. Textures (dirt, three grass types, rock, snow)
-// are procedurally generated and blended using vertex height and slope in the shader.
-// Height generation uses a web worker with Perlin noise and biome blending, unchanged
-// from the original implementation. The texture system is adapted from a source game,
-// with three grass types for variety, adjusted dirt prevalence, and enhanced rock
-// visibility on steep slopes and mountain tops.
-
 import * as THREE from 'three';
 
 const CONFIG = Object.freeze({
     TERRAIN: {
         chunkSize: 50,
-        segments: 25
+        segments: 25,
+        overlap: 1 // Overlap for seamless edges
     },
     GRAPHICS: {
-        textureSize: 48 // Doubled from 24 to reduce pixel size
+        textureSize: 48
     }
 });
 
@@ -31,7 +23,6 @@ class SimpleTerrainRenderer {
         this.initialize();
     }
 
-    // Initialize procedural textures for dirt, three grass types, rock, and snow
     initializeTextures() {
         const size = CONFIG.GRAPHICS.textureSize;
         const maxAniso = this.renderer ? this.renderer.capabilities.getMaxAnisotropy() : 1;
@@ -44,19 +35,19 @@ class SimpleTerrainRenderer {
             maxAniso
         );
         textures.grass1 = this.createProceduralTexture(
-            { r: 34, g: 139, b: 34 }, // Vibrant green
+            { r: 34, g: 139, b: 34 },
             { r: 0, g: 100, b: 0 }, 
             size, 
             maxAniso
         );
         textures.grass2 = this.createProceduralTexture(
-            { r: 50, g: 120, b: 20 }, // Darker green
+            { r: 50, g: 120, b: 20 },
             { r: 20, g: 80, b: 10 }, 
             size, 
             maxAniso
         );
         textures.grass3 = this.createProceduralTexture(
-            { r: 60, g: 150, b: 40 }, // Lighter, yellowish green
+            { r: 60, g: 150, b: 40 },
             { r: 30, g: 110, b: 20 }, 
             size, 
             maxAniso
@@ -77,7 +68,6 @@ class SimpleTerrainRenderer {
         return textures;
     }
 
-    // Create a procedural texture with two colors and noise
     createProceduralTexture(color1, color2, size, maxAniso) {
         const canvas = document.createElement('canvas');
         canvas.width = canvas.height = size;
@@ -88,9 +78,9 @@ class SimpleTerrainRenderer {
         for (let i = 0; i < data.length; i += 4) {
             const noise = Math.random();
             const c = noise > 0.5 ? color1 : color2;
-            data[i] = c.r; 
-            data[i + 1] = c.g; 
-            data[i + 2] = c.b; 
+            data[i] = c.r;
+            data[i + 1] = c.g;
+            data[i + 2] = c.b;
             data[i + 3] = 255;
         }
         ctx.putImageData(imgData, 0, 0);
@@ -102,22 +92,24 @@ class SimpleTerrainRenderer {
         return tex;
     }
 
-    // Initialize the terrain material and worker
     initialize() {
         this.terrainWorker = this.createTerrainWorker();
         this.terrainMaterial = new THREE.ShaderMaterial({
             vertexShader: `
+                attribute float biomeIndex;
                 varying float vHeight;
                 varying float vSlope;
                 varying vec3 vNormal;
                 varying vec2 vUv;
                 varying vec3 vWorldPosition;
-                void main(){
+                varying float vBiomeIndex;
+                void main() {
                     vUv = uv;
                     vHeight = position.y;
                     vNormal = normalize(normalMatrix * normal);
                     vSlope = 1.0 - dot(normal, vec3(0,1,0));
                     vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
+                    vBiomeIndex = biomeIndex;
                     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
                 }
             `,
@@ -129,18 +121,29 @@ class SimpleTerrainRenderer {
                 uniform sampler2D uGrass3;
                 uniform sampler2D uRock;
                 uniform sampler2D uSnow;
+                uniform bool uDebugBiomes;
                 varying float vHeight;
                 varying float vSlope;
                 varying vec3 vNormal;
                 varying vec2 vUv;
                 varying vec3 vWorldPosition;
+                varying float vBiomeIndex;
 
-                // Simple 2D noise for grass blending
                 float rand(vec2 co) {
                     return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
                 }
 
-                void main(){
+                void main() {
+                    if (uDebugBiomes) {
+                        vec3 debugColor = vec3(0.0);
+                        if (vBiomeIndex < 0.5) debugColor = vec3(1.0, 0.0, 0.0); // Canyons
+                        else if (vBiomeIndex < 1.5) debugColor = vec3(0.0, 1.0, 0.0); // Plains
+                        else if (vBiomeIndex < 2.5) debugColor = vec3(0.0, 0.0, 1.0); // Hills
+                        else debugColor = vec3(1.0, 1.0, 1.0); // Mountains
+                        gl_FragColor = vec4(debugColor, 1.0);
+                        return;
+                    }
+
                     float repeat = 5.3;
                     vec3 dirt = texture2D(uDirt, vUv * repeat).rgb;
                     vec3 grass1 = texture2D(uGrass1, vUv * repeat).rgb;
@@ -149,7 +152,6 @@ class SimpleTerrainRenderer {
                     vec3 rock = texture2D(uRock, vUv * repeat).rgb;
                     vec3 snow = texture2D(uSnow, vUv * repeat).rgb;
 
-                    // Blend grass types based on noise
                     float noise = rand(vUv * 10.0);
                     float wGrass1 = clamp(noise, 0.0, 0.5);
                     float wGrass2 = clamp(noise - 0.3, 0.0, 0.5);
@@ -162,18 +164,40 @@ class SimpleTerrainRenderer {
                     }
                     vec3 grass = grass1 * wGrass1 + grass2 * wGrass2 + grass3 * wGrass3;
 
-                    // Adjusted texture weights
-                    float wDirt = 1.0 - smoothstep(-4.0, 0.0, vHeight); // Tighter range to reduce dirt
+                    float wDirt = 1.0 - smoothstep(-4.0, 0.0, vHeight);
                     float wGrass = smoothstep(-4.0, 0.0, vHeight) * (1.0 - smoothstep(1.0, 7.5, vHeight));
                     float wSnow = smoothstep(1.0, 7.5, vHeight);
-                    float slopeFactor = smoothstep(0.03, 0.15, vSlope); // Loosened range for more rock
-                    float heightBoost = smoothstep(5.0, 10.0, vHeight); // Boost rock on mountain tops
+                    float wRock = 0.0;
+                    float slopeFactor = smoothstep(0.03, 0.15, vSlope);
+                    float heightBoost = smoothstep(5.0, 10.0, vHeight);
                     slopeFactor = mix(slopeFactor, 1.0, heightBoost * 0.5);
+
+                    if (vBiomeIndex < 0.5) { // Canyons
+                        wDirt *= 1.2;
+                        wGrass *= 0.5;
+                        wSnow *= 0.1;
+                    } else if (vBiomeIndex < 1.5) { // Plains
+                        wGrass *= 1.2;
+                        wDirt *= 0.8;
+                    } else if (vBiomeIndex < 2.5) { // Hills
+                        wGrass *= 1.1;
+                        wRock *= 1.1;
+                    } else { // Mountains
+                        wSnow *= 1.2;
+                        wRock *= 1.3;
+                    }
+
+                    float total = wDirt + wGrass + wSnow + wRock;
+                    if (total > 0.0) {
+                        wDirt /= total;
+                        wGrass /= total;
+                        wSnow /= total;
+                        wRock /= total;
+                    }
 
                     vec3 baseColor = dirt * wDirt + grass * wGrass + snow * wSnow;
                     baseColor = mix(baseColor, rock, slopeFactor);
 
-                    // Original lighting model with AO and fresnel
                     float light = max(dot(normalize(vNormal), normalize(uLightDir)), 0.0) * 0.7 + 0.3;
                     float ao = 1.0 - clamp(vNormal.y * 0.5 + (1.0 - smoothstep(-1.0, 1.0, vWorldPosition.y)) * 0.15, 0.0, 0.6);
                     float fresnel = pow(1.0 - max(dot(normalize(vNormal), normalize(-vWorldPosition)), 0.0), 3.0) * 0.08;
@@ -187,13 +211,17 @@ class SimpleTerrainRenderer {
                 uGrass3: { value: this.textures.grass3 },
                 uRock: { value: this.textures.rock },
                 uSnow: { value: this.textures.snow },
-                uLightDir: { value: new THREE.Vector3(1, 1, 1).normalize() }
+                uLightDir: { value: new THREE.Vector3(1, 1, 1).normalize() },
+                uDebugBiomes: { value: false }
             },
             side: THREE.FrontSide
         });
     }
 
-    // Create a web worker for biome-based height and normal calculations
+    setDebugBiomes(enabled) {
+        this.terrainMaterial.uniforms.uDebugBiomes.value = enabled;
+    }
+
     createTerrainWorker() {
         const workerCode = `
             const BIOMES = {
@@ -288,74 +316,43 @@ class SimpleTerrainRenderer {
             function sampleBiomePoint(x, z, seed) {
                 const offset = seed * 0.001;
                 const n = fbm2(x, z, 3, 0.55, 2.0, 0.008, offset);
-                return n;
+                const perturb = fbm2(x, z, 2, 0.5, 2.0, 0.002, offset + 1000) * 0.2;
+                return n + perturb;
             }
 
-            function sampleAndBlendBiomeParams(worldX, worldZ, seed, chunkSize) {
-                const chunkGridX = Math.floor(worldX / chunkSize) * chunkSize;
-                const chunkGridZ = Math.floor(worldZ / chunkSize) * chunkSize;
-                const half = chunkSize / 2;
+            function sampleAndBlendBiomeParams(worldX, worldZ, seed) {
+                const n = sampleBiomePoint(worldX, worldZ, seed);
+                const biomeIndex = noiseToBiomeIndex(n);
+                let params = { ...BIOME_PARAMS[biomeIndex] };
 
-                const corners = [
-                    [chunkGridX - half, chunkGridZ - half],
-                    [chunkGridX + half, chunkGridZ - half],
-                    [chunkGridX - half, chunkGridZ + half],
-                    [chunkGridX + half, chunkGridZ + half]
-                ];
-                const center = [chunkGridX, chunkGridZ];
-
-                const localU = (worldX - (chunkGridX - half)) / chunkSize;
-                const localV = (worldZ - (chunkGridZ - half)) / chunkSize;
-                const u = Math.max(0, Math.min(1, localU));
-                const v = Math.max(0, Math.min(1, localV));
-
-                const w00 = (1 - u) * (1 - v);
-                const w10 = u * (1 - v);
-                const w01 = (1 - u) * v;
-                const w11 = u * v;
-
-                const dx = u - 0.5;
-                const dy = v - 0.5;
-                const dist = Math.sqrt(dx * dx + dy * dy) / Math.sqrt(0.5 * 0.5 + 0.5 * 0.5);
-                let centerWeight = 1.0 - Math.min(1.0, dist);
-                centerWeight = centerWeight * centerWeight * (3 - 2 * centerWeight);
-
-                const rawWeights = [w00, w10, w01, w11, centerWeight * 0.75];
-
-                const samplePoints = [
-                    corners[0], corners[1], corners[2], corners[3], center
-                ];
-
-                let accum = {
-                    amplitude: 0, frequency: 0, octaves: 0,
-                    persistence: 0, lacunarity: 0, baseHeight: 0
-                };
-                let totalWeight = 0;
-
-                for (let i = 0; i < samplePoints.length; i++) {
-                    const sp = samplePoints[i];
-                    const w = rawWeights[i];
-                    if (w <= 0) continue;
-                    const n = sampleBiomePoint(sp[0], sp[1], seed);
-                    const biomeIndex = noiseToBiomeIndex(n);
-                    const params = BIOME_PARAMS[biomeIndex];
-
-                    accum.amplitude += params.amplitude * w;
-                    accum.frequency += params.frequency * w;
-                    accum.octaves += params.octaves * w;
-                    accum.persistence += params.persistence * w;
-                    accum.lacunarity += params.lacunarity * w;
-                    accum.baseHeight += params.baseHeight * w;
-
-                    totalWeight += w;
+                const thresholds = [-0.4, 0.0, 0.45, 1.0];
+                const blendRange = 0.1;
+                for (let i = 0; i < thresholds.length - 1; i++) {
+                    if (n >= thresholds[i] - blendRange && n <= thresholds[i] + blendRange) {
+                        const nextBiome = noiseToBiomeIndex(thresholds[i] + blendRange);
+                        const t = smoothstep(thresholds[i] - blendRange, thresholds[i] + blendRange, n);
+                        const paramsA = BIOME_PARAMS[biomeIndex];
+                        const paramsB = BIOME_PARAMS[nextBiome];
+                        params = {
+                            amplitude: lerp(t, paramsA.amplitude, paramsB.amplitude),
+                            frequency: lerp(t, paramsA.frequency, paramsB.frequency),
+                            octaves: lerp(t, paramsA.octaves, paramsB.octaves),
+                            persistence: lerp(t, paramsA.persistence, paramsB.persistence),
+                            lacunarity: lerp(t, paramsA.lacunarity, paramsB.lacunarity),
+                            baseHeight: lerp(t, paramsA.baseHeight, paramsB.baseHeight)
+                        };
+                        break;
+                    }
                 }
-
-                if (totalWeight <= 0) totalWeight = 1.0;
-
-                for (let k in accum) accum[k] /= totalWeight;
-
-                return accum;
+                return { params, biomeIndex };
             }
+
+            function smoothstep(edge0, edge1, x) {
+                const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+                return t * t * (3 - 2 * t);
+            }
+
+            function lerp(t, a, b) { return a + t * (b - a); }
 
             function calculateHeightWithParams(x, z, seed, params) {
                 const offset = seed * 0.001;
@@ -379,7 +376,7 @@ class SimpleTerrainRenderer {
             }
 
             function calculateNormal(x, z, seed, params) {
-                const eps = 0.02;
+                const eps = 0.05;
                 const heightL = calculateHeightWithParams(x - eps, z, seed, params);
                 const heightR = calculateHeightWithParams(x + eps, z, seed, params);
                 const heightD = calculateHeightWithParams(x, z - eps, seed, params);
@@ -396,11 +393,10 @@ class SimpleTerrainRenderer {
                 if (e.data.type === 'calculateHeightBatch') {
                     const { points, batchId, seed, chunkSize } = e.data.data;
                     const results = [];
-                    for(const point of points) {
+                    for (const point of points) {
                         const worldX = point.x;
                         const worldZ = point.z;
-
-                        const params = sampleAndBlendBiomeParams(worldX, worldZ, seed, chunkSize);
+                        const { params, biomeIndex } = sampleAndBlendBiomeParams(worldX, worldZ, seed);
                         const height = calculateHeightWithParams(worldX, worldZ, seed, params);
                         const normal = calculateNormal(worldX, worldZ, seed, params);
 
@@ -411,6 +407,7 @@ class SimpleTerrainRenderer {
                             normalX: normal[0],
                             normalY: normal[1],
                             normalZ: normal[2],
+                            biomeIndex,
                             index: point.index
                         });
                     }
@@ -424,7 +421,6 @@ class SimpleTerrainRenderer {
         return worker;
     }
 
-    // Process worker results to update geometry
     handleWorkerMessage(e) {
         const { type, data } = e.data;
         if (type === 'heightBatchResult') {
@@ -435,68 +431,82 @@ class SimpleTerrainRenderer {
             const { geometry, chunkX, chunkZ } = pending;
             const positions = geometry.attributes.position.array;
             const normals = geometry.attributes.normal.array;
+            const biomeIndices = geometry.attributes.biomeIndex.array;
 
             for (let i = 0; i < results.length; i++) {
-                const { height, normalX, normalY, normalZ, index } = results[i];
+                const { height, normalX, normalY, normalZ, biomeIndex, index } = results[i];
                 positions[index + 1] = height;
                 normals[index] = normalX;
                 normals[index + 1] = normalY;
                 normals[index + 2] = normalZ;
+                biomeIndices[index / 3] = biomeIndex;
             }
 
             geometry.attributes.position.needsUpdate = true;
             geometry.attributes.normal.needsUpdate = true;
+            geometry.attributes.biomeIndex.needsUpdate = true;
             this.finishTerrainChunk(geometry, chunkX, chunkZ);
             this.pendingChunks.delete(batchId);
         }
     }
 
-    // Create a new terrain chunk and request height data
     addTerrainChunk({ chunkX = 0, chunkZ = 0, seed = 0 }) {
         const chunkIndexX = Math.floor(chunkX / CONFIG.TERRAIN.chunkSize);
         const chunkIndexZ = Math.floor(chunkZ / CONFIG.TERRAIN.chunkSize);
         const key = `${chunkIndexX},${chunkIndexZ}`;
-
-        if (this.terrainChunks.has(key)) {
-            return;
-        }
+        if (this.terrainChunks.has(key)) return;
 
         console.log(`Creating terrain chunk at (${chunkX}, ${chunkZ}) with seed ${seed}`);
 
+        const overlap = CONFIG.TERRAIN.overlap;
         const geometry = new THREE.PlaneGeometry(
-            CONFIG.TERRAIN.chunkSize,
-            CONFIG.TERRAIN.chunkSize,
-            CONFIG.TERRAIN.segments,
-            CONFIG.TERRAIN.segments
+            CONFIG.TERRAIN.chunkSize + overlap * 2,
+            CONFIG.TERRAIN.chunkSize + overlap * 2,
+            CONFIG.TERRAIN.segments + overlap * 2,
+            CONFIG.TERRAIN.segments + overlap * 2
         );
 
         geometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(geometry.attributes.position.count * 3), 3));
+        geometry.setAttribute('biomeIndex', new THREE.BufferAttribute(new Float32Array(geometry.attributes.position.count), 1));
 
         const positions = geometry.attributes.position.array;
         const pointsToCalculate = [];
-
         const segmentSize = CONFIG.TERRAIN.chunkSize / CONFIG.TERRAIN.segments;
         const halfSize = CONFIG.TERRAIN.chunkSize / 2;
 
-        for (let row = 0; row <= CONFIG.TERRAIN.segments; row++) {
-            for (let col = 0; col <= CONFIG.TERRAIN.segments; col++) {
-                const vertexIndex = (row * (CONFIG.TERRAIN.segments + 1) + col) * 3;
+        const neighbors = [
+            this.terrainChunks.get(`${chunkIndexX-1},${chunkIndexZ}`), // Left
+            this.terrainChunks.get(`${chunkIndexX+1},${chunkIndexZ}`), // Right
+            this.terrainChunks.get(`${chunkIndexX},${chunkIndexZ-1}`), // Down
+            this.terrainChunks.get(`${chunkIndexX},${chunkIndexZ+1}`)  // Up
+        ];
 
+        for (let row = -overlap; row <= CONFIG.TERRAIN.segments + overlap; row++) {
+            for (let col = -overlap; col <= CONFIG.TERRAIN.segments + overlap; col++) {
+                const vertexIndex = ((row + overlap) * (CONFIG.TERRAIN.segments + 1 + overlap * 2) + (col + overlap)) * 3;
                 const localX = -halfSize + col * segmentSize;
                 const localZ = -halfSize + row * segmentSize;
-
                 const worldX = chunkX + localX;
                 const worldZ = chunkZ + localZ;
 
+                let height = null;
+                if (row === -overlap && neighbors[2]) {
+                    height = getHeightFromChunk(neighbors[2], localX, localZ + CONFIG.TERRAIN.chunkSize);
+                } else if (row === CONFIG.TERRAIN.segments + overlap && neighbors[3]) {
+                    height = getHeightFromChunk(neighbors[3], localX, localZ - CONFIG.TERRAIN.chunkSize);
+                } else if (col === -overlap && neighbors[0]) {
+                    height = getHeightFromChunk(neighbors[0], localX + CONFIG.TERRAIN.chunkSize, localZ);
+                } else if (col === CONFIG.TERRAIN.segments + overlap && neighbors[1]) {
+                    height = getHeightFromChunk(neighbors[1], localX - CONFIG.TERRAIN.chunkSize, localZ);
+                }
+
                 positions[vertexIndex] = localX;
-                positions[vertexIndex + 1] = 0;
+                positions[vertexIndex + 1] = height !== null ? height : 0;
                 positions[vertexIndex + 2] = localZ;
 
-                pointsToCalculate.push({
-                    x: worldX,
-                    z: worldZ,
-                    index: vertexIndex
-                });
+                if (height === null) {
+                    pointsToCalculate.push({ x: worldX, z: worldZ, index: vertexIndex });
+                }
             }
         }
 
@@ -507,15 +517,28 @@ class SimpleTerrainRenderer {
                 type: 'calculateHeightBatch',
                 data: { points: pointsToCalculate, batchId, seed, chunkSize: CONFIG.TERRAIN.chunkSize }
             });
+        } else {
+            this.finishTerrainChunk(geometry, chunkX, chunkZ);
+        }
+
+        function getHeightFromChunk(chunk, localX, localZ) {
+            const positions = chunk.geometry.attributes.position.array;
+            const segments = CONFIG.TERRAIN.segments;
+            const segmentSize = CONFIG.TERRAIN.chunkSize / segments;
+            const col = Math.round((localX + CONFIG.TERRAIN.chunkSize / 2) / segmentSize);
+            const row = Math.round((localZ + CONFIG.TERRAIN.chunkSize / 2) / segmentSize);
+            if (col >= 0 && col <= segments && row >= 0 && row <= segments) {
+                const vertexIndex = (row * (segments + 1) + col) * 3;
+                return positions[vertexIndex + 1];
+            }
+            return null;
         }
     }
 
-    // Finalize and add a terrain chunk to the scene
     finishTerrainChunk(geometry, chunkX, chunkZ) {
         const chunkIndexX = Math.floor(chunkX / CONFIG.TERRAIN.chunkSize);
         const chunkIndexZ = Math.floor(chunkZ / CONFIG.TERRAIN.chunkSize);
         const key = `${chunkIndexX},${chunkIndexZ}`;
-
         const mesh = new THREE.Mesh(geometry, this.terrainMaterial);
         mesh.position.set(chunkX, 0, chunkZ);
         this.scene.add(mesh);
@@ -523,7 +546,6 @@ class SimpleTerrainRenderer {
         console.log(`Added terrain chunk at (${chunkX}, ${chunkZ})`);
     }
 
-    // Remove a terrain chunk from the scene
     removeTerrainChunk({ chunkX, chunkZ }) {
         const chunkIndexX = Math.floor(chunkX / CONFIG.TERRAIN.chunkSize);
         const chunkIndexZ = Math.floor(chunkZ / CONFIG.TERRAIN.chunkSize);
@@ -537,7 +559,6 @@ class SimpleTerrainRenderer {
         }
     }
 
-    // Clear all terrain chunks and resources
     clearChunks() {
         this.terrainChunks.forEach((mesh) => {
             this.scene.remove(mesh);
