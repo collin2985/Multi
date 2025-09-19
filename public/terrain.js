@@ -1,4 +1,12 @@
 // terrain.js
+// Procedural terrain renderer using Three.js with biome-based height generation
+// and height/slope-based texture blending. Textures (dirt, three grass types, rock, snow)
+// are procedurally generated and blended using vertex height and slope in the shader.
+// Height generation uses a web worker with Perlin noise and biome blending, unchanged
+// from the original implementation. The texture system is adapted from a source game,
+// with three grass types for variety, adjusted dirt prevalence, and enhanced rock
+// visibility on steep slopes and mountain tops.
+
 import * as THREE from 'three';
 
 const CONFIG = Object.freeze({
@@ -7,7 +15,7 @@ const CONFIG = Object.freeze({
         segments: 25
     },
     GRAPHICS: {
-        textureSize: 24
+        textureSize: 48 // Doubled from 24 to reduce pixel size
     }
 });
 
@@ -23,6 +31,7 @@ class SimpleTerrainRenderer {
         this.initialize();
     }
 
+    // Initialize procedural textures for dirt, three grass types, rock, and snow
     initializeTextures() {
         const size = CONFIG.GRAPHICS.textureSize;
         const maxAniso = this.renderer ? this.renderer.capabilities.getMaxAnisotropy() : 1;
@@ -34,9 +43,21 @@ class SimpleTerrainRenderer {
             size, 
             maxAniso
         );
-        textures.grass = this.createProceduralTexture(
-            { r: 34, g: 139, b: 34 }, 
+        textures.grass1 = this.createProceduralTexture(
+            { r: 34, g: 139, b: 34 }, // Vibrant green
             { r: 0, g: 100, b: 0 }, 
+            size, 
+            maxAniso
+        );
+        textures.grass2 = this.createProceduralTexture(
+            { r: 50, g: 120, b: 20 }, // Darker green
+            { r: 20, g: 80, b: 10 }, 
+            size, 
+            maxAniso
+        );
+        textures.grass3 = this.createProceduralTexture(
+            { r: 60, g: 150, b: 40 }, // Lighter, yellowish green
+            { r: 30, g: 110, b: 20 }, 
             size, 
             maxAniso
         );
@@ -56,6 +77,7 @@ class SimpleTerrainRenderer {
         return textures;
     }
 
+    // Create a procedural texture with two colors and noise
     createProceduralTexture(color1, color2, size, maxAniso) {
         const canvas = document.createElement('canvas');
         canvas.width = canvas.height = size;
@@ -80,6 +102,7 @@ class SimpleTerrainRenderer {
         return tex;
     }
 
+    // Initialize the terrain material and worker
     initialize() {
         this.terrainWorker = this.createTerrainWorker();
         this.terrainMaterial = new THREE.ShaderMaterial({
@@ -101,7 +124,9 @@ class SimpleTerrainRenderer {
             fragmentShader: `
                 uniform vec3 uLightDir;
                 uniform sampler2D uDirt;
-                uniform sampler2D uGrass;
+                uniform sampler2D uGrass1;
+                uniform sampler2D uGrass2;
+                uniform sampler2D uGrass3;
                 uniform sampler2D uRock;
                 uniform sampler2D uSnow;
                 varying float vHeight;
@@ -109,18 +134,45 @@ class SimpleTerrainRenderer {
                 varying vec3 vNormal;
                 varying vec2 vUv;
                 varying vec3 vWorldPosition;
+
+                // Simple 2D noise for grass blending
+                float rand(vec2 co) {
+                    return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
+                }
+
                 void main(){
                     float repeat = 5.3;
                     vec3 dirt = texture2D(uDirt, vUv * repeat).rgb;
-                    vec3 grass = texture2D(uGrass, vUv * repeat).rgb;
+                    vec3 grass1 = texture2D(uGrass1, vUv * repeat).rgb;
+                    vec3 grass2 = texture2D(uGrass2, vUv * repeat).rgb;
+                    vec3 grass3 = texture2D(uGrass3, vUv * repeat).rgb;
                     vec3 rock = texture2D(uRock, vUv * repeat).rgb;
                     vec3 snow = texture2D(uSnow, vUv * repeat).rgb;
-                    float wDirt = 1.0 - smoothstep(-2.0, 1.0, vHeight);
-                    float wGrass = smoothstep(-2.0, 1.0, vHeight) * (1.0 - smoothstep(1.0, 7.5, vHeight));
+
+                    // Blend grass types based on noise
+                    float noise = rand(vUv * 10.0);
+                    float wGrass1 = clamp(noise, 0.0, 0.5);
+                    float wGrass2 = clamp(noise - 0.3, 0.0, 0.5);
+                    float wGrass3 = clamp(1.0 - noise, 0.0, 0.5);
+                    float grassTotal = wGrass1 + wGrass2 + wGrass3;
+                    if (grassTotal > 0.0) {
+                        wGrass1 /= grassTotal;
+                        wGrass2 /= grassTotal;
+                        wGrass3 /= grassTotal;
+                    }
+                    vec3 grass = grass1 * wGrass1 + grass2 * wGrass2 + grass3 * wGrass3;
+
+                    // Adjusted texture weights
+                    float wDirt = 1.0 - smoothstep(-4.0, 0.0, vHeight); // Tighter range to reduce dirt
+                    float wGrass = smoothstep(-4.0, 0.0, vHeight) * (1.0 - smoothstep(1.0, 7.5, vHeight));
                     float wSnow = smoothstep(1.0, 7.5, vHeight);
-                    float slopeFactor = smoothstep(0.05, 0.2, vSlope);
+                    float slopeFactor = smoothstep(0.03, 0.15, vSlope); // Loosened range for more rock
+                    float heightBoost = smoothstep(5.0, 10.0, vHeight); // Boost rock on mountain tops
+                    slopeFactor = mix(slopeFactor, 1.0, heightBoost * 0.5);
+
                     vec3 baseColor = dirt * wDirt + grass * wGrass + snow * wSnow;
                     baseColor = mix(baseColor, rock, slopeFactor);
+
                     // Original lighting model with AO and fresnel
                     float light = max(dot(normalize(vNormal), normalize(uLightDir)), 0.0) * 0.7 + 0.3;
                     float ao = 1.0 - clamp(vNormal.y * 0.5 + (1.0 - smoothstep(-1.0, 1.0, vWorldPosition.y)) * 0.15, 0.0, 0.6);
@@ -130,7 +182,9 @@ class SimpleTerrainRenderer {
             `,
             uniforms: {
                 uDirt: { value: this.textures.dirt },
-                uGrass: { value: this.textures.grass },
+                uGrass1: { value: this.textures.grass1 },
+                uGrass2: { value: this.textures.grass2 },
+                uGrass3: { value: this.textures.grass3 },
                 uRock: { value: this.textures.rock },
                 uSnow: { value: this.textures.snow },
                 uLightDir: { value: new THREE.Vector3(1, 1, 1).normalize() }
@@ -139,6 +193,7 @@ class SimpleTerrainRenderer {
         });
     }
 
+    // Create a web worker for biome-based height and normal calculations
     createTerrainWorker() {
         const workerCode = `
             const BIOMES = {
@@ -369,6 +424,7 @@ class SimpleTerrainRenderer {
         return worker;
     }
 
+    // Process worker results to update geometry
     handleWorkerMessage(e) {
         const { type, data } = e.data;
         if (type === 'heightBatchResult') {
@@ -395,6 +451,7 @@ class SimpleTerrainRenderer {
         }
     }
 
+    // Create a new terrain chunk and request height data
     addTerrainChunk({ chunkX = 0, chunkZ = 0, seed = 0 }) {
         const chunkIndexX = Math.floor(chunkX / CONFIG.TERRAIN.chunkSize);
         const chunkIndexZ = Math.floor(chunkZ / CONFIG.TERRAIN.chunkSize);
@@ -453,6 +510,7 @@ class SimpleTerrainRenderer {
         }
     }
 
+    // Finalize and add a terrain chunk to the scene
     finishTerrainChunk(geometry, chunkX, chunkZ) {
         const chunkIndexX = Math.floor(chunkX / CONFIG.TERRAIN.chunkSize);
         const chunkIndexZ = Math.floor(chunkZ / CONFIG.TERRAIN.chunkSize);
@@ -465,6 +523,7 @@ class SimpleTerrainRenderer {
         console.log(`Added terrain chunk at (${chunkX}, ${chunkZ})`);
     }
 
+    // Remove a terrain chunk from the scene
     removeTerrainChunk({ chunkX, chunkZ }) {
         const chunkIndexX = Math.floor(chunkX / CONFIG.TERRAIN.chunkSize);
         const chunkIndexZ = Math.floor(chunkZ / CONFIG.TERRAIN.chunkSize);
@@ -478,6 +537,7 @@ class SimpleTerrainRenderer {
         }
     }
 
+    // Clear all terrain chunks and resources
     clearChunks() {
         this.terrainChunks.forEach((mesh) => {
             this.scene.remove(mesh);
