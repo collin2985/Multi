@@ -1,4 +1,3 @@
-```javascript
 import * as THREE from 'three';
 
 const CONFIG = Object.freeze({
@@ -646,4 +645,3 @@ class SimpleTerrainRenderer {
 }
 
 export { SimpleTerrainRenderer };
-```
