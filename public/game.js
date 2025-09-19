@@ -515,7 +515,7 @@ function processChunkQueue() {
 }
 
 // --- ANIMATION LOOP ---
-const playerSpeed = 0.01;
+const playerSpeed = 0.005;  //player speed should be 0.005 max to prevent unloaded chunks
 const stopThreshold = 0.01;
 let lastFrameTime = performance.now();
 
@@ -572,7 +572,7 @@ function animate() {
     checkAndReconnectPeers();
     processChunkQueue();
 
-    const cameraOffset = new THREE.Vector3(-5, 20, 10);
+    const cameraOffset = new THREE.Vector3(0, 25, 10);
     const cameraTargetPosition = playerObject.position.clone().add(cameraOffset);
     const smoothedCameraPosition = camera.position.lerp(cameraTargetPosition, 0.5);
     camera.position.copy(smoothedCameraPosition);
