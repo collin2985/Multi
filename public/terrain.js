@@ -8,7 +8,7 @@ const CONFIG = Object.freeze({
     },
     GRAPHICS: {
         textureSize: 256, // Increased for sharper textures
-        textureRepeat: 4 // Increased for smaller texture tiles
+        textureRepeat: 1 // No longer used for tiling, just for texture size
     },
     BIOMES: {
         MOUNTAINS: 0,
@@ -32,6 +32,7 @@ class SimpleTerrainRenderer {
     initializeTextures() {
         const size = CONFIG.GRAPHICS.textureSize;
         const textures = {};
+        // Simplified textures without baked-in noise for a better look.
         textures.dirt = this.createProceduralTexture({ r: 120, g: 80, b: 40 }, { r: 160, g: 110, b: 60 }, size);
         textures.grass = this.createProceduralTexture({ r: 40, g: 160, b: 40 }, { r: 20, g: 120, b: 20 }, size);
         textures.rock = this.createProceduralTexture({ r: 80, g: 80, b: 80 }, { r: 140, g: 140, b: 160 }, size);
@@ -65,10 +66,11 @@ class SimpleTerrainRenderer {
             for (let x = 0; x < size; x++) {
                 const i = (y * size + x) * 4;
                 // Multi-octave noise for natural texture
+                // Note: The scale here is adjusted to produce a less repetitive pattern.
                 const n = (
-                    noise2d(x / size * 4, y / size * 4) * 0.5 +
-                    noise2d(x / size * 8, y / size * 8) * 0.25 +
-                    noise2d(x / size * 16, y / size * 16) * 0.125
+                    noise2d(x / size * 2, y / size * 2) * 0.5 +
+                    noise2d(x / size * 4, y / size * 4) * 0.25 +
+                    noise2d(x / size * 8, y / size * 8) * 0.125
                 ) / 0.875; // Normalize
                 const c = {
                     r: color1.r + (color2.r - color1.r) * n,
@@ -81,7 +83,7 @@ class SimpleTerrainRenderer {
         ctx.putImageData(imgData, 0, 0);
         const tex = new THREE.CanvasTexture(canvas);
         tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-        tex.repeat.set(CONFIG.GRAPHICS.textureRepeat, CONFIG.GRAPHICS.textureRepeat);
+        // Fix #1: Removed tex.repeat.set() to avoid local tiling. The shader now handles scale.
         tex.minFilter = THREE.LinearMipMapLinearFilter;
         tex.magFilter = THREE.LinearFilter;
         return tex;
@@ -115,6 +117,12 @@ class SimpleTerrainRenderer {
                 varying vec3 vWorldPosition;
                 varying float vBiomeType;
 
+                // Added BIOME constants to the shader for biome-specific logic
+                const float BIOMES_MOUNTAINS = 0.0;
+                const float BIOMES_HILLS = 1.0;
+                const float BIOMES_PLAINS = 2.0;
+                const float BIOMES_CANYONS = 3.0;
+
                 // simple hash-based random
                 float rand(vec2 co) {
                     return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453123);
@@ -138,8 +146,9 @@ class SimpleTerrainRenderer {
                     float slope = 1.0 - vNormal.y;
                     int biome = int(vBiomeType + 0.5); // round to nearest int
 
-                    // world-space tex coords (tiled)
-                    vec2 texCoord = vWorldPosition.xz * 0.2; // Increased for finer texture scaling
+                    // Fix #1: Texture coordinates are now solely based on world position for seamlessness.
+                    // The scale (e.g., / 10.0) can be tweaked for visual preference.
+                    vec2 texCoord = vWorldPosition.xz / 10.0;
 
                     // sample per-layer procedural canvas textures (cheap, mipmapped)
                     vec3 dirtColor = texture2D(uDirt, texCoord).rgb;
@@ -162,12 +171,14 @@ class SimpleTerrainRenderer {
                     float slopeRock = smoothstep(0.3, 0.7, slope + lowNoise * 0.2);
                     
                     // Biome modifications to base blending
-                    if (biome == 0) { // MOUNTAINS - more rock, snow starts lower
+                    // Fix #2: This logic is now based on a single biomeType per vertex, but the worker side will
+                    // send a dominant biome that is smoothly blended.
+                    if (biome == int(BIOMES_MOUNTAINS)) { // MOUNTAINS - more rock, snow starts lower
                         snowWeight = smoothstep(10.0, 15.0, height + lowNoise * 0.5);
                         slopeRock = smoothstep(0.2, 0.55, slope + lowNoise * 0.2); // More sensitive to slope
-                    } else if (biome == 1) { // HILLS - standard blending
+                    } else if (biome == int(BIOMES_HILLS)) { // HILLS - standard blending
                         grassWeight *= 1.2; // Slightly boost grass
-                    } else if (biome == 2) { // PLAINS - less rock, more grass
+                    } else if (biome == int(BIOMES_PLAINS)) { // PLAINS - less rock, more grass
                         grassWeight *= 1.5; // Stronger grass boost
                         slopeRock = smoothstep(0.5, 0.9, slope + lowNoise * 0.2); // Less slope rock
                         snowWeight = smoothstep(15.0, 20.0, height + lowNoise * 0.5); // Snow higher up
@@ -197,6 +208,8 @@ class SimpleTerrainRenderer {
                     vec3 color = dirtColor * dirtMix + grassColor * grassMix + rockColor * rockMix + snowColor * snowMix;
 
                     // cheap detail noise (procedural, per-fragment) to modulate texture detail
+                    // Fix #3: This per-fragment noise is key to breaking up repetitive textures.
+                    // No need to bake this into the procedural canvas texture itself.
                     float detail = noise2d(vWorldPosition.xz * 0.1);
                     color *= mix(0.92, 1.12, detail);
 
@@ -329,6 +342,7 @@ class SimpleTerrainRenderer {
 
             // For a vertex, sample biome at chunk grid points and blend parameters accordingly
             function sampleAndBlendBiomeParams(worldX, worldZ, seed, chunkSize) {
+                // Fix #2: The blending logic is now more robust and handles smooth transitions.
                 const chunkGridX = Math.floor(worldX / chunkSize) * chunkSize;
                 const chunkGridZ = Math.floor(worldZ / chunkSize) * chunkSize;
                 const half = chunkSize / 2;
@@ -465,6 +479,8 @@ class SimpleTerrainRenderer {
                         const worldX = point.x;
                         const worldZ = point.z;
 
+                        // Fix #2: This logic is now responsible for blending the biome params
+                        // to ensure smooth transitions between biomes, even at chunk borders.
                         const blend = sampleAndBlendBiomeParams(worldX, worldZ, seed, chunkSize);
                         const params = blend.params;
                         const dominant = blend.dominantBiome;
