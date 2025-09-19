@@ -7,20 +7,14 @@ const CONFIG = Object.freeze({
         segments: 25
     },
     GRAPHICS: {
-        textureSize: 64, // Smaller for a more pixelated look
-        textureRepeat: 1 // No longer used, but keeping for reference
-    },
-    BIOMES: {
-        MOUNTAINS: 0,
-        HILLS: 1,
-        PLAINS: 2,
-        CANYONS: 3
+        textureSize: 24
     }
 });
 
 class SimpleTerrainRenderer {
-    constructor(scene) {
+    constructor(scene, renderer = null) {
         this.scene = scene;
+        this.renderer = renderer;
         this.terrainChunks = new Map();
         this.terrainMaterial = null;
         this.terrainWorker = null;
@@ -29,93 +23,60 @@ class SimpleTerrainRenderer {
         this.initialize();
     }
 
-    // New procedural texture generation function.
     initializeTextures() {
         const size = CONFIG.GRAPHICS.textureSize;
+        const maxAniso = this.renderer ? this.renderer.capabilities.getMaxAnisotropy() : 1;
         const textures = {};
 
-        // Generate multiple textures for each material type for variation.
-        textures.grass1 = this.createProceduralTexture(
-            { r: 40, g: 160, b: 40 }, 
-            { r: 20, g: 120, b: 20 }, 
-            size, 
-            0.1 // A small noise scale
-        );
-        textures.grass2 = this.createProceduralTexture(
-            { r: 60, g: 180, b: 60 }, 
-            { r: 30, g: 140, b: 30 }, 
-            size, 
-            0.2 // A larger noise scale
-        );
         textures.dirt = this.createProceduralTexture(
-            { r: 120, g: 80, b: 40 }, 
-            { r: 160, g: 110, b: 60 }, 
+            { r: 101, g: 67, b: 33 }, 
+            { r: 139, g: 90, b: 43 }, 
             size, 
-            0.25
+            maxAniso
         );
-        textures.rock1 = this.createProceduralTexture(
-            { r: 80, g: 80, b: 80 }, 
-            { r: 140, g: 140, b: 160 }, 
+        textures.grass = this.createProceduralTexture(
+            { r: 34, g: 139, b: 34 }, 
+            { r: 0, g: 100, b: 0 }, 
             size, 
-            0.3
+            maxAniso
         );
-        textures.rock2 = this.createProceduralTexture(
-            { r: 100, g: 90, b: 90 }, 
-            { r: 150, g: 150, b: 170 }, 
+        textures.rock = this.createProceduralTexture(
+            { r: 105, g: 105, b: 105 }, 
+            { r: 128, g: 128, b: 128 }, 
             size, 
-            0.4
+            maxAniso
         );
         textures.snow = this.createProceduralTexture(
-            { r: 240, g: 245, b: 255 }, 
-            { r: 200, g: 220, b: 240 }, 
+            { r: 255, g: 250, b: 250 }, 
+            { r: 240, g: 248, b: 255 }, 
             size, 
-            0.15
+            maxAniso
         );
+
         return textures;
     }
 
-    createProceduralTexture(color1, color2, size, noiseScale) {
+    createProceduralTexture(color1, color2, size, maxAniso) {
         const canvas = document.createElement('canvas');
         canvas.width = canvas.height = size;
         const ctx = canvas.getContext('2d');
         const imgData = ctx.createImageData(size, size);
         const data = imgData.data;
 
-        // Simple 2D noise function
-        function rand(vec2) {
-            return (Math.sin(vec2[0] * 12.9898 + vec2[1] * 78.233) * 43758.5453123) % 1;
-        }
-        function noise2d(x, y) {
-            const i = [Math.floor(x), Math.floor(y)];
-            const f = [x % 1, y % 1];
-            const u = [f[0] * f[0] * (3 - 2 * f[0]), f[1] * f[1] * (3 - 2 * f[1])];
-            const a = rand(i);
-            const b = rand([i[0] + 1, i[1]]);
-            const c = rand([i[0], i[1] + 1]);
-            const d = rand([i[0] + 1, i[1] + 1]);
-            return a + (b - a) * u[0] + (c - a) * u[1] * (1 - u[0]) + (d - b) * u[0] * u[1];
-        }
-
-        for (let y = 0; y < size; y++) {
-            for (let x = 0; x < size; x++) {
-                const i = (y * size + x) * 4;
-                const n = (
-                    noise2d(x * noiseScale, y * noiseScale) * 0.5 +
-                    noise2d(x * noiseScale * 2, y * noiseScale * 2) * 0.25
-                ) / 0.75;
-                const c = {
-                    r: color1.r + (color2.r - color1.r) * n,
-                    g: color1.g + (color2.g - color1.g) * n,
-                    b: color1.b + (color2.b - color1.b) * n
-                };
-                data[i] = c.r; data[i + 1] = c.g; data[i + 2] = c.b; data[i + 3] = 255;
-            }
+        for (let i = 0; i < data.length; i += 4) {
+            const noise = Math.random();
+            const c = noise > 0.5 ? color1 : color2;
+            data[i] = c.r; 
+            data[i + 1] = c.g; 
+            data[i + 2] = c.b; 
+            data[i + 3] = 255;
         }
         ctx.putImageData(imgData, 0, 0);
         const tex = new THREE.CanvasTexture(canvas);
         tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-        tex.magFilter = THREE.NearestFilter; // This is key for the pixelated look
         tex.minFilter = THREE.NearestFilter;
+        tex.magFilter = THREE.NearestFilter;
+        tex.anisotropy = maxAniso;
         return tex;
     }
 
@@ -123,82 +84,54 @@ class SimpleTerrainRenderer {
         this.terrainWorker = this.createTerrainWorker();
         this.terrainMaterial = new THREE.ShaderMaterial({
             vertexShader: `
+                varying float vHeight;
+                varying float vSlope;
                 varying vec3 vNormal;
+                varying vec2 vUv;
                 varying vec3 vWorldPosition;
-                attribute vec4 blendWeights;
-                varying vec4 vBlendWeights;
-                void main() {
+                void main(){
+                    vUv = uv;
+                    vHeight = position.y;
                     vNormal = normalize(normalMatrix * normal);
+                    vSlope = 1.0 - dot(normal, vec3(0,1,0));
                     vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
-                    vBlendWeights = blendWeights;
                     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
                 }
             `,
             fragmentShader: `
-                uniform sampler2D uGrass1;
-                uniform sampler2D uGrass2;
-                uniform sampler2D uDirt;
-                uniform sampler2D uRock1;
-                uniform sampler2D uRock2;
-                uniform sampler2D uSnow;
                 uniform vec3 uLightDir;
-
+                uniform sampler2D uDirt;
+                uniform sampler2D uGrass;
+                uniform sampler2D uRock;
+                uniform sampler2D uSnow;
+                varying float vHeight;
+                varying float vSlope;
                 varying vec3 vNormal;
+                varying vec2 vUv;
                 varying vec3 vWorldPosition;
-                varying vec4 vBlendWeights;
-
-                float rand(vec2 co) {
-                    return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453123);
-                }
-
-                float noise2d(vec2 st) {
-                    vec2 i = floor(st);
-                    vec2 f = fract(st);
-                    float a = rand(i);
-                    float b = rand(i + vec2(1.0, 0.0));
-                    float c = rand(i + vec2(0.0, 1.0));
-                    float d = rand(i + vec2(1.0, 1.0));
-                    vec2 u = f * f * (3.0 - 2.0 * f);
-                    return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
-                }
-
-                void main() {
-                    // World-space coordinates for seamless texturing
-                    vec2 texCoord = vWorldPosition.xz / 10.0;
-                    
-                    // Sample the various textures
-                    vec3 grass1Color = texture2D(uGrass1, texCoord).rgb;
-                    vec3 grass2Color = texture2D(uGrass2, texCoord + vec2(23.0, 15.0)).rgb;
-                    vec3 dirtColor = texture2D(uDirt, texCoord + vec2(5.0, 10.0)).rgb;
-                    vec3 rock1Color = texture2D(uRock1, texCoord).rgb;
-                    vec3 rock2Color = texture2D(uRock2, texCoord + vec2(42.0, 51.0)).rgb;
-                    vec3 snowColor = texture2D(uSnow, texCoord).rgb;
-
-                    // Use world-space noise to blend between grass textures for variation.
-                    float grassMix = smoothstep(0.4, 0.6, noise2d(vWorldPosition.xz * 0.1));
-                    vec3 grassBaseColor = mix(grass1Color, grass2Color, grassMix);
-
-                    // Blend the main materials based on blendWeights
-                    vec3 finalColor = vec3(0.0);
-                    finalColor += grassBaseColor * vBlendWeights.x;
-                    finalColor += dirtColor * vBlendWeights.y;
-                    finalColor += mix(rock1Color, rock2Color, smoothstep(0.5, 0.8, noise2d(vWorldPosition.xz * 0.05))) * vBlendWeights.z;
-                    finalColor += snowColor * vBlendWeights.w;
-                    
-                    // Lighting
+                void main(){
+                    float repeat = 5.3;
+                    vec3 dirt = texture2D(uDirt, vUv * repeat).rgb;
+                    vec3 grass = texture2D(uGrass, vUv * repeat).rgb;
+                    vec3 rock = texture2D(uRock, vUv * repeat).rgb;
+                    vec3 snow = texture2D(uSnow, vUv * repeat).rgb;
+                    float wDirt = 1.0 - smoothstep(-2.0, 1.0, vHeight);
+                    float wGrass = smoothstep(-2.0, 1.0, vHeight) * (1.0 - smoothstep(1.0, 7.5, vHeight));
+                    float wSnow = smoothstep(1.0, 7.5, vHeight);
+                    float slopeFactor = smoothstep(0.05, 0.2, vSlope);
+                    vec3 baseColor = dirt * wDirt + grass * wGrass + snow * wSnow;
+                    baseColor = mix(baseColor, rock, slopeFactor);
+                    // Original lighting model with AO and fresnel
                     float light = max(dot(normalize(vNormal), normalize(uLightDir)), 0.0) * 0.7 + 0.3;
                     float ao = 1.0 - clamp(vNormal.y * 0.5 + (1.0 - smoothstep(-1.0, 1.0, vWorldPosition.y)) * 0.15, 0.0, 0.6);
                     float fresnel = pow(1.0 - max(dot(normalize(vNormal), normalize(-vWorldPosition)), 0.0), 3.0) * 0.08;
-
-                    gl_FragColor = vec4(finalColor * light * ao + fresnel, 1.0);
+                    gl_FragColor = vec4(baseColor * light * ao + fresnel, 1.0);
                 }
             `,
             uniforms: {
-                uGrass1: { value: this.textures.grass1 },
-                uGrass2: { value: this.textures.grass2 },
                 uDirt: { value: this.textures.dirt },
-                uRock1: { value: this.textures.rock1 },
-                uRock2: { value: this.textures.rock2 },
+                uGrass: { value: this.textures.grass },
+                uRock: { value: this.textures.rock },
                 uSnow: { value: this.textures.snow },
                 uLightDir: { value: new THREE.Vector3(1, 1, 1).normalize() }
             },
@@ -249,7 +182,7 @@ class SimpleTerrainRenderer {
                     baseHeight: -8
                 }
             };
-            
+
             const permutation = [151,160,137,91,90,15,131,13,201,95,96,53,194,233,7,225,140,36,103,30,69,142,8,99,37,240,21,10,23,190,6,148,247,120,234,75,0,26,197,62,94,252,219,203,117,35,11,32,57,177,33,88,237,149,56,87,174,20,125,136,171,168,68,175,74,165,71,134,139,48,27,166,77,146,158,231,83,111,229,122,60,211,133,230,220,105,92,41,55,46,245,40,244,102,143,54,65,25,63,161,1,216,80,73,209,76,132,187,208,89,18,169,200,196,135,130,116,188,159,86,164,100,109,198,173,186,3,64,52,217,226,250,124,123,5,202,38,147,118,126,255,82,85,212,207,206,59,227,47,16,58,17,182,189,28,42,223,183,170,213,119,248,152,2,44,154,163,70,221,153,101,155,167,43,172,9,129,22,39,253,19,98,108,110,79,113,224,232,178,185,112,104,218,246,97,228,251,34,242,193,238,210,144,12,191,179,162,241,81,51,145,235,249,14,239,107,49,192,214,31,181,199,106,157,184,84,204,176,115,121,50,45,127,4,150,254,138,236,205,93,222,114,67,29,24,72,243,141,128,195,78,66,215,61,156,180];
             const perm = new Uint8Array(512);
             for (let i = 0; i < 256; i++) {
@@ -269,11 +202,11 @@ class SimpleTerrainRenderer {
                 x -= Math.floor(x); y -= Math.floor(y); z -= Math.floor(z);
                 const u = fade(x), v = fade(y), w = fade(z);
                 const A = perm[X] + Y, AA = perm[A] + Z, AB = perm[A + 1] + Z,
-                        B = perm[X + 1] + Y, BA = perm[B] + Z, BB = perm[B + 1] + Z;
+                      B = perm[X + 1] + Y, BA = perm[B] + Z, BB = perm[B + 1] + Z;
                 return lerp(w, lerp(v, lerp(u, grad(perm[AA], x, y, z), grad(perm[BA], x - 1, y, z)),
-                                         lerp(u, grad(perm[AB], x, y - 1, z), grad(perm[BB], x - 1, y - 1, z))),
-                                 lerp(v, lerp(u, grad(perm[AA + 1], x, y, z - 1), grad(perm[BA + 1], x - 1, y, z - 1)),
-                                         lerp(u, grad(perm[AB + 1], x, y - 1, z - 1), grad(perm[BB + 1], x - 1, y - 1, z - 1))));
+                                     lerp(u, grad(perm[AB], x, y - 1, z), grad(perm[BB], x - 1, y - 1, z))),
+                               lerp(v, lerp(u, grad(perm[AA + 1], x, y, z - 1), grad(perm[BA + 1], x - 1, y, z - 1)),
+                                     lerp(u, grad(perm[AB + 1], x, y - 1, z - 1), grad(perm[BB + 1], x - 1, y - 1, z - 1))));
             }
 
             function fbm2(x, z, octaves, persistence, lacunarity, baseFreq, offset) {
@@ -289,7 +222,7 @@ class SimpleTerrainRenderer {
                 }
                 return sum / Math.max(0.0001, norm);
             }
-            
+
             function noiseToBiomeIndex(n) {
                 if (n < -0.4) return BIOMES.CANYONS;
                 if (n < 0.0) return BIOMES.PLAINS;
@@ -342,7 +275,6 @@ class SimpleTerrainRenderer {
                     amplitude: 0, frequency: 0, octaves: 0,
                     persistence: 0, lacunarity: 0, baseHeight: 0
                 };
-                const biomeWeightTotals = { 0: 0, 1: 0, 2: 0, 3: 0 };
                 let totalWeight = 0;
 
                 for (let i = 0; i < samplePoints.length; i++) {
@@ -360,7 +292,6 @@ class SimpleTerrainRenderer {
                     accum.lacunarity += params.lacunarity * w;
                     accum.baseHeight += params.baseHeight * w;
 
-                    biomeWeightTotals[biomeIndex] += w;
                     totalWeight += w;
                 }
 
@@ -368,16 +299,7 @@ class SimpleTerrainRenderer {
 
                 for (let k in accum) accum[k] /= totalWeight;
 
-                let dominantBiome = 0;
-                let maxW = -1;
-                for (let b in biomeWeightTotals) {
-                    if (biomeWeightTotals[b] > maxW) {
-                        maxW = biomeWeightTotals[b];
-                        dominantBiome = parseInt(b);
-                    }
-                }
-
-                return { params: accum, dominantBiome };
+                return accum;
             }
 
             function calculateHeightWithParams(x, z, seed, params) {
@@ -415,50 +337,6 @@ class SimpleTerrainRenderer {
                 return [nx/len, ny/len, nz/len];
             }
 
-            function calculateBlendWeights(height, slope, biome) {
-                let grassWeight = 0.0;
-                let rockWeight = 0.0;
-                let snowWeight = 0.0;
-                let dirtWeight = 0.0;
-
-                const slopeFactor = Math.min(1.0, slope * 2.0);
-                const heightFactor = Math.max(0.0, height / 15.0);
-
-                grassWeight = (1.0 - slopeFactor) * (1.0 - heightFactor);
-                dirtWeight = slopeFactor * 0.2 + (1.0 - heightFactor) * 0.3;
-
-                rockWeight = slopeFactor * 0.8 + heightFactor * 0.5;
-
-                snowWeight = Math.max(0.0, heightFactor - 0.7);
-
-                if (biome === BIOMES.MOUNTAINS) {
-                    rockWeight += 0.5;
-                    snowWeight = Math.max(snowWeight, heightFactor * 1.5 - 1.0);
-                    grassWeight *= 0.5;
-                } else if (biome === BIOMES.HILLS) {
-                    grassWeight += 0.3;
-                    rockWeight *= 0.5;
-                } else if (biome === BIOMES.PLAINS) {
-                    grassWeight += 1.0;
-                    rockWeight *= 0.1;
-                } else if (biome === BIOMES.CANYONS) {
-                    dirtWeight += 0.5;
-                    rockWeight += 0.5;
-                    grassWeight *= 0.2;
-                }
-                
-                const total = grassWeight + dirtWeight + rockWeight + snowWeight;
-                if (total > 0.0) {
-                    return [
-                        grassWeight / total,
-                        dirtWeight / total,
-                        rockWeight / total,
-                        snowWeight / total
-                    ];
-                }
-                return [1.0, 0.0, 0.0, 0.0];
-            }
-
             self.onmessage = function(e) {
                 if (e.data.type === 'calculateHeightBatch') {
                     const { points, batchId, seed, chunkSize } = e.data.data;
@@ -467,15 +345,9 @@ class SimpleTerrainRenderer {
                         const worldX = point.x;
                         const worldZ = point.z;
 
-                        const blend = sampleAndBlendBiomeParams(worldX, worldZ, seed, chunkSize);
-                        const params = blend.params;
-                        const dominant = blend.dominantBiome;
-
+                        const params = sampleAndBlendBiomeParams(worldX, worldZ, seed, chunkSize);
                         const height = calculateHeightWithParams(worldX, worldZ, seed, params);
                         const normal = calculateNormal(worldX, worldZ, seed, params);
-                        
-                        const slope = 1.0 - normal[1];
-                        const blendWeights = calculateBlendWeights(height, slope, dominant);
 
                         results.push({
                             x: worldX,
@@ -484,8 +356,6 @@ class SimpleTerrainRenderer {
                             normalX: normal[0],
                             normalY: normal[1],
                             normalZ: normal[2],
-                            biomeType: dominant,
-                            blendWeights: blendWeights,
                             index: point.index
                         });
                     }
@@ -509,29 +379,17 @@ class SimpleTerrainRenderer {
             const { geometry, chunkX, chunkZ } = pending;
             const positions = geometry.attributes.position.array;
             const normals = geometry.attributes.normal.array;
-            const biomeTypes = geometry.attributes.biomeType.array;
-            const blendWeights = geometry.attributes.blendWeights.array;
 
             for (let i = 0; i < results.length; i++) {
-                const { height, normalX, normalY, normalZ, biomeType, blendWeights: weights, index } = results[i];
-                const vertexIndex = index / 3;
-
+                const { height, normalX, normalY, normalZ, index } = results[i];
                 positions[index + 1] = height;
-                normals[index]      = normalX;
+                normals[index] = normalX;
                 normals[index + 1] = normalY;
                 normals[index + 2] = normalZ;
-                biomeTypes[vertexIndex] = biomeType;
-
-                blendWeights[vertexIndex * 4] = weights[0];
-                blendWeights[vertexIndex * 4 + 1] = weights[1];
-                blendWeights[vertexIndex * 4 + 2] = weights[2];
-                blendWeights[vertexIndex * 4 + 3] = weights[3];
             }
 
             geometry.attributes.position.needsUpdate = true;
             geometry.attributes.normal.needsUpdate = true;
-            geometry.attributes.biomeType.needsUpdate = true;
-            geometry.attributes.blendWeights.needsUpdate = true;
             this.finishTerrainChunk(geometry, chunkX, chunkZ);
             this.pendingChunks.delete(batchId);
         }
@@ -556,8 +414,6 @@ class SimpleTerrainRenderer {
         );
 
         geometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(geometry.attributes.position.count * 3), 3));
-        geometry.setAttribute('biomeType', new THREE.BufferAttribute(new Float32Array(geometry.attributes.position.count), 1));
-        geometry.setAttribute('blendWeights', new THREE.BufferAttribute(new Float32Array(geometry.attributes.position.count * 4), 4));
 
         const positions = geometry.attributes.position.array;
         const pointsToCalculate = [];
