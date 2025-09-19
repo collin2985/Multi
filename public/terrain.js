@@ -264,53 +264,163 @@ class SimpleTerrainRenderer {
                 const A = perm[X] + Y, AA = perm[A] + Z, AB = perm[A + 1] + Z,
                         B = perm[X + 1] + Y, BA = perm[B] + Z, BB = perm[B + 1] + Z;
                 return lerp(w, lerp(v, lerp(u, grad(perm[AA], x, y, z), grad(perm[BA], x - 1, y, z)),
-                                        lerp(u, grad(perm[AB], x, y - 1, z), grad(perm[BB], x - 1, y - 1, z))),
+                                        lerp(u, grad(perm[AB], x, y - 1, z), grad(perm[BB], x - 1, y - 1, z)))),
                                  lerp(v, lerp(u, grad(perm[AA + 1], x, y, z - 1), grad(perm[BA + 1], x - 1, y, z - 1)),
                                          lerp(u, grad(perm[AB + 1], x, y - 1, z - 1), grad(perm[BB + 1], x - 1, y - 1, z - 1))));
             }
 
-            function sampleBiome(x, z, seed) {
-                const offset = seed * 0.001;
-                // Low frequency biome noise - creates large biome regions
-                const biomeNoise = perlin(x * 0.008 + offset, 0, z * 0.008 + offset);
-                
-                // Map noise (-1 to 1) to biome types
-                if (biomeNoise < -0.5) return BIOMES.CANYONS;
-                if (biomeNoise < 0.0) return BIOMES.PLAINS;
-                if (biomeNoise < 0.5) return BIOMES.HILLS;
+            // Multi-octave helper
+            function fbm2(x, z, octaves, persistence, lacunarity, baseFreq, offset) {
+                let amp = 1.0;
+                let freq = baseFreq;
+                let sum = 0.0;
+                let norm = 0.0;
+                for (let i = 0; i < octaves; i++) {
+                    sum += perlin(x * freq + offset, 0, z * freq + offset) * amp;
+                    norm += amp;
+                    amp *= persistence;
+                    freq *= lacunarity;
+                }
+                return sum / Math.max(0.0001, norm);
+            }
+
+            // map continuous noise value to biome index (soft boundary will be handled by blending multiple samples)
+            function noiseToBiomeIndex(n) {
+                if (n < -0.4) return BIOMES.CANYONS;
+                if (n < 0.0) return BIOMES.PLAINS;
+                if (n < 0.45) return BIOMES.HILLS;
                 return BIOMES.MOUNTAINS;
             }
 
-            function calculateBiomeHeight(x, z, seed, biomeType) {
-                const params = BIOME_PARAMS[biomeType];
+            // sample biome noise at a point using multi-octave biome noise (gives variable biome sizes)
+            function sampleBiomePoint(x, z, seed) {
                 const offset = seed * 0.001;
-                
+                // Multi-octave biome noise for larger-scale features
+                const n = fbm2(x, z, 3, 0.55, 2.0, 0.008, offset);
+                return n;
+            }
+
+            // For a vertex, sample biome at chunk corners + center and blend parameters accordingly
+            function sampleAndBlendBiomeParams(worldX, worldZ, seed, chunkCenterX, chunkCenterZ, chunkSize) {
+                const half = chunkSize / 2;
+                // Corner positions
+                const corners = [
+                    [chunkCenterX - half, chunkCenterZ - half], // bottom-left (u=0,v=0)
+                    [chunkCenterX + half, chunkCenterZ - half], // bottom-right (u=1,v=0)
+                    [chunkCenterX - half, chunkCenterZ + half], // top-left (u=0,v=1)
+                    [chunkCenterX + half, chunkCenterZ + half]  // top-right (u=1,v=1)
+                ];
+                const center = [chunkCenterX, chunkCenterZ];
+
+                // compute u,v (normalized local coords inside chunk 0..1)
+                const localU = (worldX - (chunkCenterX - half)) / chunkSize;
+                const localV = (worldZ - (chunkCenterZ - half)) / chunkSize;
+                // clamp
+                const u = Math.max(0, Math.min(1, localU));
+                const v = Math.max(0, Math.min(1, localV));
+
+                // bilinear corner weights
+                const w00 = (1 - u) * (1 - v);
+                const w10 = u * (1 - v);
+                const w01 = (1 - u) * v;
+                const w11 = u * v;
+
+                // center weight: stronger near center, weaker near edges
+                const dx = u - 0.5;
+                const dy = v - 0.5;
+                const dist = Math.sqrt(dx * dx + dy * dy) / Math.sqrt(0.5 * 0.5 + 0.5 * 0.5);
+                // invert distance so center gets higher weight near middle; smoothstep for softness
+                let centerWeight = 1.0 - Math.min(1.0, dist);
+                centerWeight = centerWeight * centerWeight * (3 - 2 * centerWeight); // smoothstep-like
+
+                // raw weights array
+                const rawWeights = [w00, w10, w01, w11, centerWeight * 0.75]; // center scaled a bit so corners still matter
+
+                // sample biome noise at each sample point
+                const samplePoints = [
+                    corners[0], corners[1], corners[2], corners[3], center
+                ];
+
+                // accumulate param blends and biome dominances
+                let accum = {
+                    amplitude: 0,
+                    frequency: 0,
+                    octaves: 0,
+                    persistence: 0,
+                    lacunarity: 0,
+                    baseHeight: 0
+                };
+                const biomeWeightTotals = { 0: 0, 1: 0, 2: 0, 3: 0 };
+
+                let totalWeight = 0;
+                for (let i = 0; i < samplePoints.length; i++) {
+                    const sp = samplePoints[i];
+                    const w = rawWeights[i];
+                    if (w <= 0) continue;
+                    const n = sampleBiomePoint(sp[0], sp[1], seed);
+                    const biomeIndex = noiseToBiomeIndex(n);
+                    const params = BIOME_PARAMS[biomeIndex];
+
+                    accum.amplitude += params.amplitude * w;
+                    accum.frequency += params.frequency * w;
+                    accum.octaves += params.octaves * w;
+                    accum.persistence += params.persistence * w;
+                    accum.lacunarity += params.lacunarity * w;
+                    accum.baseHeight += params.baseHeight * w;
+
+                    biomeWeightTotals[biomeIndex] += w;
+                    totalWeight += w;
+                }
+
+                if (totalWeight <= 0) totalWeight = 1.0; // avoid div0
+
+                // normalize accum
+                for (let k in accum) accum[k] /= totalWeight;
+
+                // determine dominant biome (highest total weight)
+                let dominantBiome = 0;
+                let maxW = -1;
+                for (let b in biomeWeightTotals) {
+                    if (biomeWeightTotals[b] > maxW) {
+                        maxW = biomeWeightTotals[b];
+                        dominantBiome = parseInt(b);
+                    }
+                }
+
+                return { params: accum, dominantBiome };
+            }
+
+            // calculate height using blended params (supports fractional octaves)
+            function calculateHeightWithParams(x, z, seed, params) {
+                const offset = seed * 0.001;
                 let height = params.baseHeight;
+
+                const fullOctaves = Math.floor(params.octaves);
+                const frac = params.octaves - fullOctaves;
+
                 let amplitude = params.amplitude;
                 let frequency = params.frequency;
-                
-                // Generate multiple octaves of noise
-                for (let i = 0; i < params.octaves; i++) {
+
+                for (let i = 0; i < fullOctaves; i++) {
                     height += perlin(x * frequency + offset, 0, z * frequency + offset) * amplitude;
                     amplitude *= params.persistence;
                     frequency *= params.lacunarity;
                 }
-                
-                // Special handling for canyons - create sharp ridges
-                if (biomeType === BIOMES.CANYONS) {
-                    const ridgeNoise = Math.abs(perlin(x * 0.04 + offset, 0, z * 0.04 + offset));
-                    height += ridgeNoise * 8; // Sharp upward ridges
+
+                if (frac > 0) {
+                    // partial octave contribution
+                    height += perlin(x * frequency + offset, 0, z * frequency + offset) * amplitude * frac;
                 }
-                
+
                 return height;
             }
 
-            function calculateNormal(x, z, seed, biomeType) {
+            function calculateNormal(x, z, seed, params) {
                 const eps = 0.02;
-                const heightL = calculateBiomeHeight(x - eps, z, seed, biomeType);
-                const heightR = calculateBiomeHeight(x + eps, z, seed, biomeType);
-                const heightD = calculateBiomeHeight(x, z - eps, seed, biomeType);
-                const heightU = calculateBiomeHeight(x, z + eps, seed, biomeType);
+                const heightL = calculateHeightWithParams(x - eps, z, seed, params);
+                const heightR = calculateHeightWithParams(x + eps, z, seed, params);
+                const heightD = calculateHeightWithParams(x, z - eps, seed, params);
+                const heightU = calculateHeightWithParams(x, z + eps, seed, params);
 
                 const nx = heightL - heightR;
                 const nz = heightD - heightU;
@@ -321,20 +431,26 @@ class SimpleTerrainRenderer {
 
             self.onmessage = function(e) {
                 if (e.data.type === 'calculateHeightBatch') {
-                    const { points, batchId, seed } = e.data.data;
+                    const { points, batchId, seed, chunkCenterX, chunkCenterZ, chunkSize } = e.data.data;
                     const results = [];
                     for(const point of points) {
-                        const biomeType = sampleBiome(point.x, point.z, seed);
-                        const height = calculateBiomeHeight(point.x, point.z, seed, biomeType);
-                        const normal = calculateNormal(point.x, point.z, seed, biomeType);
+                        const worldX = point.x;
+                        const worldZ = point.z;
+
+                        const blend = sampleAndBlendBiomeParams(worldX, worldZ, seed, chunkCenterX, chunkCenterZ, chunkSize);
+                        const params = blend.params;
+                        const dominant = blend.dominantBiome;
+
+                        const height = calculateHeightWithParams(worldX, worldZ, seed, params);
+                        const normal = calculateNormal(worldX, worldZ, seed, params);
                         results.push({
-                            x: point.x,
-                            z: point.z,
+                            x: worldX,
+                            z: worldZ,
                             height,
                             normalX: normal[0],
                             normalY: normal[1],
                             normalZ: normal[2],
-                            biomeType,
+                            biomeType: dominant,
                             index: point.index
                         });
                     }
@@ -363,7 +479,7 @@ class SimpleTerrainRenderer {
             for (let i = 0; i < results.length; i++) {
                 const { height, normalX, normalY, normalZ, biomeType, index } = results[i];
                 const vertexIndex = index / 3; // Convert back to vertex index
-                
+
                 // index is the byte/array index already (vertexIndex * 3 in addTerrainChunk)
                 positions[index + 1] = height; // y is height
                 normals[index]     = normalX;
@@ -433,10 +549,10 @@ class SimpleTerrainRenderer {
         if (pointsToCalculate.length > 0) {
             const batchId = key;
             this.pendingChunks.set(batchId, { geometry, chunkX, chunkZ });
-            // structured clone supported; send array of small objects
+            // structured clone supported; send array of small objects plus chunk metadata
             this.terrainWorker.postMessage({
                 type: 'calculateHeightBatch',
-                data: { points: pointsToCalculate, batchId, seed }
+                data: { points: pointsToCalculate, batchId, seed, chunkCenterX: chunkX, chunkCenterZ: chunkZ, chunkSize: CONFIG.TERRAIN.chunkSize }
             });
         }
     }

@@ -1,63 +1,336 @@
-Technical To-Do List ⚙️
-Here is a revised, detailed technical to-do list for your game project, incorporating all your feedback, especially the focus on modularity for easy expansion by a new programmer.
+Known issues:
+AI doesn't hanlde mulitple code files well
+not retrying peer connections
+no way to reconnect beside refresh browser
 
-Server-Side Tasks 💻
-1. Project Setup & Core Logic
-Initialize the Server: Set up a Node.js server using a library like ws for WebSockets to handle communication with clients.
 
-Chunk Data Storage: Implement a simple, file-based storage system. Create a data folder on the server. Each chunk will be a separate JSON file (e.g., chunkA.json, chunkB.json). This keeps the data simple, understandable, and free.
 
-ChunkManager Module: This module will be responsible for handling all chunk-related logic.
 
-Load/Unload Logic: Implement a cache or in-memory map to hold active chunks.
 
-Timeout: Set a 30-second timer for each loaded chunk. If no clients are present when the timer expires, the chunk is written to disk and removed from memory.
 
-Data Serialization: Create a function to serialize the chunk's state into a JSON string and a function to deserialize it from the JSON file.
+# Multiplayer Game Project - Current State & Future Goals
 
-2. Player & Communication Management
-PlayerManager Module: This module will manage all connected clients and their location.
+## Current Game Description
 
-Player List: Maintain a list of all connected players.
+This is a 3D multiplayer exploration and building game built with a hybrid server-client 
+architecture designed to minimize server load while enabling large-scale multiplayer 
+experiences.
 
-Chunk-Specific Lists: Maintain a map or dictionary where the keys are chunk IDs, and the values are lists of players currently in that chunk.
+### Architecture Overview
 
-Periodic Check-In: Implement a timer to request a "check-in" message from all clients in a chunk once every minute. If a client doesn't respond, assume they have disconnected (e.g., due to a crash) and remove them from the chunk's list.
+**Server Role (WebSocket-based)**
+- Acts as a lightweight coordination hub
+- Manages chunk-based player location tracking
+- Facilitates WebRTC handshakes between clients for P2P connections
+- Maintains authority over persistent world objects (trees, buildings, items)
+- Handles infrequent state changes (10+ second intervals)
+- Uses JSON file storage for chunk persistence (resets on server restart)
 
-WebSocket Endpoints: Define specific message types (e.g., join_chunk, request_box_change) and implement listeners to handle incoming messages from clients.
+**Client Role (Three.js + WebRTC P2P)**
+- Renders 3D world with procedural terrain generation
+- Handles real-time player movement via click-to-move mechanics
+- Establishes direct P2P connections with players in nearby chunks
+- Manages smooth interpolated movement and animations
+- Loads/unloads terrain chunks dynamically based on player position
 
-Client List Broadcasting: When a player joins a server, joins a new chunk, or leaves a chunk, broadcast the updated list of players in that chunk to all clients in that chunk. Do not broadcast if the list has not changed.
+### Current Technical Features
 
-Client-Side Tasks 🕹️
-1. Core Systems & Rendering
-Base Game Setup: Continue building out your core game systems as planned (e.g., TerrainSystem, CharacterSystem, InputManager).
+**Terrain System**
+- Procedural generation using seeded Perlin noise
+- 50x50 unit chunks with 25x25 vertex resolution
+- Web Worker-based height calculation for performance
+- Multi-texture blending (dirt, grass, rock, snow) based on height and slope
+- Dynamic chunk loading within 1-chunk radius of player
 
-SceneManager Module: This module will handle rendering logic and ensure that only the current chunk is loaded.
+**Networking**
+- Hybrid model: Server for coordination, P2P for real-time data
+- WebSocket reconnection logic for server connectivity
+- P2P reconnection attempts for peer connections
+- Chunk-based player grouping for localized P2P meshes
 
-Scene Clearing: Implement a function to unload all assets and objects related to the previous chunk before loading the new one. This keeps the memory footprint low.
+**Player Systems**
+- Click-to-move navigation on terrain
+- Smooth camera following with offset positioning
+- Real-time position broadcasting via P2P
+- Avatar representation for remote players
 
-ObjectFactory Module: To support your goal of easy feature addition, create a modular system for game objects. For instance, a function createObject(type, model, texture) could be used for creating trees, bushes, and boxes by simply passing in different parameters.
+**World Objects**
+- Server-authoritative shared objects (green box example)
+- Add/remove requests processed through server
+- State synchronization across all chunk participants
 
-2. Networking Modules
-ServerConnection Module: A dedicated module for all server-client communication.
+## Future Goals & Vision
 
-Message Handlers: Implement functions to handle server broadcasts like player_list_update and chunk_state_change.
+### Scalability Targets
+- Support for much larger world sizes
+- Localized P2P meshes (~12 players per chunk group)
+- Minimize server bandwidth by keeping authority limited to persistent objects
+- Enable multiple simultaneous chunk groups operating independently
 
-Send Messages: Create functions to send messages to the server, such as request_box_change or request_chunk_switch.
+### Gameplay Systems
 
-P2PConnectionHandler Module: A separate module to handle all peer-to-peer communication.
+**Building & Construction**
+- Player-placed structures with server persistence
+- Resource gathering and crafting systems
+- Collaborative building projects
 
-Connect/Disconnect: Implement logic to initiate WebRTC connections to new peers as they appear on the player_list_update and to close connections when peers leave the chunk list.
+**Exploration & World Interaction**
+- Interactive environment objects (harvestable trees, collectible items)
+- Discovery mechanics for world exploration
+- Environmental storytelling elements
 
-Send Data: Create a function to send a message like flash_box to all connected peers.
+**Social Systems**
+- Text/voice communication within P2P groups
+- Player identification and reputation systems
+- Collaborative gameplay mechanics
 
-Receive Data: Implement a listener to handle incoming data channel messages from peers.
+**PvE Combat**
+- Player vs NPC encounters
+- Environmental hazards and challenges
+- No direct PvP to maintain cooperative focus
 
-Development Workflow
-Start Simple: Begin by implementing the server-side file storage and the client's ability to load a single, hardcoded chunk file.
+### Technical Improvements Needed
 
-Build the Core Loop: Add the client-server communication for Place/Remove Box and ensure the server updates its file.
+**Terrain Performance**
+- Current terrain generation is too slow for target experience
+- Need faster chunk loading to eliminate visible black background
+- Require larger view distance (more loaded chunks simultaneously)
+- Optimization of web worker terrain calculation
+- Potential LOD (Level of Detail) system for distant chunks
 
-Add P2P: Implement the client list broadcasting and the peer-to-peer connections for the "Flash Box" feature.
+**Server Infrastructure**
+- Decision needed on persistent storage solution vs current JSON reset behavior
+- Evaluation of Render.com paid tier vs alternative hosting
+- Scalability planning for larger player counts
 
-Refactor for Modularity: As you add more features, move reusable code into dedicated modules to keep the project organized.
+**Network Resilience**
+- Enhanced reconnection logic beyond current basic retry system
+- Better handling of network interruptions
+- Graceful degradation when P2P connections fail
+
+### Architecture Philosophy
+
+The core design principle is **minimal server load with maximum P2P efficiency**:
+- Server handles only infrequent, authoritative state changes
+- P2P carries all high-frequency data (movement, animations, interactions)
+- Chunk-based isolation prevents unnecessary cross-region traffic
+- Hybrid approach balances consistency with performance
+
+This creates a foundation for massive multiplayer worlds where server costs 
+scale primarily with unique world content rather than player activity, enabling 
+sustainable large-scale multiplayer experiences.
+
+
+
+
+
+
+
+
+
+
+
+
+
+Terrain Biomes & Water System Implementation Plan
+Phase 1: Biome Foundation
+
+ Add biome noise to worker
+
+ Add biome sampling function to terrain worker (low-frequency noise, 0.005-0.01 scale)
+ Create biome type enum/constants (MOUNTAINS, HILLS, PLAINS, CANYONS)
+ Sample biome at chunk center and pass to height calculation
+
+
+ Create biome-specific terrain parameters
+
+ Define parameter sets for each biome (amplitude, frequency, octaves)
+ Mountains: high amplitude (15-20), more octaves (4-5)
+ Hills: medium amplitude (5-8), medium octaves (3)
+ Plains: low amplitude (1-3), few octaves (2)
+ Canyons: negative base height, sharp ridges
+
+
+ Modify height calculation in worker
+
+ Replace single perlin call with biome-aware function
+ Apply biome parameters to noise generation
+ Test with 2-3 biome types first
+
+
+ Update shader for biome-based texturing
+
+ Pass biome type as uniform or vertex attribute
+ Adjust texture blending based on biome (more rock in mountains, etc.)
+
+
+
+Phase 2: Biome Transitions & Refinement
+
+ Implement biome blending
+
+ Sample biome at multiple points per chunk (corners + center)
+ Interpolate between different biome parameters
+ Use smoothstep for natural transitions
+
+
+ Add biome size control
+
+ Implement multi-octave biome noise for varied sizes
+ Ensure biomes range from 3-25 chunks as specified
+ Add biome persistence/lacunarity controls
+
+
+ Test and optimize biome generation
+
+ Verify performance hasn't degraded
+ Check biome boundaries look natural
+ Adjust parameters for realistic terrain variety
+
+
+
+Phase 3: Water Flow Simulation
+
+ Add flow accumulation to worker
+
+ For each vertex, find steepest downhill neighbor
+ Accumulate flow values following downhill paths
+ Store flow data in vertex attributes or separate array
+
+
+ Implement hydraulic erosion
+
+ Carve terrain based on accumulated flow
+ More flow = deeper carving (erosion factor)
+ Ensure erosion respects biome types (mountains erode differently than plains)
+
+
+ Create water detection system
+
+ Mark vertices/areas with high flow as water bodies
+ Distinguish between creeks, rivers, and lakes based on flow and elevation
+ Create water level calculation for pools/lakes
+
+
+
+Phase 4: Water Mesh Generation
+
+ Generate water geometry
+
+ Create separate water plane meshes for detected water areas
+ Follow carved channel paths for rivers/creeks
+ Generate broader areas for lakes
+
+
+ Create water material
+
+ Transparent blue material with reflections
+ Add subtle wave animation (time-based vertex displacement)
+ Consider depth-based opacity
+
+
+ Integrate with chunk system
+
+ Generate water meshes per chunk like terrain
+ Handle water mesh cleanup in removeTerrainChunk
+ Ensure water connects properly across chunk boundaries
+
+
+
+Phase 5: Polish & Optimization
+
+ Enhance biome variety
+
+ Add sub-biome variations (dense forest, sparse forest, etc.)
+ Implement biome-specific features (rock outcrops in mountains, etc.)
+ Fine-tune biome parameters for realism
+
+
+ Improve water realism
+
+ Add waterfalls where appropriate (steep elevation drops)
+ Ensure rivers eventually reach lakes or "ocean" areas
+ Add shoreline generation for lakes
+
+
+ Performance optimization
+
+ Profile new biome/water generation performance
+ Optimize worker message passing if needed
+ Consider LOD for distant water features
+
+
+ Integration testing
+
+ Test with your existing codebase
+ Ensure chunk loading/unloading still works smoothly
+ Verify memory usage hasn't increased significantly
+
+
+
+Milestone Checkpoints
+
+Checkpoint 1: Basic biomes working (mountains, hills, plains)
+Checkpoint 2: Smooth biome transitions implemented
+Checkpoint 3: Water flow and erosion functional
+Checkpoint 4: Water meshes rendering correctly
+Checkpoint 5: Full system integrated and optimized
+
+
+
+
+
+
+
+TREE GENERATION
+
+The tree models are procedurally generated and do not use external image files. The generation process is handled within the createTree() function, which uses the three.js library to create and style the objects.
+
+1. Trunk Creation
+The trunk is a simple cylinder with a procedural texture to simulate bark.
+
+Geometry: A THREE.CylinderGeometry(0.1, 0.1, 1, 8) is created. This defines a cylinder with a top and bottom radius of 0.1 units, a height of 1 unit, and 8 radial segments for a low-poly appearance.
+
+Material: A THREE.MeshStandardMaterial is used to allow for more realistic lighting and texture mapping.
+
+Procedural Texture:
+
+A new HTMLCanvasElement is created.
+
+The canvas's 2D context is used to draw a pattern.
+
+The canvas is filled with a dark brown color (#2E1805).
+
+A loop draws several vertical lines in a lighter brown color (#522D0A) to mimic the texture of bark.
+
+A THREE.CanvasTexture is created from this canvas, and its wrapS and wrapT properties are set to THREE.RepeatWrapping to allow the texture to tile seamlessly.
+
+Mesh: A THREE.Mesh is created by combining the cylinder geometry and the textured material. The mesh's y position is set to 0.5 to place the base of the trunk at the origin.
+
+2. Leaf Creation
+The leaves are a cone shape with a dappled, two-tone green texture.
+
+Geometry: A THREE.ConeGeometry(0.5, 1, 8) is created. This defines a cone with a base radius of 0.5 units, a height of 1 unit, and 8 radial segments.
+
+Material: A THREE.MeshStandardMaterial is used for the leaves, similar to the trunk.
+
+Procedural Texture:
+
+A new HTMLCanvasElement is created.
+
+The canvas is filled with a base green color (#1A5B2E).
+
+A loop draws 15 circles with a lighter green color (#267B3B) at random positions on the canvas.
+
+Another loop draws 10 even lighter green circles (#349B4D) to add more variation and highlights.
+
+A THREE.CanvasTexture is created from this canvas, with THREE.RepeatWrapping enabled.
+
+Mesh: A THREE.Mesh is created by combining the cone geometry and the textured material. The mesh's y position is set to 1.5 to position the cone directly on top of the trunk.
+
+3. Final Assembly
+The trunk and leaf meshes are combined for easy manipulation.
+
+Grouping: The trunk and leaf meshes are added to a THREE.Group object. This allows the entire tree to be moved, rotated, and scaled as a single entity within the three.js scene.
+
+No External Assets: The entire process relies on native three.js primitives and canvas-based textures, meaning no external files (e.g., .gltf, .obj, .png) are needed to render the trees.
