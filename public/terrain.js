@@ -1,4 +1,3 @@
-```javascript
 // terrain.js
 import * as THREE from 'three';
 
@@ -627,4 +626,3 @@ class SimpleTerrainRenderer {
 }
 
 export { SimpleTerrainRenderer };
-```
