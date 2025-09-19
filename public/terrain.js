@@ -7,7 +7,7 @@ const CONFIG = Object.freeze({
         segments: 25
     },
     GRAPHICS: {
-        textureSize: 24,
+        textureSize: 48,
         textureRepeat: 2
     }
 });
@@ -113,7 +113,7 @@ class SimpleTerrainRenderer {
                     float lowNoise = noise2d(vWorldPosition.xz * 0.05) * 0.3;
 
                     // Smooth transitions with smoothstep + noise offset
-                    float dirtMix  = smoothstep(0.8, 0.2, height * 0.1 + lowNoise * 0.5);
+                    float dirtMix  = smoothstep(0.8, 0.1, height * 0.1 + lowNoise * 0.5);
                     float grassMix = smoothstep(0.0, 1.0, height * 0.1 - slope + lowNoise * 0.4);
                     float rockMix  = smoothstep(0.0, 1.0, slope * 0.5 + lowNoise * 0.2);
                     float snowMix  = smoothstep(0.5, 1.5, height * 0.05 + lowNoise * 0.6);
