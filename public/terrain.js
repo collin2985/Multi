@@ -7,8 +7,8 @@ const CONFIG = Object.freeze({
         segments: 25
     },
     GRAPHICS: {
-        textureRepeat: 0.1, // Adjusted for fine-grained detail.
-        textureScale: 50.0
+        textureSize: 64, // Smaller for a more pixelated look
+        textureRepeat: 1 // No longer used, but keeping for reference
     },
     BIOMES: {
         MOUNTAINS: 0,
@@ -25,38 +25,98 @@ class SimpleTerrainRenderer {
         this.terrainMaterial = null;
         this.terrainWorker = null;
         this.pendingChunks = new Map();
-        this.textures = {};
-        this.textureLoader = new THREE.TextureLoader();
-        this.loadTextures().then(() => {
-            this.initialize();
-        });
+        this.textures = this.initializeTextures();
+        this.initialize();
     }
 
-    async loadTextures() {
-        // Paths to your low-res, pixelated textures. Replace with your own.
-        const texturePaths = {
-            grass1: 'https://cdn.glitch.global/027063d8-500e-43a9-a78b-d7d8e82d46e3/grass1.png?v=1672323891000',
-            grass2: 'https://cdn.glitch.global/027063d8-500e-43a9-a78b-d7d8e82d46e3/grass2.png?v=1672323891001',
-            grass3: 'https://cdn.glitch.global/027063d8-500e-43a9-a78b-d7d8e82d46e3/grass3.png?v=1672323891002',
-            dirt: 'https://cdn.glitch.global/027063d8-500e-43a9-a78b-d7d8e82d46e3/dirt.png?v=1672323891003',
-            rock1: 'https://cdn.glitch.global/027063d8-500e-43a9-a78b-d7d8e82d46e3/rock1.png?v=1672323891004',
-            rock2: 'https://cdn.glitch.global/027063d8-500e-43a9-a78b-d7d8e82d46e3/rock2.png?v=1672323891005',
-            snow: 'https://cdn.glitch.global/027063d8-500e-43a9-a78b-d7d8e82d46e3/snow.png?v=1672323891006'
-        };
+    // New procedural texture generation function.
+    initializeTextures() {
+        const size = CONFIG.GRAPHICS.textureSize;
+        const textures = {};
 
-        const texturePromises = Object.keys(texturePaths).map(key =>
-            new Promise(resolve => {
-                this.textureLoader.load(texturePaths[key], (texture) => {
-                    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-                    texture.magFilter = THREE.NearestFilter;
-                    texture.minFilter = THREE.NearestFilter; // 
-                    this.textures[key] = texture;
-                    resolve();
-                });
-            })
+        // Generate multiple textures for each material type for variation.
+        textures.grass1 = this.createProceduralTexture(
+            { r: 40, g: 160, b: 40 }, 
+            { r: 20, g: 120, b: 20 }, 
+            size, 
+            0.1 // A small noise scale
         );
-        await Promise.all(texturePromises);
-        console.log('All textures loaded successfully.');
+        textures.grass2 = this.createProceduralTexture(
+            { r: 60, g: 180, b: 60 }, 
+            { r: 30, g: 140, b: 30 }, 
+            size, 
+            0.2 // A larger noise scale
+        );
+        textures.dirt = this.createProceduralTexture(
+            { r: 120, g: 80, b: 40 }, 
+            { r: 160, g: 110, b: 60 }, 
+            size, 
+            0.25
+        );
+        textures.rock1 = this.createProceduralTexture(
+            { r: 80, g: 80, b: 80 }, 
+            { r: 140, g: 140, b: 160 }, 
+            size, 
+            0.3
+        );
+        textures.rock2 = this.createProceduralTexture(
+            { r: 100, g: 90, b: 90 }, 
+            { r: 150, g: 150, b: 170 }, 
+            size, 
+            0.4
+        );
+        textures.snow = this.createProceduralTexture(
+            { r: 240, g: 245, b: 255 }, 
+            { r: 200, g: 220, b: 240 }, 
+            size, 
+            0.15
+        );
+        return textures;
+    }
+
+    createProceduralTexture(color1, color2, size, noiseScale) {
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        const imgData = ctx.createImageData(size, size);
+        const data = imgData.data;
+
+        // Simple 2D noise function
+        function rand(vec2) {
+            return (Math.sin(vec2[0] * 12.9898 + vec2[1] * 78.233) * 43758.5453123) % 1;
+        }
+        function noise2d(x, y) {
+            const i = [Math.floor(x), Math.floor(y)];
+            const f = [x % 1, y % 1];
+            const u = [f[0] * f[0] * (3 - 2 * f[0]), f[1] * f[1] * (3 - 2 * f[1])];
+            const a = rand(i);
+            const b = rand([i[0] + 1, i[1]]);
+            const c = rand([i[0], i[1] + 1]);
+            const d = rand([i[0] + 1, i[1] + 1]);
+            return a + (b - a) * u[0] + (c - a) * u[1] * (1 - u[0]) + (d - b) * u[0] * u[1];
+        }
+
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                const i = (y * size + x) * 4;
+                const n = (
+                    noise2d(x * noiseScale, y * noiseScale) * 0.5 +
+                    noise2d(x * noiseScale * 2, y * noiseScale * 2) * 0.25
+                ) / 0.75;
+                const c = {
+                    r: color1.r + (color2.r - color1.r) * n,
+                    g: color1.g + (color2.g - color1.g) * n,
+                    b: color1.b + (color2.b - color1.b) * n
+                };
+                data[i] = c.r; data[i + 1] = c.g; data[i + 2] = c.b; data[i + 3] = 255;
+            }
+        }
+        ctx.putImageData(imgData, 0, 0);
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        tex.magFilter = THREE.NearestFilter; // This is key for the pixelated look
+        tex.minFilter = THREE.NearestFilter;
+        return tex;
     }
 
     initialize() {
@@ -64,13 +124,11 @@ class SimpleTerrainRenderer {
         this.terrainMaterial = new THREE.ShaderMaterial({
             vertexShader: `
                 varying vec3 vNormal;
-                varying vec3 vPosition;
                 varying vec3 vWorldPosition;
-                attribute vec4 blendWeights; // New attribute for texture blending
+                attribute vec4 blendWeights;
                 varying vec4 vBlendWeights;
                 void main() {
                     vNormal = normalize(normalMatrix * normal);
-                    vPosition = position;
                     vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
                     vBlendWeights = blendWeights;
                     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
@@ -79,25 +137,20 @@ class SimpleTerrainRenderer {
             fragmentShader: `
                 uniform sampler2D uGrass1;
                 uniform sampler2D uGrass2;
-                uniform sampler2D uGrass3;
                 uniform sampler2D uDirt;
                 uniform sampler2D uRock1;
                 uniform sampler2D uRock2;
                 uniform sampler2D uSnow;
                 uniform vec3 uLightDir;
-                uniform float uTextureScale;
 
                 varying vec3 vNormal;
-                varying vec3 vPosition;
                 varying vec3 vWorldPosition;
                 varying vec4 vBlendWeights;
 
-                // simple hash-based random
                 float rand(vec2 co) {
                     return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453123);
                 }
 
-                // Value-noise like 2D (cheap)
                 float noise2d(vec2 st) {
                     vec2 i = floor(st);
                     vec2 f = fract(st);
@@ -111,26 +164,21 @@ class SimpleTerrainRenderer {
 
                 void main() {
                     // World-space coordinates for seamless texturing
-                    vec2 texCoord = vWorldPosition.xz / uTextureScale;
-                    vec2 detailTexCoord = vWorldPosition.xz * 0.1;
-
+                    vec2 texCoord = vWorldPosition.xz / 10.0;
+                    
                     // Sample the various textures
                     vec3 grass1Color = texture2D(uGrass1, texCoord).rgb;
                     vec3 grass2Color = texture2D(uGrass2, texCoord + vec2(23.0, 15.0)).rgb;
-                    vec3 grass3Color = texture2D(uGrass3, texCoord + vec2(7.0, 31.0)).rgb;
                     vec3 dirtColor = texture2D(uDirt, texCoord + vec2(5.0, 10.0)).rgb;
                     vec3 rock1Color = texture2D(uRock1, texCoord).rgb;
                     vec3 rock2Color = texture2D(uRock2, texCoord + vec2(42.0, 51.0)).rgb;
                     vec3 snowColor = texture2D(uSnow, texCoord).rgb;
 
-                    // Per-fragment noise to blend grass textures and add subtle detail
-                    float noise = noise2d(vWorldPosition.xz * 0.1);
-                    float grassMix = smoothstep(0.4, 0.6, noise);
+                    // Use world-space noise to blend between grass textures for variation.
+                    float grassMix = smoothstep(0.4, 0.6, noise2d(vWorldPosition.xz * 0.1));
                     vec3 grassBaseColor = mix(grass1Color, grass2Color, grassMix);
-                    float grass3Mix = smoothstep(0.5, 0.8, noise2d(vWorldPosition.xz * 0.2));
-                    grassBaseColor = mix(grassBaseColor, grass3Color, grass3Mix);
 
-                    // Blend the main materials based on blendWeights from the worker
+                    // Blend the main materials based on blendWeights
                     vec3 finalColor = vec3(0.0);
                     finalColor += grassBaseColor * vBlendWeights.x;
                     finalColor += dirtColor * vBlendWeights.y;
@@ -148,21 +196,17 @@ class SimpleTerrainRenderer {
             uniforms: {
                 uGrass1: { value: this.textures.grass1 },
                 uGrass2: { value: this.textures.grass2 },
-                uGrass3: { value: this.textures.grass3 },
                 uDirt: { value: this.textures.dirt },
                 uRock1: { value: this.textures.rock1 },
                 uRock2: { value: this.textures.rock2 },
                 uSnow: { value: this.textures.snow },
-                uLightDir: { value: new THREE.Vector3(1, 1, 1).normalize() },
-                uTextureScale: { value: CONFIG.GRAPHICS.textureScale }
+                uLightDir: { value: new THREE.Vector3(1, 1, 1).normalize() }
             },
             side: THREE.FrontSide
         });
     }
 
     createTerrainWorker() {
-        // Worker code remains the same, but the onmessage handler will be updated
-        // to calculate biome blend weights instead of a single biomeType.
         const workerCode = `
             const BIOMES = {
                 MOUNTAINS: 0,
@@ -371,28 +415,22 @@ class SimpleTerrainRenderer {
                 return [nx/len, ny/len, nz/len];
             }
 
-            // New function to calculate blend weights for the textures
             function calculateBlendWeights(height, slope, biome) {
                 let grassWeight = 0.0;
                 let rockWeight = 0.0;
                 let snowWeight = 0.0;
                 let dirtWeight = 0.0;
 
-                // Base height- and slope-based blending
-                const slopeFactor = Math.min(1.0, slope * 2.0); // Rocks on steep slopes
-                const heightFactor = Math.max(0.0, height / 15.0); // For elevation
+                const slopeFactor = Math.min(1.0, slope * 2.0);
+                const heightFactor = Math.max(0.0, height / 15.0);
 
-                // Grass and dirt
                 grassWeight = (1.0 - slopeFactor) * (1.0 - heightFactor);
                 dirtWeight = slopeFactor * 0.2 + (1.0 - heightFactor) * 0.3;
 
-                // Rock on steep slopes
                 rockWeight = slopeFactor * 0.8 + heightFactor * 0.5;
 
-                // Snow at high elevations
                 snowWeight = Math.max(0.0, heightFactor - 0.7);
 
-                // Refine based on biome for variety
                 if (biome === BIOMES.MOUNTAINS) {
                     rockWeight += 0.5;
                     snowWeight = Math.max(snowWeight, heightFactor * 1.5 - 1.0);
@@ -409,7 +447,6 @@ class SimpleTerrainRenderer {
                     grassWeight *= 0.2;
                 }
                 
-                // Normalize weights
                 const total = grassWeight + dirtWeight + rockWeight + snowWeight;
                 if (total > 0.0) {
                     return [
@@ -419,7 +456,7 @@ class SimpleTerrainRenderer {
                         snowWeight / total
                     ];
                 }
-                return [1.0, 0.0, 0.0, 0.0]; // Default to grass if no valid weights
+                return [1.0, 0.0, 0.0, 0.0];
             }
 
             self.onmessage = function(e) {
@@ -448,7 +485,7 @@ class SimpleTerrainRenderer {
                             normalY: normal[1],
                             normalZ: normal[2],
                             biomeType: dominant,
-                            blendWeights: blendWeights, // New output for texture blending
+                            blendWeights: blendWeights,
                             index: point.index
                         });
                     }
@@ -485,7 +522,6 @@ class SimpleTerrainRenderer {
                 normals[index + 2] = normalZ;
                 biomeTypes[vertexIndex] = biomeType;
 
-                // Set the new blend weights attribute
                 blendWeights[vertexIndex * 4] = weights[0];
                 blendWeights[vertexIndex * 4 + 1] = weights[1];
                 blendWeights[vertexIndex * 4 + 2] = weights[2];
