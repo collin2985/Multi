@@ -13,7 +13,7 @@ const clients = new Map();
 // Define a global terrain seed (can be fixed or dynamically generated)
 const terrainSeed = 12345; // Example: Random seed per server start
 
-// NEW: Queue for rate-limiting notifications
+// Queue for rate-limiting notifications
 const notificationQueue = [];
 const notificationInterval = 100; // Process every 100ms
 
@@ -57,7 +57,7 @@ function broadcastToChunk(chunkId, message) {
     console.log(`Broadcasted ${message.type} to chunk ${chunkId}`);
 }
 
-// NEW: Get players in a 3x3 grid around a chunk
+// Get players in a 3x3 grid around a chunk
 function getPlayersInProximity(chunkId) {
     const parts = chunkId.split('_');
     const chunkX = parseInt(parts[1]);
@@ -79,7 +79,7 @@ function getPlayersInProximity(chunkId) {
     return players;
 }
 
-// NEW: Process notification queue for rate limiting
+// Process notification queue for rate limiting
 function processNotificationQueue() {
     if (notificationQueue.length === 0) return;
 
@@ -107,7 +107,7 @@ function processNotificationQueue() {
     });
 }
 
-// NEW: Start notification queue processing
+// Start notification queue processing
 setInterval(processNotificationQueue, notificationInterval);
 
 // Handle new connections
@@ -136,7 +136,6 @@ wss.on('connection', ws => {
                     ws.send(JSON.stringify({ type: 'error', message: 'No clientId provided' }));
                     return;
                 }
-                // NEW: Store client data with ws, currentChunk, and lastChunk
                 ws.clientId = clientId;
                 clients.set(clientId, { ws, currentChunk: chunkId, lastChunk: null });
                 ws.currentChunk = chunkId; // Keep for backward compatibility
@@ -156,12 +155,11 @@ wss.on('connection', ws => {
                     saveChunk(chunkId);
                 }
 
-                // NEW: Queue notification for join
                 notificationQueue.push({ chunkId });
 
                 break;
 
-            case 'chunk_update': // NEW: Handle chunk update messages
+            case 'chunk_update':
                 const { clientId: updateClientId, newChunkId, lastChunkId } = parsedMessage.payload;
                 const clientData = clients.get(updateClientId);
                 if (!clientData) {
@@ -256,8 +254,8 @@ wss.on('connection', ws => {
                     chunkData.players = chunkData.players.filter(p => p.id !== ws.clientId);
                     console.log(`Client ${ws.clientId} left chunk: ${clientData.currentChunk}`);
                     saveChunk(clientData.currentChunk);
-                    // Queue notification for disconnection
                     notificationQueue.push({ chunkId: clientData.currentChunk });
+                    console.log(`Queued proximity_update for chunk ${clientData.currentChunk} due to disconnection`);
                 }
             }
             clients.delete(ws.clientId);
@@ -282,6 +280,7 @@ const interval = setInterval(() => {
             chunkData.players = chunkData.players.filter(p => !playersToRemove.includes(p.id));
             saveChunk(chunkId);
             notificationQueue.push({ chunkId });
+            console.log(`Queued proximity_update for chunk ${chunkId} due to cleanup`);
         }
     });
     console.log('Periodic player check finished');

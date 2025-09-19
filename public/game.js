@@ -12,8 +12,8 @@ let terrainRenderer = null;
 const avatars = new Map();
 let currentPlayerChunkX = 0;
 let currentPlayerChunkZ = 0;
-let lastChunkX = 0; // NEW: Track previous chunk for change detection
-let lastChunkZ = 0; // NEW: Track previous chunk for change detection
+let lastChunkX = null; // NEW: Track previous chunk for change detection
+let lastChunkZ = null; // NEW: Track previous chunk for change detection
 
 const loadRadius = 1; // How many chunks to load around player
 let lastChunkUpdateTime = 0;
@@ -109,11 +109,22 @@ function connectToServer() {
         ui.updateConnectionStatus('connected', '✅ Server Connected');
         ui.updateButtonStates(isInChunk, boxInScene);
         wsRetryAttempts = 0;
-        // Trigger initial chunk loading right after connecting
-        updateChunksAroundPlayer(
-            Math.floor(playerObject.position.x / 50),
-            Math.floor(playerObject.position.z / 50)
-        );
+        // NEW: Send join_chunk with initial chunk
+        const chunkSize = 50;
+        const initialChunkX = Math.floor((playerObject.position.x + chunkSize/2) / chunkSize);
+        const initialChunkZ = Math.floor((playerObject.position.z + chunkSize/2) / chunkSize);
+        const chunkId = `chunk_${initialChunkX}_${initialChunkZ}`;
+        const success = sendServerMessage('join_chunk', { chunkId, clientId });
+        if (success) {
+            isInChunk = true;
+            currentPlayerChunkX = initialChunkX;
+            currentPlayerChunkZ = initialChunkZ;
+            lastChunkX = initialChunkX;
+            lastChunkZ = initialChunkZ;
+            ui.updateButtonStates(isInChunk, boxInScene);
+        }
+        // Trigger initial chunk loading
+        updateChunksAroundPlayer(initialChunkX, initialChunkZ);
     };
 
     ws.onclose = (event) => {
@@ -161,7 +172,7 @@ function connectToServer() {
             case 'chunk_state_change':
                 handleChunkStateChange(data.payload);
                 break;
-            case 'proximity_update': // NEW: Handle proximity-based player list
+            case 'proximity_update':
                 handleProximityUpdate(data.payload);
                 break;
             default:
@@ -174,7 +185,7 @@ function sendServerMessage(type, payload) {
     if (ws && ws.readyState === WebSocket.OPEN) {
         const message = { type, payload };
         ws.send(JSON.stringify(message));
-        ui.updateStatus(`📤 Sent ${type} to server`); // NEW: Log all sent messages
+        ui.updateStatus(`📤 Sent ${type} to server`);
         return true;
     }
     ui.updateStatus(`❌ Failed to send ${type}: No server connection`);
@@ -373,7 +384,7 @@ function handleChunkStateChange(payload) {
     ui.updatePeerInfo(peers, avatars);
 }
 
-function handleProximityUpdate(payload) { // NEW: Handle proximity update
+function handleProximityUpdate(payload) {
     const players = payload.players; // Array of { id, chunkId }
     ui.updateStatus(`📍 Proximity update: ${players.length} players`);
 
@@ -434,8 +445,8 @@ function updateChunksAroundPlayer(chunkX, chunkZ) {
         }
     }
 
-    // NEW: Send chunk update to server
-    if (chunkX !== lastChunkX || chunkZ !== lastChunkZ) {
+    // NEW: Only send chunk_update if joined
+    if (isInChunk && (chunkX !== lastChunkX || chunkZ !== lastChunkZ)) {
         const newChunkId = `chunk_${chunkX}_${chunkZ}`;
         const lastChunkId = lastChunkX !== null ? `chunk_${lastChunkX}_${lastChunkZ}` : null;
         sendServerMessage('chunk_update', {
@@ -569,6 +580,9 @@ ui.initializeUI({
     clientId: clientId,
     onJoinSuccess: () => {
         isInChunk = true;
+        // NEW: Set last chunk on join
+        lastChunkX = currentPlayerChunkX;
+        lastChunkZ = currentPlayerChunkZ;
         ui.updateButtonStates(isInChunk, boxInScene);
     },
     onResize: () => {
