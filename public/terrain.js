@@ -110,13 +110,17 @@ class SimpleTerrainRenderer {
                     vec3 snowColor = texture2D(uSnow, texCoord).rgb;
 
                     // Add low-frequency noise to break banding
-                    float lowNoise = noise2d(vWorldPosition.xz * 0.05) * 0.3;
+                    float lowNoise = noise2d(vWorldPosition.xz * 0.05) * 0.15;
+
+
+                    // Change this scaling factor based on your actual height range
+                    float heightFactor = height * 0.05; // Even gentler scaling
 
                     // Smooth transitions with smoothstep + noise offset
-                    float dirtMix  = smoothstep(0.8, 0.1, height * 0.1 + lowNoise * 0.5);
-                    float grassMix = smoothstep(0.0, 1.0, height * 0.1 - slope + lowNoise * 0.4);
-                    float rockMix  = smoothstep(0.0, 1.0, slope * 0.5 + lowNoise * 0.2);
-                    float snowMix  = smoothstep(0.5, 1.5, height * 0.05 + lowNoise * 0.6);
+                    float dirtMix = 1.0 - smoothstep(-1.0, 1.0, heightFactor + lowNoise * 0.3);
+                    float grassMix = smoothstep(-0.5, 1.5, heightFactor - slope + lowNoise * 0.2);
+                    float rockMix = smoothstep(0.3, 0.8, slope * 0.8 + lowNoise * 0.1);
+                    float snowMix = smoothstep(1.0, 2.0, heightFactor + lowNoise * 0.2);
 
                     float sum = dirtMix + grassMix + rockMix + snowMix;
                     if (sum > 0.0) {
