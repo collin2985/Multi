@@ -450,7 +450,7 @@ function staggerP2PInitiations(newPlayers) {
             scene.add(avatar);
             avatars.set(player.id, avatar);
             ui.updateStatus(`🟢 Avatar for ${player.id} added at (0,0,0)`);
-        }, index * 500); // 150ms delay per connection
+        }, index * 150); // 150ms delay per connection
     });
 }
 
