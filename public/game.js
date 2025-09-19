@@ -286,7 +286,7 @@ function handleP2PMessage(message, fromPeer) {
                 ui.updateStatus(`🕺 Avatar for ${fromPeer} is now moving`);
             }
             break;
-        case 'player_sync': // Handle initial position sync
+        case 'player_sync':
             const syncPeer = peers.get(fromPeer);
             const syncAvatar = avatars.get(fromPeer);
             if (syncPeer && syncAvatar) {
@@ -425,12 +425,24 @@ function handleProximityUpdate(payload) {
         }
     });
 
-    // Add new peers and avatars
-    players.forEach(player => {
-        if (player.id !== clientId && !peers.has(player.id)) {
+    // Queue new peers for staggered initiation
+    const newPlayers = players.filter(player => player.id !== clientId && !peers.has(player.id));
+    if (newPlayers.length > 0) {
+        ui.updateStatus(`Queuing ${newPlayers.length} new P2P connections for staggering`);
+        staggerP2PInitiations(newPlayers);
+    }
+
+    ui.updatePeerInfo(peers, avatars);
+}
+
+// NEW: Stagger P2P initiations to reduce lag
+function staggerP2PInitiations(newPlayers) {
+    newPlayers.forEach((player, index) => {
+        setTimeout(() => {
             const shouldInitiate = clientId < player.id;
             if (shouldInitiate) {
                 initiateConnection(player.id);
+                ui.updateStatus(`Initiating staggered P2P to ${player.id}`);
             }
             const geometry = new THREE.SphereGeometry(1, 32, 32);
             const material = new THREE.MeshBasicMaterial({ color: Math.random() * 0xffffff });
@@ -438,10 +450,8 @@ function handleProximityUpdate(payload) {
             scene.add(avatar);
             avatars.set(player.id, avatar);
             ui.updateStatus(`🟢 Avatar for ${player.id} added at (0,0,0)`);
-        }
+        }, index * 150); // 150ms delay per connection
     });
-
-    ui.updatePeerInfo(peers, avatars);
 }
 
 function updateChunksAroundPlayer(chunkX, chunkZ) {
@@ -558,7 +568,7 @@ function animate() {
     checkAndReconnectPeers();
     processChunkQueue();
 
-    const cameraOffset = new THREE.Vector3(0, 25, 10);
+    const cameraOffset = new THREE.Vector3(0, 15, 5);
     const cameraTargetPosition = playerObject.position.clone().add(cameraOffset);
     const smoothedCameraPosition = camera.position.lerp(cameraTargetPosition, 0.5);
     camera.position.copy(smoothedCameraPosition);
@@ -604,8 +614,6 @@ ui.updateConnectionStatus('connecting', '🔄 Connecting...');
 ui.initializeUI({
     sendServerMessage: sendServerMessage,
     clientId: clientId,
-    currentChunkX: currentPlayerChunkX, // Added for dynamic chunk in add/remove
-    currentChunkZ: currentPlayerChunkZ, // Added for dynamic chunk in add/remove
     onResize: () => {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
