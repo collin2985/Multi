@@ -4,7 +4,7 @@ const CONFIG = Object.freeze({
     TERRAIN: {
         chunkSize: 50,
         segments: 25,
-        overlap: 1 // Overlap for seamless edges
+        overlap: 3 // Increased from 1 to 3 for smoother transitions
     },
     GRAPHICS: {
         textureSize: 48
@@ -168,7 +168,8 @@ class SimpleTerrainRenderer {
                     float wGrass = smoothstep(-4.0, 0.0, vHeight) * (1.0 - smoothstep(1.0, 7.5, vHeight));
                     float wSnow = smoothstep(1.0, 7.5, vHeight);
                     float wRock = 0.0;
-                    float slopeFactor = smoothstep(0.03, 0.15, vSlope);
+                    float slopeNoise = rand(vUv * 5.0) * 0.2 + 0.8; // Noise to soften rock transitions
+                    float slopeFactor = smoothstep(0.05, 0.25, vSlope) * slopeNoise; // Loosened thresholds
                     float heightBoost = smoothstep(5.0, 10.0, vHeight);
                     slopeFactor = mix(slopeFactor, 1.0, heightBoost * 0.5);
 
@@ -233,7 +234,7 @@ class SimpleTerrainRenderer {
 
             const BIOME_PARAMS = {
                 [BIOMES.MOUNTAINS]: {
-                    amplitude: 60,
+                    amplitude: 30,
                     frequency: 0.02,
                     octaves: 4,
                     persistence: 0.6,
@@ -470,6 +471,7 @@ class SimpleTerrainRenderer {
         geometry.setAttribute('biomeIndex', new THREE.BufferAttribute(new Float32Array(geometry.attributes.position.count), 1));
 
         const positions = geometry.attributes.position.array;
+        const biomeIndices = geometry.attributes.biomeIndex.array;
         const pointsToCalculate = [];
         const segmentSize = CONFIG.TERRAIN.chunkSize / CONFIG.TERRAIN.segments;
         const halfSize = CONFIG.TERRAIN.chunkSize / 2;
@@ -490,19 +492,33 @@ class SimpleTerrainRenderer {
                 const worldZ = chunkZ + localZ;
 
                 let height = null;
-                if (row === -overlap && neighbors[2]) {
-                    height = getHeightFromChunk(neighbors[2], localX, localZ + CONFIG.TERRAIN.chunkSize);
-                } else if (row === CONFIG.TERRAIN.segments + overlap && neighbors[3]) {
-                    height = getHeightFromChunk(neighbors[3], localX, localZ - CONFIG.TERRAIN.chunkSize);
-                } else if (col === -overlap && neighbors[0]) {
-                    height = getHeightFromChunk(neighbors[0], localX + CONFIG.TERRAIN.chunkSize, localZ);
-                } else if (col === CONFIG.TERRAIN.segments + overlap && neighbors[1]) {
-                    height = getHeightFromChunk(neighbors[1], localX - CONFIG.TERRAIN.chunkSize, localZ);
+                let biomeIndex = null;
+                if (row <= -overlap && neighbors[2]) {
+                    // Interpolate from upper neighbor (bottom edge)
+                    const t = (row + overlap) / overlap; // 0 at edge, 1 at overlap boundary
+                    height = interpolateHeightFromChunk(neighbors[2], localX, localZ + CONFIG.TERRAIN.chunkSize, worldX, worldZ, seed, t);
+                    biomeIndex = getBiomeFromChunk(neighbors[2], localX, localZ + CONFIG.TERRAIN.chunkSize);
+                } else if (row >= CONFIG.TERRAIN.segments && neighbors[3]) {
+                    // Interpolate from lower neighbor (top edge)
+                    const t = (CONFIG.TERRAIN.segments + overlap - row) / overlap;
+                    height = interpolateHeightFromChunk(neighbors[3], localX, localZ - CONFIG.TERRAIN.chunkSize, worldX, worldZ, seed, t);
+                    biomeIndex = getBiomeFromChunk(neighbors[3], localX, localZ - CONFIG.TERRAIN.chunkSize);
+                } else if (col <= -overlap && neighbors[0]) {
+                    // Interpolate from left neighbor (right edge)
+                    const t = (col + overlap) / overlap;
+                    height = interpolateHeightFromChunk(neighbors[0], localX + CONFIG.TERRAIN.chunkSize, localZ, worldX, worldZ, seed, t);
+                    biomeIndex = getBiomeFromChunk(neighbors[0], localX + CONFIG.TERRAIN.chunkSize, localZ);
+                } else if (col >= CONFIG.TERRAIN.segments && neighbors[1]) {
+                    // Interpolate from right neighbor (left edge)
+                    const t = (CONFIG.TERRAIN.segments + overlap - col) / overlap;
+                    height = interpolateHeightFromChunk(neighbors[1], localX - CONFIG.TERRAIN.chunkSize, localZ, worldX, worldZ, seed, t);
+                    biomeIndex = getBiomeFromChunk(neighbors[1], localX - CONFIG.TERRAIN.chunkSize, localZ);
                 }
 
                 positions[vertexIndex] = localX;
                 positions[vertexIndex + 1] = height !== null ? height : 0;
                 positions[vertexIndex + 2] = localZ;
+                biomeIndices[vertexIndex / 3] = biomeIndex !== null ? biomeIndex : -1;
 
                 if (height === null) {
                     pointsToCalculate.push({ x: worldX, z: worldZ, index: vertexIndex });
@@ -521,18 +537,52 @@ class SimpleTerrainRenderer {
             this.finishTerrainChunk(geometry, chunkX, chunkZ);
         }
 
+        function interpolateHeightFromChunk(chunk, localX, localZ, worldX, worldZ, seed, t) {
+            const neighborHeight = getHeightFromChunk(chunk, localX, localZ);
+            if (neighborHeight === null) return null;
+            const { params } = sampleAndBlendBiomeParams(worldX, worldZ, seed);
+            const computedHeight = calculateHeightWithParams(worldX, worldZ, seed, params);
+            return lerp(t, neighborHeight, computedHeight);
+        }
+
         function getHeightFromChunk(chunk, localX, localZ) {
             const positions = chunk.geometry.attributes.position.array;
+            const segments = CONFIG.TERRAIN.segments;
+            const segmentSize = CONFIG.TERRAIN.chunkSize / segments;
+            const col = (localX + CONFIG.TERRAIN.chunkSize / 2) / segmentSize;
+            const row = (localZ + CONFIG.TERRAIN.chunkSize / 2) / segmentSize;
+            const col0 = Math.floor(col);
+            const row0 = Math.floor(row);
+            const col1 = Math.ceil(col);
+            const row1 = Math.ceil(row);
+            if (col0 < 0 || col1 > segments || row0 < 0 || row1 > segments) return null;
+
+            const v00 = positions[(row0 * (segments + 1) + col0) * 3 + 1];
+            const v10 = positions[(row0 * (segments + 1) + col1) * 3 + 1];
+            const v01 = positions[(row1 * (segments + 1) + col0) * 3 + 1];
+            const v11 = positions[(row1 * (segments + 1) + col1) * 3 + 1];
+
+            const tx = col - col0;
+            const ty = row - row0;
+            const h0 = lerp(tx, v00, v10);
+            const h1 = lerp(tx, v01, v11);
+            return lerp(ty, h0, h1);
+        }
+
+        function getBiomeFromChunk(chunk, localX, localZ) {
+            const biomeIndices = chunk.geometry.attributes.biomeIndex.array;
             const segments = CONFIG.TERRAIN.segments;
             const segmentSize = CONFIG.TERRAIN.chunkSize / segments;
             const col = Math.round((localX + CONFIG.TERRAIN.chunkSize / 2) / segmentSize);
             const row = Math.round((localZ + CONFIG.TERRAIN.chunkSize / 2) / segmentSize);
             if (col >= 0 && col <= segments && row >= 0 && row <= segments) {
-                const vertexIndex = (row * (segments + 1) + col) * 3;
-                return positions[vertexIndex + 1];
+                const vertexIndex = row * (segments + 1) + col;
+                return biomeIndices[vertexIndex];
             }
             return null;
         }
+
+        function lerp(t, a, b) { return a + t * (b - a); }
     }
 
     finishTerrainChunk(geometry, chunkX, chunkZ) {
