@@ -300,48 +300,49 @@ class SimpleTerrainRenderer {
                 return n;
             }
 
-            // For a vertex, sample biome at chunk corners + center and blend parameters accordingly
-            function sampleAndBlendBiomeParams(worldX, worldZ, seed, chunkCenterX, chunkCenterZ, chunkSize) {
+            // For a vertex, sample biome at chunk grid points and blend parameters accordingly
+            function sampleAndBlendBiomeParams(worldX, worldZ, seed, chunkSize) {
+                const chunkGridX = Math.floor(worldX / chunkSize) * chunkSize;
+                const chunkGridZ = Math.floor(worldZ / chunkSize) * chunkSize;
                 const half = chunkSize / 2;
-                // Corner positions
-                const corners = [
-                    [chunkCenterX - half, chunkCenterZ - half], // bottom-left (u=0,v=0)
-                    [chunkCenterX + half, chunkCenterZ - half], // bottom-right (u=1,v=0)
-                    [chunkCenterX - half, chunkCenterZ + half], // top-left (u=0,v=1)
-                    [chunkCenterX + half, chunkCenterZ + half]  // top-right (u=1,v=1)
-                ];
-                const center = [chunkCenterX, chunkCenterZ];
 
-                // compute u,v (normalized local coords inside chunk 0..1)
-                const localU = (worldX - (chunkCenterX - half)) / chunkSize;
-                const localV = (worldZ - (chunkCenterZ - half)) / chunkSize;
-                // clamp
+                // Sample at grid-aligned points (chunk corners) to ensure consistency across chunks
+                const corners = [
+                    [chunkGridX - half, chunkGridZ - half], // bottom-left
+                    [chunkGridX + half, chunkGridZ - half], // bottom-right
+                    [chunkGridX - half, chunkGridZ + half], // top-left
+                    [chunkGridX + half, chunkGridZ + half]  // top-right
+                ];
+                const center = [chunkGridX, chunkGridZ];
+
+                // Compute u,v (normalized local coords within the chunk grid, 0..1)
+                const localU = (worldX - (chunkGridX - half)) / chunkSize;
+                const localV = (worldZ - (chunkGridZ - half)) / chunkSize;
                 const u = Math.max(0, Math.min(1, localU));
                 const v = Math.max(0, Math.min(1, localV));
 
-                // bilinear corner weights
+                // Bilinear corner weights
                 const w00 = (1 - u) * (1 - v);
                 const w10 = u * (1 - v);
                 const w01 = (1 - u) * v;
                 const w11 = u * v;
 
-                // center weight: stronger near center, weaker near edges
+                // Center weight: stronger near center, weaker near edges
                 const dx = u - 0.5;
                 const dy = v - 0.5;
                 const dist = Math.sqrt(dx * dx + dy * dy) / Math.sqrt(0.5 * 0.5 + 0.5 * 0.5);
-                // invert distance so center gets higher weight near middle; smoothstep for softness
                 let centerWeight = 1.0 - Math.min(1.0, dist);
                 centerWeight = centerWeight * centerWeight * (3 - 2 * centerWeight); // smoothstep-like
 
-                // raw weights array
+                // Raw weights array
                 const rawWeights = [w00, w10, w01, w11, centerWeight * 0.75]; // center scaled a bit so corners still matter
 
-                // sample biome noise at each sample point
+                // Sample biome noise at each sample point
                 const samplePoints = [
                     corners[0], corners[1], corners[2], corners[3], center
                 ];
 
-                // accumulate param blends and biome dominances
+                // Accumulate param blends and biome dominances
                 let accum = {
                     amplitude: 0,
                     frequency: 0,
@@ -374,10 +375,10 @@ class SimpleTerrainRenderer {
 
                 if (totalWeight <= 0) totalWeight = 1.0; // avoid div0
 
-                // normalize accum
+                // Normalize accum
                 for (let k in accum) accum[k] /= totalWeight;
 
-                // determine dominant biome (highest total weight)
+                // Determine dominant biome (highest total weight)
                 let dominantBiome = 0;
                 let maxW = -1;
                 for (let b in biomeWeightTotals) {
@@ -390,7 +391,7 @@ class SimpleTerrainRenderer {
                 return { params: accum, dominantBiome };
             }
 
-            // calculate height using blended params (supports fractional octaves)
+            // Calculate height using blended params (supports fractional octaves)
             function calculateHeightWithParams(x, z, seed, params) {
                 const offset = seed * 0.001;
                 let height = params.baseHeight;
@@ -408,7 +409,7 @@ class SimpleTerrainRenderer {
                 }
 
                 if (frac > 0) {
-                    // partial octave contribution
+                    // Partial octave contribution
                     height += perlin(x * frequency + offset, 0, z * frequency + offset) * amplitude * frac;
                 }
 
@@ -424,20 +425,20 @@ class SimpleTerrainRenderer {
 
                 const nx = heightL - heightR;
                 const nz = heightD - heightU;
-                const ny = 2.0; // control steepness influence
+                const ny = 2.0; // Control steepness influence
                 const len = Math.sqrt(nx*nx + ny*ny + nz*nz);
                 return [nx/len, ny/len, nz/len];
             }
 
             self.onmessage = function(e) {
                 if (e.data.type === 'calculateHeightBatch') {
-                    const { points, batchId, seed, chunkCenterX, chunkCenterZ, chunkSize } = e.data.data;
+                    const { points, batchId, seed, chunkSize } = e.data.data;
                     const results = [];
                     for(const point of points) {
                         const worldX = point.x;
                         const worldZ = point.z;
 
-                        const blend = sampleAndBlendBiomeParams(worldX, worldZ, seed, chunkCenterX, chunkCenterZ, chunkSize);
+                        const blend = sampleAndBlendBiomeParams(worldX, worldZ, seed, chunkSize);
                         const params = blend.params;
                         const dominant = blend.dominantBiome;
 
@@ -552,7 +553,7 @@ class SimpleTerrainRenderer {
             // structured clone supported; send array of small objects plus chunk metadata
             this.terrainWorker.postMessage({
                 type: 'calculateHeightBatch',
-                data: { points: pointsToCalculate, batchId, seed, chunkCenterX: chunkX, chunkCenterZ: chunkZ, chunkSize: CONFIG.TERRAIN.chunkSize }
+                data: { points: pointsToCalculate, batchId, seed, chunkSize: CONFIG.TERRAIN.chunkSize }
             });
         }
     }
