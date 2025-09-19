@@ -9,6 +9,12 @@ const CONFIG = Object.freeze({
     GRAPHICS: {
         textureSize: 48,
         textureRepeat: 2
+    },
+    BIOMES: {
+        MOUNTAINS: 0,
+        HILLS: 1,
+        PLAINS: 2,
+        CANYONS: 3
     }
 });
 
@@ -61,10 +67,13 @@ class SimpleTerrainRenderer {
                 varying vec3 vNormal;
                 varying vec3 vPosition;
                 varying vec3 vWorldPosition;
+                attribute float biomeType;
+                varying float vBiomeType;
                 void main() {
                     vNormal = normalize(normalMatrix * normal);
                     vPosition = position;
                     vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
+                    vBiomeType = biomeType;
                     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
                 }
             `,
@@ -77,6 +86,7 @@ class SimpleTerrainRenderer {
                 varying vec3 vNormal;
                 varying vec3 vPosition;
                 varying vec3 vWorldPosition;
+                varying float vBiomeType;
 
                 // simple hash-based random
                 float rand(vec2 co) {
@@ -99,6 +109,7 @@ class SimpleTerrainRenderer {
                 void main() {
                     float height = vWorldPosition.y;
                     float slope = 1.0 - vNormal.y;
+                    int biome = int(vBiomeType + 0.5); // round to nearest int
 
                     // world-space tex coords (tiled)
                     vec2 texCoord = vWorldPosition.xz * 0.1;
@@ -112,15 +123,34 @@ class SimpleTerrainRenderer {
                     // Add low-frequency noise to break banding
                     float lowNoise = noise2d(vWorldPosition.xz * 0.05) * 0.15;
 
-
-                    // Change this scaling factor based on your actual height range
-                    float heightFactor = height * 0.05; // Even gentler scaling
-
-                    // Smooth transitions with smoothstep + noise offset
-                    float dirtMix = smoothstep(0.5, 2.0, height * 0.1 + lowNoise * 0.5);
-                    float grassMix = smoothstep(-2.0, 0.5, height * 0.1 - slope * 0.3 + lowNoise * 0.4);
-                    float rockMix = smoothstep(0.3, 0.8, slope * 0.8 + lowNoise * 0.1);
-                    float snowMix = smoothstep(1.0, 2.0, heightFactor + lowNoise * 0.2);
+                    // Biome-specific texture blending
+                    float dirtMix, grassMix, rockMix, snowMix;
+                    
+                    if (biome == 0) { // MOUNTAINS
+                        // More rock and snow at elevation
+                        dirtMix = smoothstep(2.0, 5.0, height * 0.1 + lowNoise * 0.3);
+                        grassMix = smoothstep(-1.0, 3.0, height * 0.1 - slope * 0.5 + lowNoise * 0.2);
+                        rockMix = smoothstep(0.2, 0.6, slope * 1.2 + lowNoise * 0.1);
+                        snowMix = smoothstep(8.0, 12.0, height * 0.1 + lowNoise * 0.1);
+                    } else if (biome == 1) { // HILLS  
+                        // Balanced mix with moderate slopes
+                        dirtMix = smoothstep(0.5, 2.0, height * 0.1 + lowNoise * 0.5);
+                        grassMix = smoothstep(-2.0, 1.0, height * 0.1 - slope * 0.3 + lowNoise * 0.4);
+                        rockMix = smoothstep(0.4, 0.8, slope * 0.8 + lowNoise * 0.1);
+                        snowMix = smoothstep(4.0, 6.0, height * 0.1 + lowNoise * 0.2);
+                    } else if (biome == 2) { // PLAINS
+                        // Mostly grass and dirt, minimal rock
+                        dirtMix = smoothstep(0.0, 1.0, height * 0.1 + lowNoise * 0.8);
+                        grassMix = smoothstep(-3.0, 0.0, height * 0.1 - slope * 0.1 + lowNoise * 0.6);
+                        rockMix = smoothstep(0.7, 1.0, slope * 0.4 + lowNoise * 0.05);
+                        snowMix = smoothstep(2.0, 3.0, height * 0.1 + lowNoise * 0.3);
+                    } else { // CANYONS
+                        // More exposed rock, less vegetation
+                        dirtMix = smoothstep(1.0, 3.0, height * 0.1 + lowNoise * 0.4);
+                        grassMix = smoothstep(-1.0, 1.0, height * 0.1 - slope * 0.8 + lowNoise * 0.3);
+                        rockMix = smoothstep(0.1, 0.5, slope * 1.5 + lowNoise * 0.2);
+                        snowMix = smoothstep(6.0, 8.0, height * 0.1 + lowNoise * 0.1);
+                    }
 
                     float sum = dirtMix + grassMix + rockMix + snowMix;
                     if (sum > 0.0) {
@@ -163,6 +193,48 @@ class SimpleTerrainRenderer {
 
     createTerrainWorker() {
         const workerCode = `
+            const BIOMES = {
+                MOUNTAINS: 0,
+                HILLS: 1,
+                PLAINS: 2,
+                CANYONS: 3
+            };
+
+            const BIOME_PARAMS = {
+                [BIOMES.MOUNTAINS]: {
+                    amplitude: 18,
+                    frequency: 0.02,
+                    octaves: 4,
+                    persistence: 0.6,
+                    lacunarity: 2.1,
+                    baseHeight: 2
+                },
+                [BIOMES.HILLS]: {
+                    amplitude: 7,
+                    frequency: 0.025,
+                    octaves: 3,
+                    persistence: 0.5,
+                    lacunarity: 2.0,
+                    baseHeight: 0
+                },
+                [BIOMES.PLAINS]: {
+                    amplitude: 2,
+                    frequency: 0.03,
+                    octaves: 2,
+                    persistence: 0.4,
+                    lacunarity: 2.0,
+                    baseHeight: -1
+                },
+                [BIOMES.CANYONS]: {
+                    amplitude: 12,
+                    frequency: 0.015,
+                    octaves: 4,
+                    persistence: 0.7,
+                    lacunarity: 2.5,
+                    baseHeight: -8
+                }
+            };
+
             const permutation = [151,160,137,91,90,15,131,13,201,95,96,53,194,233,7,225,140,36,103,30,69,142,8,99,37,240,21,10,23,190,6,148,247,120,234,75,0,26,197,62,94,252,219,203,117,35,11,32,57,177,33,88,237,149,56,87,174,20,125,136,171,168,68,175,74,165,71,134,139,48,27,166,77,146,158,231,83,111,229,122,60,211,133,230,220,105,92,41,55,46,245,40,244,102,143,54,65,25,63,161,1,216,80,73,209,76,132,187,208,89,18,169,200,196,135,130,116,188,159,86,164,100,109,198,173,186,3,64,52,217,226,250,124,123,5,202,38,147,118,126,255,82,85,212,207,206,59,227,47,16,58,17,182,189,28,42,223,183,170,213,119,248,152,2,44,154,163,70,221,153,101,155,167,43,172,9,129,22,39,253,19,98,108,110,79,113,224,232,178,185,112,104,218,246,97,228,251,34,242,193,238,210,144,12,191,179,162,241,81,51,145,235,249,14,239,107,49,192,214,31,181,199,106,157,184,84,204,176,115,121,50,45,127,4,150,254,138,236,205,93,222,114,67,29,24,72,243,141,128,195,78,66,215,61,156,180];
             const perm = new Uint8Array(512);
             for (let i = 0; i < 256; i++) {
@@ -189,13 +261,48 @@ class SimpleTerrainRenderer {
                                          lerp(u, grad(perm[AB + 1], x, y - 1, z - 1), grad(perm[BB + 1], x - 1, y - 1, z - 1))));
             }
 
-            function calculateNormal(x, z, seed, perlinFn) {
+            function sampleBiome(x, z, seed) {
                 const offset = seed * 0.001;
+                // Low frequency biome noise - creates large biome regions
+                const biomeNoise = perlin(x * 0.008 + offset, 0, z * 0.008 + offset);
+                
+                // Map noise (-1 to 1) to biome types
+                if (biomeNoise < -0.5) return BIOMES.CANYONS;
+                if (biomeNoise < 0.0) return BIOMES.PLAINS;
+                if (biomeNoise < 0.5) return BIOMES.HILLS;
+                return BIOMES.MOUNTAINS;
+            }
+
+            function calculateBiomeHeight(x, z, seed, biomeType) {
+                const params = BIOME_PARAMS[biomeType];
+                const offset = seed * 0.001;
+                
+                let height = params.baseHeight;
+                let amplitude = params.amplitude;
+                let frequency = params.frequency;
+                
+                // Generate multiple octaves of noise
+                for (let i = 0; i < params.octaves; i++) {
+                    height += perlin(x * frequency + offset, 0, z * frequency + offset) * amplitude;
+                    amplitude *= params.persistence;
+                    frequency *= params.lacunarity;
+                }
+                
+                // Special handling for canyons - create sharp ridges
+                if (biomeType === BIOMES.CANYONS) {
+                    const ridgeNoise = Math.abs(perlin(x * 0.04 + offset, 0, z * 0.04 + offset));
+                    height += ridgeNoise * 8; // Sharp upward ridges
+                }
+                
+                return height;
+            }
+
+            function calculateNormal(x, z, seed, biomeType) {
                 const eps = 0.02;
-                const heightL = perlinFn((x - eps) * 0.02 + offset, 0, z * 0.02 + offset) * 10;
-                const heightR = perlinFn((x + eps) * 0.02 + offset, 0, z * 0.02 + offset) * 10;
-                const heightD = perlinFn(x * 0.02 + offset, 0, (z - eps) * 0.02 + offset) * 10;
-                const heightU = perlinFn(x * 0.02 + offset, 0, (z + eps) * 0.02 + offset) * 10;
+                const heightL = calculateBiomeHeight(x - eps, z, seed, biomeType);
+                const heightR = calculateBiomeHeight(x + eps, z, seed, biomeType);
+                const heightD = calculateBiomeHeight(x, z - eps, seed, biomeType);
+                const heightU = calculateBiomeHeight(x, z + eps, seed, biomeType);
 
                 const nx = heightL - heightR;
                 const nz = heightD - heightU;
@@ -209,9 +316,9 @@ class SimpleTerrainRenderer {
                     const { points, batchId, seed } = e.data.data;
                     const results = [];
                     for(const point of points) {
-                        const offset = seed * 0.001;
-                        const height = perlin(point.x * 0.02 + offset, 0, point.z * 0.02 + offset) * 10;
-                        const normal = calculateNormal(point.x, point.z, seed, perlin);
+                        const biomeType = sampleBiome(point.x, point.z, seed);
+                        const height = calculateBiomeHeight(point.x, point.z, seed, biomeType);
+                        const normal = calculateNormal(point.x, point.z, seed, biomeType);
                         results.push({
                             x: point.x,
                             z: point.z,
@@ -219,6 +326,7 @@ class SimpleTerrainRenderer {
                             normalX: normal[0],
                             normalY: normal[1],
                             normalZ: normal[2],
+                            biomeType,
                             index: point.index
                         });
                     }
@@ -242,18 +350,23 @@ class SimpleTerrainRenderer {
             const { geometry, chunkX, chunkZ } = pending;
             const positions = geometry.attributes.position.array;
             const normals = geometry.attributes.normal.array;
+            const biomeTypes = geometry.attributes.biomeType.array;
 
             for (let i = 0; i < results.length; i++) {
-                const { height, normalX, normalY, normalZ, index } = results[i];
+                const { height, normalX, normalY, normalZ, biomeType, index } = results[i];
+                const vertexIndex = index / 3; // Convert back to vertex index
+                
                 // index is the byte/array index already (vertexIndex * 3 in addTerrainChunk)
                 positions[index + 1] = height; // y is height
                 normals[index]     = normalX;
                 normals[index + 1] = normalY;
                 normals[index + 2] = normalZ;
+                biomeTypes[vertexIndex] = biomeType;
             }
 
             geometry.attributes.position.needsUpdate = true;
             geometry.attributes.normal.needsUpdate = true;
+            geometry.attributes.biomeType.needsUpdate = true;
             this.finishTerrainChunk(geometry, chunkX, chunkZ);
             this.pendingChunks.delete(batchId);
         }
@@ -277,10 +390,9 @@ class SimpleTerrainRenderer {
             CONFIG.TERRAIN.segments
         );
 
-        // PlaneGeometry default is XY plane; your original code used plane with positions x/z already set.
-        // Keep the positions as-is (do not rotate) so worldPosition calculation in shader matches your earlier code.
-        // Add a normal attribute for worker to fill in:
+        // Add normal and biome type attributes
         geometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(geometry.attributes.position.count * 3), 3));
+        geometry.setAttribute('biomeType', new THREE.BufferAttribute(new Float32Array(geometry.attributes.position.count), 1));
 
         const positions = geometry.attributes.position.array;
         const pointsToCalculate = [];
