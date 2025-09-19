@@ -7,8 +7,8 @@ const CONFIG = Object.freeze({
         segments: 25
     },
     GRAPHICS: {
-        textureSize: 256, // Increased for sharper textures
-        textureRepeat: 1 // No longer used for tiling, just for texture size
+        textureRepeat: 0.1, // Adjusted for fine-grained detail.
+        textureScale: 50.0
     },
     BIOMES: {
         MOUNTAINS: 0,
@@ -25,68 +25,38 @@ class SimpleTerrainRenderer {
         this.terrainMaterial = null;
         this.terrainWorker = null;
         this.pendingChunks = new Map();
-        this.textures = this.initializeTextures();
-        this.initialize();
+        this.textures = {};
+        this.textureLoader = new THREE.TextureLoader();
+        this.loadTextures().then(() => {
+            this.initialize();
+        });
     }
 
-    initializeTextures() {
-        const size = CONFIG.GRAPHICS.textureSize;
-        const textures = {};
-        // Simplified textures without baked-in noise for a better look.
-        textures.dirt = this.createProceduralTexture({ r: 120, g: 80, b: 40 }, { r: 160, g: 110, b: 60 }, size);
-        textures.grass = this.createProceduralTexture({ r: 40, g: 160, b: 40 }, { r: 20, g: 120, b: 20 }, size);
-        textures.rock = this.createProceduralTexture({ r: 80, g: 80, b: 80 }, { r: 140, g: 140, b: 160 }, size);
-        textures.snow = this.createProceduralTexture({ r: 240, g: 245, b: 255 }, { r: 200, g: 220, b: 240 }, size);
-        return textures;
-    }
+    async loadTextures() {
+        // Paths to your low-res, pixelated textures. Replace with your own.
+        const texturePaths = {
+            grass1: 'https://cdn.glitch.global/027063d8-500e-43a9-a78b-d7d8e82d46e3/grass1.png?v=1672323891000',
+            grass2: 'https://cdn.glitch.global/027063d8-500e-43a9-a78b-d7d8e82d46e3/grass2.png?v=1672323891001',
+            grass3: 'https://cdn.glitch.global/027063d8-500e-43a9-a78b-d7d8e82d46e3/grass3.png?v=1672323891002',
+            dirt: 'https://cdn.glitch.global/027063d8-500e-43a9-a78b-d7d8e82d46e3/dirt.png?v=1672323891003',
+            rock1: 'https://cdn.glitch.global/027063d8-500e-43a9-a78b-d7d8e82d46e3/rock1.png?v=1672323891004',
+            rock2: 'https://cdn.glitch.global/027063d8-500e-43a9-a78b-d7d8e82d46e3/rock2.png?v=1672323891005',
+            snow: 'https://cdn.glitch.global/027063d8-500e-43a9-a78b-d7d8e82d46e3/snow.png?v=1672323891006'
+        };
 
-    createProceduralTexture(color1, color2, size) {
-        const canvas = document.createElement('canvas');
-        canvas.width = canvas.height = size;
-        const ctx = canvas.getContext('2d');
-        const imgData = ctx.createImageData(size, size);
-        const data = imgData.data;
-
-        // Simple 2D noise function (similar to fragment shader)
-        function rand(vec2) {
-            return (Math.sin(vec2[0] * 12.9898 + vec2[1] * 78.233) * 43758.5453123) % 1;
-        }
-        function noise2d(x, y) {
-            const i = [Math.floor(x), Math.floor(y)];
-            const f = [x % 1, y % 1];
-            const u = [f[0] * f[0] * (3 - 2 * f[0]), f[1] * f[1] * (3 - 2 * f[1])];
-            const a = rand(i);
-            const b = rand([i[0] + 1, i[1]]);
-            const c = rand([i[0], i[1] + 1]);
-            const d = rand([i[0] + 1, i[1] + 1]);
-            return a + (b - a) * u[0] + (c - a) * u[1] * (1 - u[0]) + (d - b) * u[0] * u[1];
-        }
-
-        for (let y = 0; y < size; y++) {
-            for (let x = 0; x < size; x++) {
-                const i = (y * size + x) * 4;
-                // Multi-octave noise for natural texture
-                // Note: The scale here is adjusted to produce a less repetitive pattern.
-                const n = (
-                    noise2d(x / size * 2, y / size * 2) * 0.5 +
-                    noise2d(x / size * 4, y / size * 4) * 0.25 +
-                    noise2d(x / size * 8, y / size * 8) * 0.125
-                ) / 0.875; // Normalize
-                const c = {
-                    r: color1.r + (color2.r - color1.r) * n,
-                    g: color1.g + (color2.g - color1.g) * n,
-                    b: color1.b + (color2.b - color1.b) * n
-                };
-                data[i] = c.r; data[i + 1] = c.g; data[i + 2] = c.b; data[i + 3] = 255;
-            }
-        }
-        ctx.putImageData(imgData, 0, 0);
-        const tex = new THREE.CanvasTexture(canvas);
-        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-        // Fix #1: Removed tex.repeat.set() to avoid local tiling. The shader now handles scale.
-        tex.minFilter = THREE.LinearMipMapLinearFilter;
-        tex.magFilter = THREE.LinearFilter;
-        return tex;
+        const texturePromises = Object.keys(texturePaths).map(key =>
+            new Promise(resolve => {
+                this.textureLoader.load(texturePaths[key], (texture) => {
+                    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+                    texture.magFilter = THREE.NearestFilter;
+                    texture.minFilter = THREE.NearestFilter; // 
+                    this.textures[key] = texture;
+                    resolve();
+                });
+            })
+        );
+        await Promise.all(texturePromises);
+        console.log('All textures loaded successfully.');
     }
 
     initialize() {
@@ -96,32 +66,31 @@ class SimpleTerrainRenderer {
                 varying vec3 vNormal;
                 varying vec3 vPosition;
                 varying vec3 vWorldPosition;
-                attribute float biomeType;
-                varying float vBiomeType;
+                attribute vec4 blendWeights; // New attribute for texture blending
+                varying vec4 vBlendWeights;
                 void main() {
                     vNormal = normalize(normalMatrix * normal);
                     vPosition = position;
                     vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
-                    vBiomeType = biomeType;
+                    vBlendWeights = blendWeights;
                     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
                 }
             `,
             fragmentShader: `
+                uniform sampler2D uGrass1;
+                uniform sampler2D uGrass2;
+                uniform sampler2D uGrass3;
                 uniform sampler2D uDirt;
-                uniform sampler2D uGrass;
-                uniform sampler2D uRock;
+                uniform sampler2D uRock1;
+                uniform sampler2D uRock2;
                 uniform sampler2D uSnow;
                 uniform vec3 uLightDir;
+                uniform float uTextureScale;
+
                 varying vec3 vNormal;
                 varying vec3 vPosition;
                 varying vec3 vWorldPosition;
-                varying float vBiomeType;
-
-                // Added BIOME constants to the shader for biome-specific logic
-                const float BIOMES_MOUNTAINS = 0.0;
-                const float BIOMES_HILLS = 1.0;
-                const float BIOMES_PLAINS = 2.0;
-                const float BIOMES_CANYONS = 3.0;
+                varying vec4 vBlendWeights;
 
                 // simple hash-based random
                 float rand(vec2 co) {
@@ -136,110 +105,64 @@ class SimpleTerrainRenderer {
                     float b = rand(i + vec2(1.0, 0.0));
                     float c = rand(i + vec2(0.0, 1.0));
                     float d = rand(i + vec2(1.0, 1.0));
-                    // smooth interpolation
                     vec2 u = f * f * (3.0 - 2.0 * f);
                     return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
                 }
 
                 void main() {
-                    float height = vWorldPosition.y;
-                    float slope = 1.0 - vNormal.y;
-                    int biome = int(vBiomeType + 0.5); // round to nearest int
+                    // World-space coordinates for seamless texturing
+                    vec2 texCoord = vWorldPosition.xz / uTextureScale;
+                    vec2 detailTexCoord = vWorldPosition.xz * 0.1;
 
-                    // Fix #1: Texture coordinates are now solely based on world position for seamlessness.
-                    // The scale (e.g., / 10.0) can be tweaked for visual preference.
-                    vec2 texCoord = vWorldPosition.xz / 10.0;
-
-                    // sample per-layer procedural canvas textures (cheap, mipmapped)
-                    vec3 dirtColor = texture2D(uDirt, texCoord).rgb;
-                    vec3 grassColor = texture2D(uGrass, texCoord).rgb;
-                    vec3 rockColor = texture2D(uRock, texCoord).rgb;
+                    // Sample the various textures
+                    vec3 grass1Color = texture2D(uGrass1, texCoord).rgb;
+                    vec3 grass2Color = texture2D(uGrass2, texCoord + vec2(23.0, 15.0)).rgb;
+                    vec3 grass3Color = texture2D(uGrass3, texCoord + vec2(7.0, 31.0)).rgb;
+                    vec3 dirtColor = texture2D(uDirt, texCoord + vec2(5.0, 10.0)).rgb;
+                    vec3 rock1Color = texture2D(uRock1, texCoord).rgb;
+                    vec3 rock2Color = texture2D(uRock2, texCoord + vec2(42.0, 51.0)).rgb;
                     vec3 snowColor = texture2D(uSnow, texCoord).rgb;
 
-                    // Add low-frequency noise to break banding
-                    float lowNoise = noise2d(vWorldPosition.xz * 0.05) * 0.3; // Increased noise impact
+                    // Per-fragment noise to blend grass textures and add subtle detail
+                    float noise = noise2d(vWorldPosition.xz * 0.1);
+                    float grassMix = smoothstep(0.4, 0.6, noise);
+                    vec3 grassBaseColor = mix(grass1Color, grass2Color, grassMix);
+                    float grass3Mix = smoothstep(0.5, 0.8, noise2d(vWorldPosition.xz * 0.2));
+                    grassBaseColor = mix(grassBaseColor, grass3Color, grass3Mix);
 
-                    // Base texture blending: dirt -> grass -> rock -> snow by elevation
-                    // Steep slopes override with rock
+                    // Blend the main materials based on blendWeights from the worker
+                    vec3 finalColor = vec3(0.0);
+                    finalColor += grassBaseColor * vBlendWeights.x;
+                    finalColor += dirtColor * vBlendWeights.y;
+                    finalColor += mix(rock1Color, rock2Color, smoothstep(0.5, 0.8, noise2d(vWorldPosition.xz * 0.05))) * vBlendWeights.z;
+                    finalColor += snowColor * vBlendWeights.w;
                     
-                    // Primary elevation-based blending (adjusted for height range -10 to 20)
-                    float dirtWeight = smoothstep(-10.0, 0.0, -height + lowNoise);  // Low elevations
-                    float grassWeight = smoothstep(-2.0, 10.0, height + lowNoise) * smoothstep(15.0, 8.0, height + lowNoise); // Mid elevations  
-                    float snowWeight = smoothstep(12.0, 18.0, height + lowNoise * 0.5); // High elevations
-                    
-                    // Rock on steep slopes (overrides elevation-based texturing)
-                    float slopeRock = smoothstep(0.3, 0.7, slope + lowNoise * 0.2);
-                    
-                    // Biome modifications to base blending
-                    // Fix #2: This logic is now based on a single biomeType per vertex, but the worker side will
-                    // send a dominant biome that is smoothly blended.
-                    if (biome == int(BIOMES_MOUNTAINS)) { // MOUNTAINS - more rock, snow starts lower
-                        snowWeight = smoothstep(10.0, 15.0, height + lowNoise * 0.5);
-                        slopeRock = smoothstep(0.2, 0.55, slope + lowNoise * 0.2); // More sensitive to slope
-                    } else if (biome == int(BIOMES_HILLS)) { // HILLS - standard blending
-                        grassWeight *= 1.2; // Slightly boost grass
-                    } else if (biome == int(BIOMES_PLAINS)) { // PLAINS - less rock, more grass
-                        grassWeight *= 1.5; // Stronger grass boost
-                        slopeRock = smoothstep(0.5, 0.9, slope + lowNoise * 0.2); // Less slope rock
-                        snowWeight = smoothstep(15.0, 20.0, height + lowNoise * 0.5); // Snow higher up
-                    } else { // CANYONS - more exposed rock
-                        dirtWeight *= 1.5; // Stronger dirt
-                        slopeRock = smoothstep(0.15, 0.45, slope + lowNoise * 0.2); // Very slope-sensitive
-                        snowWeight = smoothstep(8.0, 12.0, height + lowNoise * 0.5); // Snow lower
-                    }
-                    
-                    // Mix rock based on slope (rock overrides other textures on steep slopes)
-                    float dirtMix = dirtWeight * (1.0 - slopeRock);
-                    float grassMix = grassWeight * (1.0 - slopeRock);
-                    float rockMix = slopeRock + (1.0 - slopeRock) * smoothstep(8.0, 12.0, height + lowNoise); // Some rock at high elevation
-                    float snowMix = snowWeight;
-                    
-                    // Normalize weights
-                    float sum = dirtMix + grassMix + rockMix + snowMix;
-                    if (sum > 0.0) {
-                        dirtMix /= sum; 
-                        grassMix /= sum; 
-                        rockMix /= sum; 
-                        snowMix /= sum;
-                    } else {
-                        dirtMix = 1.0; // Fallback to dirt
-                    }
-
-                    vec3 color = dirtColor * dirtMix + grassColor * grassMix + rockColor * rockMix + snowColor * snowMix;
-
-                    // cheap detail noise (procedural, per-fragment) to modulate texture detail
-                    // Fix #3: This per-fragment noise is key to breaking up repetitive textures.
-                    // No need to bake this into the procedural canvas texture itself.
-                    float detail = noise2d(vWorldPosition.xz * 0.1);
-                    color *= mix(0.92, 1.12, detail);
-
-                    // lighting
+                    // Lighting
                     float light = max(dot(normalize(vNormal), normalize(uLightDir)), 0.0) * 0.7 + 0.3;
+                    float ao = 1.0 - clamp(vNormal.y * 0.5 + (1.0 - smoothstep(-1.0, 1.0, vWorldPosition.y)) * 0.15, 0.0, 0.6);
+                    float fresnel = pow(1.0 - max(dot(normalize(vNormal), normalize(-vWorldPosition)), 0.0), 3.0) * 0.08;
 
-                    // fake ambient occlusion using slope and height (darken crevices)
-                    float ao = 1.0 - clamp(slope * 0.5 + (1.0 - smoothstep(-1.0, 1.0, height)) * 0.15, 0.0, 0.6);
-
-                    // subtle fresnel (rim) to give silhouettes depth
-                    float viewDot = max(dot(normalize(vNormal), normalize(-vWorldPosition)), 0.0);
-                    float fresnel = pow(1.0 - viewDot, 3.0) * 0.08;
-
-                    vec3 finalColor = color * light * ao + fresnel;
-
-                    gl_FragColor = vec4(finalColor, 1.0);
+                    gl_FragColor = vec4(finalColor * light * ao + fresnel, 1.0);
                 }
             `,
             uniforms: {
+                uGrass1: { value: this.textures.grass1 },
+                uGrass2: { value: this.textures.grass2 },
+                uGrass3: { value: this.textures.grass3 },
                 uDirt: { value: this.textures.dirt },
-                uGrass: { value: this.textures.grass },
-                uRock: { value: this.textures.rock },
+                uRock1: { value: this.textures.rock1 },
+                uRock2: { value: this.textures.rock2 },
                 uSnow: { value: this.textures.snow },
-                uLightDir: { value: new THREE.Vector3(1, 1, 1).normalize() }
+                uLightDir: { value: new THREE.Vector3(1, 1, 1).normalize() },
+                uTextureScale: { value: CONFIG.GRAPHICS.textureScale }
             },
             side: THREE.FrontSide
         });
     }
 
     createTerrainWorker() {
+        // Worker code remains the same, but the onmessage handler will be updated
+        // to calculate biome blend weights instead of a single biomeType.
         const workerCode = `
             const BIOMES = {
                 MOUNTAINS: 0,
@@ -282,7 +205,7 @@ class SimpleTerrainRenderer {
                     baseHeight: -8
                 }
             };
-
+            
             const permutation = [151,160,137,91,90,15,131,13,201,95,96,53,194,233,7,225,140,36,103,30,69,142,8,99,37,240,21,10,23,190,6,148,247,120,234,75,0,26,197,62,94,252,219,203,117,35,11,32,57,177,33,88,237,149,56,87,174,20,125,136,171,168,68,175,74,165,71,134,139,48,27,166,77,146,158,231,83,111,229,122,60,211,133,230,220,105,92,41,55,46,245,40,244,102,143,54,65,25,63,161,1,216,80,73,209,76,132,187,208,89,18,169,200,196,135,130,116,188,159,86,164,100,109,198,173,186,3,64,52,217,226,250,124,123,5,202,38,147,118,126,255,82,85,212,207,206,59,227,47,16,58,17,182,189,28,42,223,183,170,213,119,248,152,2,44,154,163,70,221,153,101,155,167,43,172,9,129,22,39,253,19,98,108,110,79,113,224,232,178,185,112,104,218,246,97,228,251,34,242,193,238,210,144,12,191,179,162,241,81,51,145,235,249,14,239,107,49,192,214,31,181,199,106,157,184,84,204,176,115,121,50,45,127,4,150,254,138,236,205,93,222,114,67,29,24,72,243,141,128,195,78,66,215,61,156,180];
             const perm = new Uint8Array(512);
             for (let i = 0; i < 256; i++) {
@@ -309,7 +232,6 @@ class SimpleTerrainRenderer {
                                          lerp(u, grad(perm[AB + 1], x, y - 1, z - 1), grad(perm[BB + 1], x - 1, y - 1, z - 1))));
             }
 
-            // Multi-octave helper
             function fbm2(x, z, octaves, persistence, lacunarity, baseFreq, offset) {
                 let amp = 1.0;
                 let freq = baseFreq;
@@ -323,8 +245,7 @@ class SimpleTerrainRenderer {
                 }
                 return sum / Math.max(0.0001, norm);
             }
-
-            // map continuous noise value to biome index (soft boundary will be handled by blending multiple samples)
+            
             function noiseToBiomeIndex(n) {
                 if (n < -0.4) return BIOMES.CANYONS;
                 if (n < 0.0) return BIOMES.PLAINS;
@@ -332,69 +253,54 @@ class SimpleTerrainRenderer {
                 return BIOMES.MOUNTAINS;
             }
 
-            // sample biome noise at a point using multi-octave biome noise (gives variable biome sizes)
             function sampleBiomePoint(x, z, seed) {
                 const offset = seed * 0.001;
-                // Multi-octave biome noise for larger-scale features
                 const n = fbm2(x, z, 3, 0.55, 2.0, 0.008, offset);
                 return n;
             }
 
-            // For a vertex, sample biome at chunk grid points and blend parameters accordingly
             function sampleAndBlendBiomeParams(worldX, worldZ, seed, chunkSize) {
-                // Fix #2: The blending logic is now more robust and handles smooth transitions.
                 const chunkGridX = Math.floor(worldX / chunkSize) * chunkSize;
                 const chunkGridZ = Math.floor(worldZ / chunkSize) * chunkSize;
                 const half = chunkSize / 2;
 
-                // Sample at grid-aligned points (chunk corners) to ensure consistency across chunks
                 const corners = [
-                    [chunkGridX - half, chunkGridZ - half], // bottom-left
-                    [chunkGridX + half, chunkGridZ - half], // bottom-right
-                    [chunkGridX - half, chunkGridZ + half], // top-left
-                    [chunkGridX + half, chunkGridZ + half]  // top-right
+                    [chunkGridX - half, chunkGridZ - half],
+                    [chunkGridX + half, chunkGridZ - half],
+                    [chunkGridX - half, chunkGridZ + half],
+                    [chunkGridX + half, chunkGridZ + half]
                 ];
                 const center = [chunkGridX, chunkGridZ];
 
-                // Compute u,v (normalized local coords within the chunk grid, 0..1)
                 const localU = (worldX - (chunkGridX - half)) / chunkSize;
                 const localV = (worldZ - (chunkGridZ - half)) / chunkSize;
                 const u = Math.max(0, Math.min(1, localU));
                 const v = Math.max(0, Math.min(1, localV));
 
-                // Bilinear corner weights
                 const w00 = (1 - u) * (1 - v);
                 const w10 = u * (1 - v);
                 const w01 = (1 - u) * v;
                 const w11 = u * v;
 
-                // Center weight: stronger near center, weaker near edges
                 const dx = u - 0.5;
                 const dy = v - 0.5;
                 const dist = Math.sqrt(dx * dx + dy * dy) / Math.sqrt(0.5 * 0.5 + 0.5 * 0.5);
                 let centerWeight = 1.0 - Math.min(1.0, dist);
-                centerWeight = centerWeight * centerWeight * (3 - 2 * centerWeight); // smoothstep-like
+                centerWeight = centerWeight * centerWeight * (3 - 2 * centerWeight);
 
-                // Raw weights array
-                const rawWeights = [w00, w10, w01, w11, centerWeight * 0.75]; // center scaled a bit so corners still matter
+                const rawWeights = [w00, w10, w01, w11, centerWeight * 0.75];
 
-                // Sample biome noise at each sample point
                 const samplePoints = [
                     corners[0], corners[1], corners[2], corners[3], center
                 ];
 
-                // Accumulate param blends and biome dominances
                 let accum = {
-                    amplitude: 0,
-                    frequency: 0,
-                    octaves: 0,
-                    persistence: 0,
-                    lacunarity: 0,
-                    baseHeight: 0
+                    amplitude: 0, frequency: 0, octaves: 0,
+                    persistence: 0, lacunarity: 0, baseHeight: 0
                 };
                 const biomeWeightTotals = { 0: 0, 1: 0, 2: 0, 3: 0 };
-
                 let totalWeight = 0;
+
                 for (let i = 0; i < samplePoints.length; i++) {
                     const sp = samplePoints[i];
                     const w = rawWeights[i];
@@ -414,12 +320,10 @@ class SimpleTerrainRenderer {
                     totalWeight += w;
                 }
 
-                if (totalWeight <= 0) totalWeight = 1.0; // avoid div0
+                if (totalWeight <= 0) totalWeight = 1.0;
 
-                // Normalize accum
                 for (let k in accum) accum[k] /= totalWeight;
 
-                // Determine dominant biome (highest total weight)
                 let dominantBiome = 0;
                 let maxW = -1;
                 for (let b in biomeWeightTotals) {
@@ -432,14 +336,11 @@ class SimpleTerrainRenderer {
                 return { params: accum, dominantBiome };
             }
 
-            // Calculate height using blended params (supports fractional octaves)
             function calculateHeightWithParams(x, z, seed, params) {
                 const offset = seed * 0.001;
                 let height = params.baseHeight;
-
                 const fullOctaves = Math.floor(params.octaves);
                 const frac = params.octaves - fullOctaves;
-
                 let amplitude = params.amplitude;
                 let frequency = params.frequency;
 
@@ -450,7 +351,6 @@ class SimpleTerrainRenderer {
                 }
 
                 if (frac > 0) {
-                    // Partial octave contribution
                     height += perlin(x * frequency + offset, 0, z * frequency + offset) * amplitude * frac;
                 }
 
@@ -466,9 +366,60 @@ class SimpleTerrainRenderer {
 
                 const nx = heightL - heightR;
                 const nz = heightD - heightU;
-                const ny = 2.0; // Control steepness influence
+                const ny = 2.0;
                 const len = Math.sqrt(nx*nx + ny*ny + nz*nz);
                 return [nx/len, ny/len, nz/len];
+            }
+
+            // New function to calculate blend weights for the textures
+            function calculateBlendWeights(height, slope, biome) {
+                let grassWeight = 0.0;
+                let rockWeight = 0.0;
+                let snowWeight = 0.0;
+                let dirtWeight = 0.0;
+
+                // Base height- and slope-based blending
+                const slopeFactor = Math.min(1.0, slope * 2.0); // Rocks on steep slopes
+                const heightFactor = Math.max(0.0, height / 15.0); // For elevation
+
+                // Grass and dirt
+                grassWeight = (1.0 - slopeFactor) * (1.0 - heightFactor);
+                dirtWeight = slopeFactor * 0.2 + (1.0 - heightFactor) * 0.3;
+
+                // Rock on steep slopes
+                rockWeight = slopeFactor * 0.8 + heightFactor * 0.5;
+
+                // Snow at high elevations
+                snowWeight = Math.max(0.0, heightFactor - 0.7);
+
+                // Refine based on biome for variety
+                if (biome === BIOMES.MOUNTAINS) {
+                    rockWeight += 0.5;
+                    snowWeight = Math.max(snowWeight, heightFactor * 1.5 - 1.0);
+                    grassWeight *= 0.5;
+                } else if (biome === BIOMES.HILLS) {
+                    grassWeight += 0.3;
+                    rockWeight *= 0.5;
+                } else if (biome === BIOMES.PLAINS) {
+                    grassWeight += 1.0;
+                    rockWeight *= 0.1;
+                } else if (biome === BIOMES.CANYONS) {
+                    dirtWeight += 0.5;
+                    rockWeight += 0.5;
+                    grassWeight *= 0.2;
+                }
+                
+                // Normalize weights
+                const total = grassWeight + dirtWeight + rockWeight + snowWeight;
+                if (total > 0.0) {
+                    return [
+                        grassWeight / total,
+                        dirtWeight / total,
+                        rockWeight / total,
+                        snowWeight / total
+                    ];
+                }
+                return [1.0, 0.0, 0.0, 0.0]; // Default to grass if no valid weights
             }
 
             self.onmessage = function(e) {
@@ -479,14 +430,16 @@ class SimpleTerrainRenderer {
                         const worldX = point.x;
                         const worldZ = point.z;
 
-                        // Fix #2: This logic is now responsible for blending the biome params
-                        // to ensure smooth transitions between biomes, even at chunk borders.
                         const blend = sampleAndBlendBiomeParams(worldX, worldZ, seed, chunkSize);
                         const params = blend.params;
                         const dominant = blend.dominantBiome;
 
                         const height = calculateHeightWithParams(worldX, worldZ, seed, params);
                         const normal = calculateNormal(worldX, worldZ, seed, params);
+                        
+                        const slope = 1.0 - normal[1];
+                        const blendWeights = calculateBlendWeights(height, slope, dominant);
+
                         results.push({
                             x: worldX,
                             z: worldZ,
@@ -495,6 +448,7 @@ class SimpleTerrainRenderer {
                             normalY: normal[1],
                             normalZ: normal[2],
                             biomeType: dominant,
+                            blendWeights: blendWeights, // New output for texture blending
                             index: point.index
                         });
                     }
@@ -519,22 +473,29 @@ class SimpleTerrainRenderer {
             const positions = geometry.attributes.position.array;
             const normals = geometry.attributes.normal.array;
             const biomeTypes = geometry.attributes.biomeType.array;
+            const blendWeights = geometry.attributes.blendWeights.array;
 
             for (let i = 0; i < results.length; i++) {
-                const { height, normalX, normalY, normalZ, biomeType, index } = results[i];
-                const vertexIndex = index / 3; // Convert back to vertex index
+                const { height, normalX, normalY, normalZ, biomeType, blendWeights: weights, index } = results[i];
+                const vertexIndex = index / 3;
 
-                // index is the byte/array index already (vertexIndex * 3 in addTerrainChunk)
-                positions[index + 1] = height; // y is height
+                positions[index + 1] = height;
                 normals[index]      = normalX;
                 normals[index + 1] = normalY;
                 normals[index + 2] = normalZ;
                 biomeTypes[vertexIndex] = biomeType;
+
+                // Set the new blend weights attribute
+                blendWeights[vertexIndex * 4] = weights[0];
+                blendWeights[vertexIndex * 4 + 1] = weights[1];
+                blendWeights[vertexIndex * 4 + 2] = weights[2];
+                blendWeights[vertexIndex * 4 + 3] = weights[3];
             }
 
             geometry.attributes.position.needsUpdate = true;
             geometry.attributes.normal.needsUpdate = true;
             geometry.attributes.biomeType.needsUpdate = true;
+            geometry.attributes.blendWeights.needsUpdate = true;
             this.finishTerrainChunk(geometry, chunkX, chunkZ);
             this.pendingChunks.delete(batchId);
         }
@@ -558,9 +519,9 @@ class SimpleTerrainRenderer {
             CONFIG.TERRAIN.segments
         );
 
-        // Add normal and biome type attributes
         geometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(geometry.attributes.position.count * 3), 3));
         geometry.setAttribute('biomeType', new THREE.BufferAttribute(new Float32Array(geometry.attributes.position.count), 1));
+        geometry.setAttribute('blendWeights', new THREE.BufferAttribute(new Float32Array(geometry.attributes.position.count * 4), 4));
 
         const positions = geometry.attributes.position.array;
         const pointsToCalculate = [];
@@ -593,7 +554,6 @@ class SimpleTerrainRenderer {
         if (pointsToCalculate.length > 0) {
             const batchId = key;
             this.pendingChunks.set(batchId, { geometry, chunkX, chunkZ });
-            // structured clone supported; send array of small objects plus chunk metadata
             this.terrainWorker.postMessage({
                 type: 'calculateHeightBatch',
                 data: { points: pointsToCalculate, batchId, seed, chunkSize: CONFIG.TERRAIN.chunkSize }
