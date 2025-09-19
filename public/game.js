@@ -12,6 +12,8 @@ let terrainRenderer = null;
 const avatars = new Map();
 let currentPlayerChunkX = 0;
 let currentPlayerChunkZ = 0;
+let lastChunkX = 0; // NEW: Track previous chunk for change detection
+let lastChunkZ = 0; // NEW: Track previous chunk for change detection
 
 const loadRadius = 1; // How many chunks to load around player
 let lastChunkUpdateTime = 0;
@@ -159,45 +161,33 @@ function connectToServer() {
             case 'chunk_state_change':
                 handleChunkStateChange(data.payload);
                 break;
+            case 'proximity_update': // NEW: Handle proximity-based player list
+                handleProximityUpdate(data.payload);
+                break;
             default:
-                ui.updateStatus(`❓ Unknown server message: ${data.type}`);
+                ui.updateStatus(`❓ Unknown server message type: ${data.type}`);
         }
     };
 }
 
-function attemptWsReconnect() {
-    if (wsRetryAttempts < wsMaxRetries) {
-        wsRetryAttempts++;
-        ui.updateStatus(`Attempting server reconnect... (${wsRetryAttempts}/${wsMaxRetries})`);
-        setTimeout(connectToServer, wsRetryInterval);
-    } else {
-        ui.updateStatus("❌ Max server reconnection attempts reached. Please refresh.");
+function sendServerMessage(type, payload) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        const message = { type, payload };
+        ws.send(JSON.stringify(message));
+        ui.updateStatus(`📤 Sent ${type} to server`); // NEW: Log all sent messages
+        return true;
     }
+    ui.updateStatus(`❌ Failed to send ${type}: No server connection`);
+    return false;
 }
 
-// --- P2P CONNECTION MANAGEMENT ---
+// --- WEBRTC P2P ---
 function createPeerConnection(peerId, isInitiator = false) {
     ui.updateStatus(`Creating ${isInitiator ? 'outgoing' : 'incoming'} P2P connection to ${peerId}`);
-
-    const config = {
-        iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
-        ]
-    };
-
+    const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] };
     const connection = new RTCPeerConnection(config);
     let dataChannel = null;
-
-    const peerState = {
-        connection,
-        dataChannel: null,
-        state: 'connecting',
-        isInitiator,
-        targetPosition: null,
-        moveStartTime: null
-    };
-
+    const peerState = { connection, dataChannel: null, state: 'connecting', isInitiator, targetPosition: null, moveStartTime: null };
     peers.set(peerId, peerState);
 
     connection.onicecandidate = (event) => {
@@ -214,7 +204,6 @@ function createPeerConnection(peerId, isInitiator = false) {
         const state = connection.connectionState;
         ui.updateStatus(`P2P ${peerId}: ${state}`);
         peerState.state = state;
-
         if (state === 'connected') {
             ui.updateStatus(`✅ P2P connected to ${peerId}`);
         } else if (state === 'failed' || state === 'closed' || state === 'disconnected') {
@@ -238,50 +227,27 @@ function createPeerConnection(peerId, isInitiator = false) {
     return connection;
 }
 
-function setupDataChannel(channel, peerId) {
-    channel.onopen = () => {
-        ui.updateStatus(`📡 Data channel open with ${peerId}`);
-        const peer = peers.get(peerId);
-        if (peer) peer.state = 'connected';
+function setupDataChannel(dataChannel, peerId) {
+    dataChannel.onopen = () => {
+        ui.updateStatus(`P2P data channel opened with ${peerId}`);
         ui.updatePeerInfo(peers, avatars);
     };
 
-    channel.onclose = () => {
-        ui.updateStatus(`📡 Data channel closed with ${peerId}`);
-        const peer = peers.get(peerId);
-        if(peer) peer.state = 'disconnected';
+    dataChannel.onclose = () => {
+        ui.updateStatus(`P2P data channel closed with ${peerId}`);
+        ui.updatePeerInfo(peers, avatars);
     };
 
-    channel.onerror = (error) => {
-        ui.updateStatus(`❌ Data channel error with ${peerId}: ${error}`);
-    };
-
-    channel.onmessage = (event) => {
+    dataChannel.onmessage = (event) => {
+        let message;
         try {
-            const message = JSON.parse(event.data);
-            handleP2PMessage(message, peerId);
+            message = JSON.parse(event.data);
         } catch (error) {
-            ui.updateStatus(`❌ Invalid P2P message from ${peerId}`);
+            ui.updateStatus(`❌ Invalid P2P message from ${peerId}: ${error.message}`);
+            return;
         }
+        handleP2PMessage(message, peerId);
     };
-}
-
-function cleanupPeer(peerId) {
-    const peer = peers.get(peerId);
-    if (peer) {
-        if (peer.connection) {
-            peer.connection.close();
-        }
-        peers.delete(peerId);
-        ui.updateStatus(`🧹 Cleaned up peer ${peerId}`);
-    }
-    const avatar = avatars.get(peerId);
-    if (avatar) {
-        scene.remove(avatar);
-        avatars.delete(peerId);
-        ui.updateStatus(`👋 Avatar for ${peerId} removed.`);
-    }
-    ui.updatePeerInfo(peers, avatars);
 }
 
 function handleP2PMessage(message, fromPeer) {
@@ -301,6 +267,86 @@ function handleP2PMessage(message, fromPeer) {
     }
 }
 
+async function initiateConnection(peerId) {
+    const connection = createPeerConnection(peerId, true);
+    try {
+        const offer = await connection.createOffer();
+        await connection.setLocalDescription(offer);
+        sendServerMessage('webrtc_offer', {
+            recipientId: peerId,
+            senderId: clientId,
+            offer
+        });
+    } catch (error) {
+        ui.updateStatus(`❌ Failed to create offer for ${peerId}: ${error}`);
+    }
+}
+
+async function handleWebRTCOffer(payload) {
+    if (payload.recipientId !== clientId) return;
+    const peerId = payload.senderId;
+    const connection = createPeerConnection(peerId, false);
+    try {
+        await connection.setRemoteDescription(new RTCSessionDescription(payload.offer));
+        const answer = await connection.createAnswer();
+        await connection.setLocalDescription(answer);
+        sendServerMessage('webrtc_answer', {
+            recipientId: peerId,
+            senderId: clientId,
+            answer
+        });
+    } catch (error) {
+        ui.updateStatus(`❌ Failed to handle offer from ${peerId}: ${error}`);
+    }
+}
+
+async function handleWebRTCAnswer(payload) {
+    if (payload.recipientId !== clientId) return;
+    const peerId = payload.senderId;
+    const peer = peers.get(peerId);
+    if (peer && peer.connection) {
+        try {
+            await peer.connection.setRemoteDescription(new RTCSessionDescription(payload.answer));
+        } catch (error) {
+            ui.updateStatus(`❌ Failed to handle answer from ${peerId}: ${error}`);
+        }
+    }
+}
+
+async function handleWebRTCIceCandidate(payload) {
+    if (payload.recipientId !== clientId) return;
+    const peerId = payload.senderId;
+    const peer = peers.get(peerId);
+    if (peer && peer.connection) {
+        try {
+            await peer.connection.addIceCandidate(new RTCIceCandidate(payload.candidate));
+        } catch (error) {
+            ui.updateStatus(`❌ Failed to add ICE candidate from ${peerId}: ${error}`);
+        }
+    }
+}
+
+function cleanupPeer(peerId) {
+    const peer = peers.get(peerId);
+    if (peer) {
+        if (peer.dataChannel) {
+            peer.dataChannel.close();
+        }
+        if (peer.connection) {
+            peer.connection.close();
+        }
+        peers.delete(peerId);
+    }
+    const avatar = avatars.get(peerId);
+    if (avatar) {
+        scene.remove(avatar);
+        avatar.geometry.dispose();
+        avatar.material.dispose();
+        avatars.delete(peerId);
+    }
+    ui.updatePeerInfo(peers, avatars);
+}
+
 function broadcastP2P(message) {
     let sentCount = 0;
     peers.forEach((peer, peerId) => {
@@ -316,165 +362,54 @@ function broadcastP2P(message) {
     return sentCount;
 }
 
-// --- SERVER MESSAGE HANDLING ---
-async function handleWebRTCOffer(payload) {
-    const { senderId, offer } = payload;
-    if (!senderId || !offer) return;
-
-    const connection = createPeerConnection(senderId, false);
-
-    try {
-        await connection.setRemoteDescription(new RTCSessionDescription(offer));
-        const answer = await connection.createAnswer();
-        await connection.setLocalDescription(answer);
-
-        sendServerMessage('webrtc_answer', {
-            recipientId: senderId,
-            senderId: clientId,
-            answer: connection.localDescription
-        });
-    } catch (error) {
-        ui.updateStatus(`❌ WebRTC offer handling failed: ${error}`);
-        cleanupPeer(senderId);
-    }
-}
-
-async function handleWebRTCAnswer(payload) {
-    const { senderId, answer } = payload;
-    if (!senderId || !answer) return;
-
-    const peer = peers.get(senderId);
-    if (!peer) {
-        ui.updateStatus(`❌ No peer connection for answer from ${senderId}`);
-        return;
-    }
-
-    try {
-        await peer.connection.setRemoteDescription(new RTCSessionDescription(answer));
-    } catch (error) {
-        ui.updateStatus(`❌ WebRTC answer handling failed: ${error}`);
-        cleanupPeer(senderId);
-    }
-}
-
-async function handleWebRTCIceCandidate(payload) {
-    const { senderId, candidate } = payload;
-    if (!senderId || !candidate) return;
-
-    const peer = peers.get(senderId);
-    if (!peer) {
-        ui.updateStatus(`❌ No peer connection for ICE from ${senderId}`);
-        return;
-    }
-
-    try {
-        await peer.connection.addIceCandidate(new RTCIceCandidate(candidate));
-    } catch (error) {
-        ui.updateStatus(`❌ ICE candidate failed: ${error}`);
-    }
-}
-
-async function handleChunkStateChange(payload) {
+function handleChunkStateChange(payload) {
     const chunkState = payload.state;
-    if (!chunkState) return;
-
     ui.updateStatus(`🏠 Chunk update: ${chunkState.players.length} players, box: ${chunkState.boxPresent}`);
-
     const parts = payload.chunkId.split('_');
     const chunkX = parseInt(parts[1]) * 50;
     const chunkZ = parseInt(parts[2]) * 50;
     terrainRenderer.addTerrainChunk({ chunkX, chunkZ, seed: terrainSeed });
+    ui.updateButtonStates(isInChunk, boxInScene);
+    ui.updatePeerInfo(peers, avatars);
+}
 
-    if (chunkState.boxPresent) {
-        const existingBox = scene.getObjectByName('serverBox');
-        if (!existingBox) {
-            scene.add(box);
-            boxInScene = true;
-            ui.updateStatus("📦 Box added to scene (server authority)");
-        }
-    } else {
-        const existingBox = scene.getObjectByName('serverBox');
-        if (existingBox) {
-            scene.remove(existingBox);
-            boxInScene = false;
-            ui.updateStatus("📦 Box removed from scene (server authority)");
-        }
-    }
+function handleProximityUpdate(payload) { // NEW: Handle proximity update
+    const players = payload.players; // Array of { id, chunkId }
+    ui.updateStatus(`📍 Proximity update: ${players.length} players`);
 
-    const otherPlayers = chunkState.players.filter(p => p.id !== clientId);
-
-    peers.forEach((peer, peerId) => {
-        if (!otherPlayers.some(p => p.id === peerId)) {
-            ui.updateStatus(`👋 Player ${peerId} left chunk`);
+    // Remove peers and avatars not in the new list
+    const currentPeerIds = new Set(players.map(p => p.id));
+    peers.forEach((_, peerId) => {
+        if (!currentPeerIds.has(peerId) && peerId !== clientId) {
+            ui.updateStatus(`👋 Player ${peerId} left proximity`);
             cleanupPeer(peerId);
         }
     });
 
-    for (const player of otherPlayers) {
-        if (!peers.has(player.id)) {
+    // Add new peers and avatars
+    players.forEach(player => {
+        if (player.id !== clientId && !peers.has(player.id)) {
             const shouldInitiate = clientId < player.id;
             if (shouldInitiate) {
-                await initiateConnection(player.id);
+                initiateConnection(player.id);
             }
-        }
-        if (!avatars.has(player.id)) {
             const geometry = new THREE.SphereGeometry(1, 32, 32);
             const material = new THREE.MeshBasicMaterial({ color: Math.random() * 0xffffff });
             const avatar = new THREE.Mesh(geometry, material);
             scene.add(avatar);
             avatars.set(player.id, avatar);
-            ui.updateStatus(`🟢 Avatar for ${player.id} added.`);
+            ui.updateStatus(`🟢 Avatar for ${player.id} added at (0,0,0)`);
         }
-    }
+    });
 
-    ui.updateButtonStates(isInChunk, boxInScene);
     ui.updatePeerInfo(peers, avatars);
 }
 
-async function initiateConnection(peerId) {
-    ui.updateStatus(`🤝 Initiating connection to ${peerId}`);
-
-    const connection = createPeerConnection(peerId, true);
-
-    try {
-        const offer = await connection.createOffer();
-        await connection.setLocalDescription(offer);
-
-        sendServerMessage('webrtc_offer', {
-            recipientId: peerId,
-            senderId: clientId,
-            offer: connection.localDescription
-        });
-    } catch (error) {
-        ui.updateStatus(`❌ Failed to create offer for ${peerId}: ${error}`);
-        cleanupPeer(peerId);
-    }
-}
-
-// --- SERVER COMMUNICATION ---
-function sendServerMessage(type, payload) {
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-        ui.updateStatus("❌ Cannot send - server disconnected");
-        ui.updateConnectionStatus('disconnected', '❌ Server Disconnected');
-        return false;
-    }
-
-    try {
-        ws.send(JSON.stringify({ type, payload }));
-        ui.updateStatus(`📤 Sent to server: ${type}`);
-        return true;
-    } catch (error) {
-        ui.updateStatus(`❌ Failed to send message: ${error}`);
-        return false;
-    }
-}
-
-function updateChunksAroundPlayer(playerChunkX, playerChunkZ) {
+function updateChunksAroundPlayer(chunkX, chunkZ) {
     const chunkSize = 50;
-
     const shouldLoad = new Set();
-    for (let x = playerChunkX - loadRadius; x <= playerChunkX + loadRadius; x++) {
-        for (let z = playerChunkZ - loadRadius; z <= playerChunkZ + loadRadius; z++) {
+    for (let x = chunkX - loadRadius; x <= chunkX + loadRadius; x++) {
+        for (let z = chunkZ - loadRadius; z <= chunkZ + loadRadius; z++) {
             shouldLoad.add(`${x},${z}`);
         }
     }
@@ -497,6 +432,19 @@ function updateChunksAroundPlayer(playerChunkX, playerChunkZ) {
                 seed: terrainSeed
             });
         }
+    }
+
+    // NEW: Send chunk update to server
+    if (chunkX !== lastChunkX || chunkZ !== lastChunkZ) {
+        const newChunkId = `chunk_${chunkX}_${chunkZ}`;
+        const lastChunkId = lastChunkX !== null ? `chunk_${lastChunkX}_${lastChunkZ}` : null;
+        sendServerMessage('chunk_update', {
+            clientId,
+            newChunkId,
+            lastChunkId
+        });
+        lastChunkX = chunkX;
+        lastChunkZ = chunkZ;
     }
 }
 

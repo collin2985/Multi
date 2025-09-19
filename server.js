@@ -1,4 +1,3 @@
-// server.js
 const WebSocket = require('ws');
 const fs = require('fs');
 
@@ -8,11 +7,15 @@ console.log('Server started on port 8080');
 
 // A simple in-memory cache to hold our chunk data
 const chunkCache = new Map();
-// A map to quickly find a client's WebSocket connection by their player ID
+// A map to store client data with WebSocket, currentChunk, and lastChunk
 const clients = new Map();
 
 // Define a global terrain seed (can be fixed or dynamically generated)
 const terrainSeed = 12345; // Example: Random seed per server start
+
+// NEW: Queue for rate-limiting notifications
+const notificationQueue = [];
+const notificationInterval = 100; // Process every 100ms
 
 // Save the chunk state to its file
 function saveChunk(chunkId) {
@@ -54,6 +57,59 @@ function broadcastToChunk(chunkId, message) {
     console.log(`Broadcasted ${message.type} to chunk ${chunkId}`);
 }
 
+// NEW: Get players in a 3x3 grid around a chunk
+function getPlayersInProximity(chunkId) {
+    const parts = chunkId.split('_');
+    const chunkX = parseInt(parts[1]);
+    const chunkZ = parseInt(parts[2]);
+    const players = [];
+
+    // Check 3x3 grid (1-chunk radius)
+    for (let x = chunkX - 1; x <= chunkX + 1; x++) {
+        for (let z = chunkZ - 1; z <= chunkZ + 1; z++) {
+            const targetChunkId = `chunk_${x}_${z}`;
+            const chunkData = chunkCache.get(targetChunkId);
+            if (chunkData) {
+                chunkData.players.forEach(player => {
+                    players.push({ id: player.id, chunkId: targetChunkId });
+                });
+            }
+        }
+    }
+    return players;
+}
+
+// NEW: Process notification queue for rate limiting
+function processNotificationQueue() {
+    if (notificationQueue.length === 0) return;
+
+    // Group events by affected chunk to avoid duplicate notifications
+    const chunksToNotify = new Set(notificationQueue.map(event => event.chunkId));
+    notificationQueue.length = 0; // Clear queue
+
+    chunksToNotify.forEach(chunkId => {
+        // Get players in the 3x3 grid around this chunk
+        const proximatePlayers = getPlayersInProximity(chunkId);
+        const affectedClients = new Set(proximatePlayers.map(p => p.id));
+
+        // For each affected client, compute their own 3x3 grid player list
+        affectedClients.forEach(clientId => {
+            const clientData = clients.get(clientId);
+            if (!clientData || !clientData.ws || clientData.ws.readyState !== WebSocket.OPEN) return;
+
+            const clientPlayers = getPlayersInProximity(clientData.currentChunk);
+            clientData.ws.send(JSON.stringify({
+                type: 'proximity_update',
+                payload: { players: clientPlayers }
+            }));
+            console.log(`Sent proximity_update to ${clientId} with ${clientPlayers.length} players`);
+        });
+    });
+}
+
+// NEW: Start notification queue processing
+setInterval(processNotificationQueue, notificationInterval);
+
 // Handle new connections
 wss.on('connection', ws => {
     console.log('A new client connected');
@@ -80,13 +136,14 @@ wss.on('connection', ws => {
                     ws.send(JSON.stringify({ type: 'error', message: 'No clientId provided' }));
                     return;
                 }
-                ws.clientId = clientId; // Assign the client's ID
-                clients.set(clientId, ws); // Store in clients map
-                ws.currentChunk = chunkId;
+                // NEW: Store client data with ws, currentChunk, and lastChunk
+                ws.clientId = clientId;
+                clients.set(clientId, { ws, currentChunk: chunkId, lastChunk: null });
+                ws.currentChunk = chunkId; // Keep for backward compatibility
 
                 let chunkData = loadChunk(chunkId);
                 if (!chunkData) {
-                    // Initialize chunk if it doesn't exist, including the seed
+                    // Initialize chunk if it doesn't exist
                     chunkData = { players: [], boxPresent: false, seed: terrainSeed };
                     chunkCache.set(chunkId, chunkData);
                     saveChunk(chunkId);
@@ -99,11 +156,49 @@ wss.on('connection', ws => {
                     saveChunk(chunkId);
                 }
 
-                // Broadcast to ALL clients in the chunk, including the seed
-                broadcastToChunk(chunkId, {
-                    type: 'chunk_state_change',
-                    payload: { chunkId, state: chunkData }
-                });
+                // NEW: Queue notification for join
+                notificationQueue.push({ chunkId });
+
+                break;
+
+            case 'chunk_update': // NEW: Handle chunk update messages
+                const { clientId: updateClientId, newChunkId, lastChunkId } = parsedMessage.payload;
+                const clientData = clients.get(updateClientId);
+                if (!clientData) {
+                    console.error(`Client ${updateClientId} not found for chunk_update`);
+                    return;
+                }
+
+                // Update client data
+                clientData.currentChunk = newChunkId;
+                clientData.lastChunk = lastChunkId;
+                clientData.ws.currentChunk = newChunkId; // Update for compatibility
+
+                // Update chunk data
+                if (lastChunkId) {
+                    const oldChunkData = chunkCache.get(lastChunkId);
+                    if (oldChunkData) {
+                        oldChunkData.players = oldChunkData.players.filter(p => p.id !== updateClientId);
+                        saveChunk(lastChunkId);
+                    }
+                }
+
+                let newChunkData = chunkCache.get(newChunkId);
+                if (!newChunkData) {
+                    newChunkData = { players: [], boxPresent: false, seed: terrainSeed };
+                    chunkCache.set(newChunkId, newChunkData);
+                }
+                if (!newChunkData.players.some(p => p.id === updateClientId)) {
+                    newChunkData.players.push({ id: updateClientId });
+                    saveChunk(newChunkId);
+                }
+
+                // Queue notifications for both chunks
+                notificationQueue.push({ chunkId: newChunkId });
+                if (lastChunkId) {
+                    notificationQueue.push({ chunkId: lastChunkId });
+                }
+                console.log(`Processed chunk_update for ${updateClientId}: ${lastChunkId || 'none'} -> ${newChunkId}`);
 
                 break;
 
@@ -137,9 +232,9 @@ wss.on('connection', ws => {
             case 'webrtc_answer':
             case 'webrtc_ice_candidate':
                 const recipientId = parsedMessage.payload.recipientId;
-                const recipientWs = clients.get(recipientId);
-                if (recipientWs) {
-                    recipientWs.send(message);
+                const recipientData = clients.get(recipientId);
+                if (recipientData && recipientData.ws) {
+                    recipientData.ws.send(message);
                     console.log(`Forwarded ${parsedMessage.type} from ${ws.clientId} to ${recipientId}`);
                 } else {
                     console.error(`Recipient ${recipientId} not found`);
@@ -154,19 +249,18 @@ wss.on('connection', ws => {
     ws.on('close', () => {
         if (ws.clientId) {
             console.log(`Client ${ws.clientId} disconnected`);
-            clients.delete(ws.clientId);
-            if (ws.currentChunk) {
-                const chunkData = chunkCache.get(ws.currentChunk);
+            const clientData = clients.get(ws.clientId);
+            if (clientData && clientData.currentChunk) {
+                const chunkData = chunkCache.get(clientData.currentChunk);
                 if (chunkData) {
                     chunkData.players = chunkData.players.filter(p => p.id !== ws.clientId);
-                    console.log(`Client ${ws.clientId} left chunk: ${ws.currentChunk}`);
-                    saveChunk(ws.currentChunk);
-                    broadcastToChunk(ws.currentChunk, {
-                        type: 'chunk_state_change',
-                        payload: { chunkId: ws.currentChunk, state: chunkData }
-                    });
+                    console.log(`Client ${ws.clientId} left chunk: ${clientData.currentChunk}`);
+                    saveChunk(clientData.currentChunk);
+                    // Queue notification for disconnection
+                    notificationQueue.push({ chunkId: clientData.currentChunk });
                 }
             }
+            clients.delete(ws.clientId);
         }
     });
 });
@@ -177,8 +271,8 @@ const interval = setInterval(() => {
     chunkCache.forEach((chunkData, chunkId) => {
         const playersToRemove = [];
         chunkData.players.forEach(player => {
-            const clientWs = clients.get(player.id);
-            if (!clientWs) {
+            const clientData = clients.get(player.id);
+            if (!clientData || !clientData.ws || clientData.ws.readyState !== WebSocket.OPEN) {
                 console.log(`Removing disconnected player ${player.id} from chunk ${chunkId}`);
                 playersToRemove.push(player.id);
             }
@@ -187,10 +281,7 @@ const interval = setInterval(() => {
         if (playersToRemove.length > 0) {
             chunkData.players = chunkData.players.filter(p => !playersToRemove.includes(p.id));
             saveChunk(chunkId);
-            broadcastToChunk(chunkId, {
-                type: 'chunk_state_change',
-                payload: { chunkId, state: chunkData }
-            });
+            notificationQueue.push({ chunkId });
         }
     });
     console.log('Periodic player check finished');
