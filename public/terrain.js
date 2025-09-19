@@ -123,40 +123,48 @@ class SimpleTerrainRenderer {
                     // Add low-frequency noise to break banding
                     float lowNoise = noise2d(vWorldPosition.xz * 0.05) * 0.15;
 
-                    // Biome-specific texture blending
-                    float dirtMix, grassMix, rockMix, snowMix;
+                    // Base texture blending: dirt -> grass -> rock -> snow by elevation
+                    // Steep slopes override with rock
                     
-                    if (biome == 0) { // MOUNTAINS
-                        // More rock and snow at elevation
-                        dirtMix = smoothstep(2.0, 5.0, height * 0.1 + lowNoise * 0.3);
-                        grassMix = smoothstep(-1.0, 3.0, height * 0.1 - slope * 0.5 + lowNoise * 0.2);
-                        rockMix = smoothstep(0.2, 0.6, slope * 1.2 + lowNoise * 0.1);
-                        snowMix = smoothstep(8.0, 12.0, height * 0.1 + lowNoise * 0.1);
-                    } else if (biome == 1) { // HILLS  
-                        // Balanced mix with moderate slopes
-                        dirtMix = smoothstep(0.5, 2.0, height * 0.1 + lowNoise * 0.5);
-                        grassMix = smoothstep(-2.0, 1.0, height * 0.1 - slope * 0.3 + lowNoise * 0.4);
-                        rockMix = smoothstep(0.4, 0.8, slope * 0.8 + lowNoise * 0.1);
-                        snowMix = smoothstep(4.0, 6.0, height * 0.1 + lowNoise * 0.2);
-                    } else if (biome == 2) { // PLAINS
-                        // Mostly grass and dirt, minimal rock
-                        dirtMix = smoothstep(0.0, 1.0, height * 0.1 + lowNoise * 0.8);
-                        grassMix = smoothstep(-3.0, 0.0, height * 0.1 - slope * 0.1 + lowNoise * 0.6);
-                        rockMix = smoothstep(0.7, 1.0, slope * 0.4 + lowNoise * 0.05);
-                        snowMix = smoothstep(2.0, 3.0, height * 0.1 + lowNoise * 0.3);
-                    } else { // CANYONS
-                        // More exposed rock, less vegetation
-                        dirtMix = smoothstep(1.0, 3.0, height * 0.1 + lowNoise * 0.4);
-                        grassMix = smoothstep(-1.0, 1.0, height * 0.1 - slope * 0.8 + lowNoise * 0.3);
-                        rockMix = smoothstep(0.1, 0.5, slope * 1.5 + lowNoise * 0.2);
-                        snowMix = smoothstep(6.0, 8.0, height * 0.1 + lowNoise * 0.1);
+                    // Primary elevation-based blending (same for all biomes)
+                    float dirtWeight = smoothstep(-5.0, 2.0, -height + lowNoise);  // Low elevations
+                    float grassWeight = smoothstep(-2.0, 8.0, height + lowNoise) * smoothstep(12.0, 6.0, height + lowNoise); // Mid elevations  
+                    float snowWeight = smoothstep(10.0, 15.0, height + lowNoise * 0.5); // High elevations
+                    
+                    // Rock on steep slopes (overrides elevation-based texturing)
+                    float slopeRock = smoothstep(0.3, 0.7, slope + lowNoise * 0.1);
+                    
+                    // Biome modifications to base blending
+                    if (biome == 0) { // MOUNTAINS - more rock, snow starts lower
+                        snowWeight = smoothstep(8.0, 12.0, height + lowNoise * 0.5);
+                        slopeRock = smoothstep(0.25, 0.6, slope + lowNoise * 0.1); // More sensitive to slope
+                    } else if (biome == 1) { // HILLS - standard blending
+                        // Use base values
+                    } else if (biome == 2) { // PLAINS - less rock, more grass
+                        grassWeight *= 1.3; // Boost grass
+                        slopeRock = smoothstep(0.5, 0.8, slope + lowNoise * 0.1); // Less slope rock
+                        snowWeight = smoothstep(12.0, 18.0, height + lowNoise * 0.5); // Snow higher up
+                    } else { // CANYONS - more exposed rock
+                        dirtWeight *= 1.2; // More dirt in low areas
+                        slopeRock = smoothstep(0.2, 0.5, slope + lowNoise * 0.1); // Very slope-sensitive
+                        snowWeight = smoothstep(6.0, 10.0, height + lowNoise * 0.5); // Snow lower (high peaks)
                     }
-
+                    
+                    // Mix rock based on slope (rock overrides other textures on steep slopes)
+                    float dirtMix = dirtWeight * (1.0 - slopeRock);
+                    float grassMix = grassWeight * (1.0 - slopeRock);
+                    float rockMix = slopeRock + (1.0 - slopeRock) * smoothstep(6.0, 10.0, height + lowNoise); // Some rock at high elevation too
+                    float snowMix = snowWeight; // Snow can appear on steep slopes
+                    
+                    // Normalize weights
                     float sum = dirtMix + grassMix + rockMix + snowMix;
                     if (sum > 0.0) {
-                        dirtMix /= sum; grassMix /= sum; rockMix /= sum; snowMix /= sum;
+                        dirtMix /= sum; 
+                        grassMix /= sum; 
+                        rockMix /= sum; 
+                        snowMix /= sum;
                     } else {
-                        grassMix = 1.0;
+                        dirtMix = 1.0; // Fallback to dirt
                     }
 
                     vec3 color = dirtColor * dirtMix + grassColor * grassMix + rockColor * rockMix + snowColor * snowMix;
