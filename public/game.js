@@ -13,7 +13,7 @@ const avatars = new Map();
 let currentPlayerChunkX = 0;
 let currentPlayerChunkZ = 0;
 
-const loadRadius = 2; // How many chunks to load around player
+const loadRadius = 1; // How many chunks to load around player
 let lastChunkUpdateTime = 0;
 const chunkUpdateInterval = 1000; // Check every second
 let chunkLoadQueue = [];
@@ -515,7 +515,7 @@ function processChunkQueue() {
 }
 
 // --- ANIMATION LOOP ---
-const playerSpeed = 0.05;
+const playerSpeed = 0.01;
 const stopThreshold = 0.01;
 let lastFrameTime = performance.now();
 
