@@ -1,11 +1,10 @@
-// ===== THREE.JS TERRAIN AND CHARACTER SYSTEM - ADAPTED FOR game.js =====
+// ===== THREE.JS TERRAIN SYSTEM - ADAPTED FOR game.js =====
 // This is a single-file implementation of a procedural terrain system
 // adapted from terrain.js to fit the SimpleTerrainRenderer class
 // expected by game.js.
 
 // 1. IMPORTS
 import * as THREE from 'three';
-import { GLTFLoader } from './GLTFLoader.js'; // Assuming this is the correct path
 
 // 2. CONSTANTS AND CONFIGURATION
 const CONFIG = Object.freeze({
@@ -24,12 +23,6 @@ const CONFIG = Object.freeze({
     },
     CAMERA: {
         offset: { x: 0, y: 35, z: -20 }
-    },
-    CHARACTER: {
-        rotationSpeed: 5,
-        groundClearance: 0.1,
-        moveSpeed: 3.7,
-        maxYSpeed: 2.0
     }
 });
 
@@ -230,7 +223,7 @@ export class SimpleTerrainRenderer {
                 gl_FragColor=vec4(baseColor,1.0);
             }
         `;
-        
+
         // Dummy textures since game.js doesn't provide a renderer to create them
         const dummyTexture = new THREE.Texture();
         this.terrainMaterial = new THREE.ShaderMaterial({
