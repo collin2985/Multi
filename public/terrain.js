@@ -152,6 +152,7 @@ class SimpleTerrainRenderer {
                     vec3 rock = texture2D(uRock, vUv * repeat).rgb;
                     vec3 snow = texture2D(uSnow, vUv * repeat).rgb;
 
+                    // Blend different grass textures
                     float noise = rand(vUv * 10.0);
                     float wGrass1 = clamp(noise, 0.0, 0.5);
                     float wGrass2 = clamp(noise - 0.3, 0.0, 0.5);
@@ -164,32 +165,37 @@ class SimpleTerrainRenderer {
                     }
                     vec3 grass = grass1 * wGrass1 + grass2 * wGrass2 + grass3 * wGrass3;
 
+                    // Base terrain weights by height
                     float wDirt = 1.0 - smoothstep(-4.0, 0.0, vHeight);
                     float wGrass = smoothstep(-4.0, 0.0, vHeight) * (1.0 - smoothstep(1.0, 7.5, vHeight));
                     float wSnow = smoothstep(1.0, 7.5, vHeight);
-                    float wRock = 0.0;
+                    
+                    // FIXED: Initialize rock weight properly based on slope
                     float slopeNoise = rand(vUv * 5.0) * 0.2 + 0.8;
-                    float slopeFactor = smoothstep(0.02, 0.20, vSlope) * slopeNoise; // Loosened for more rock visibility
-                    float heightBoost = smoothstep(3.0, 8.0, vHeight); // Lowered thresholds for earlier rock at height
-                    slopeFactor = mix(slopeFactor, 1.0, heightBoost * 0.7); // Increased influence of height boost
+                    float slopeFactor = smoothstep(0.1, 0.4, vSlope) * slopeNoise; // Lowered thresholds
+                    float heightBoost = smoothstep(2.0, 6.0, vHeight); // Rock appears earlier at height
+                    float wRock = slopeFactor + heightBoost * 0.5; // FIXED: Proper initial rock weight
+                    wRock = clamp(wRock, 0.0, 1.0);
 
+                    // Apply biome modifiers
                     if (vBiomeIndex < 0.5) { // Canyons
-                        wDirt *= 1.2;
-                        wGrass *= 0.5;
+                        wDirt *= 1.3;
+                        wGrass *= 0.4;
                         wSnow *= 0.1;
-                        wRock *= 1.2; // More rock in canyons
-                    } else if (vBiomeIndex < 1.5) { // Plains
-                        wGrass *= 1.2;
+                        wRock *= 1.4;
+                    } else if (vBiomeIndex < 1.5) { // Plains  
+                        wGrass *= 1.3;
                         wDirt *= 0.8;
-                        wRock *= 0.8; // Less rock in plains
+                        wRock *= 0.6;
                     } else if (vBiomeIndex < 2.5) { // Hills
                         wGrass *= 1.1;
-                        wRock *= 1.3; // More rock in hills
+                        wRock *= 1.2;
                     } else { // Mountains
                         wSnow *= 1.2;
-                        wRock *= 1.5; // Even more rock in mountains
+                        wRock *= 1.6;
                     }
 
+                    // Normalize weights
                     float total = wDirt + wGrass + wSnow + wRock;
                     if (total > 0.0) {
                         wDirt /= total;
@@ -198,13 +204,14 @@ class SimpleTerrainRenderer {
                         wRock /= total;
                     }
 
-                    vec3 baseColor = dirt * wDirt + grass * wGrass + snow * wSnow + rock * wRock; // Added rock to base blend
+                    // FIXED: Include rock in base color blend
+                    vec3 baseColor = dirt * wDirt + grass * wGrass + snow * wSnow + rock * wRock;
 
-                    baseColor = mix(baseColor, rock, slopeFactor);
-
+                    // Lighting and effects
                     float light = max(dot(normalize(vNormal), normalize(uLightDir)), 0.0) * 0.7 + 0.3;
                     float ao = 1.0 - clamp(vNormal.y * 0.5 + (1.0 - smoothstep(-1.0, 1.0, vWorldPosition.y)) * 0.15, 0.0, 0.6);
                     float fresnel = pow(1.0 - max(dot(normalize(vNormal), normalize(-vWorldPosition)), 0.0), 3.0) * 0.08;
+                    
                     gl_FragColor = vec4(baseColor * light * ao + fresnel, 1.0);
                 }
             `,
@@ -319,8 +326,10 @@ class SimpleTerrainRenderer {
 
             function sampleBiomePoint(x, z, seed) {
                 const offset = seed * 0.001;
-                const n = fbm2(x, z, 3, 0.55, 2.0, 0.004, offset); // Reduced frequency for larger biomes
-                const perturb = fbm2(x, z, 2, 0.5, 2.0, 0.001, offset + 1000) * 0.2;
+                // FIXED: Much lower frequency for larger biomes (was 0.004, now 0.0008)
+                const n = fbm2(x, z, 3, 0.55, 2.0, 0.0008, offset);
+                // FIXED: Lower frequency for perturbation too
+                const perturb = fbm2(x, z, 2, 0.5, 2.0, 0.0002, offset + 1000) * 0.2;
                 return n + perturb;
             }
 
@@ -330,7 +339,8 @@ class SimpleTerrainRenderer {
                 let params = { ...BIOME_PARAMS[biomeIndex] };
 
                 const thresholds = [-0.4, 0.0, 0.45, 1.0];
-                const blendRange = 0.3; // Increased for wider transitions
+                // FIXED: Much larger blend range for smoother transitions
+                const blendRange = 0.8; // Was 0.3, now 0.8 for wider transitions
                 for (let i = 0; i < thresholds.length - 1; i++) {
                     if (n >= thresholds[i] - blendRange && n <= thresholds[i] + blendRange) {
                         const nextBiome = noiseToBiomeIndex(thresholds[i] + blendRange);
@@ -390,7 +400,7 @@ class SimpleTerrainRenderer {
                 const nz = heightD - heightU;
                 const ny = 2.0;
                 const len = Math.sqrt(nx*nx + ny*ny + nz*nz);
-                return [nx/len, ny/len, nz/len];
+                return [nx/len, ny/len, nz/nz];
             }
 
             function interpolateHeight(neighborHeight, worldX, worldZ, seed, t) {
@@ -515,18 +525,6 @@ class SimpleTerrainRenderer {
                 if (row <= -1 && neighbors[2]) {
                     t = (row + overlap) / overlap;
                     neighbor = {
-                        height: getHeightFromChunk(neighbors[2], localX, localZ + CONFIG.TERRAIN.chunkSize),
-                        biomeIndex: getBiomeFromChunk(neighbors[2], localX, localZ + CONFIG.TERRAIN.chunkSize)
-                    };
-                } else if (row >= CONFIG.TERRAIN.segments && neighbors[3]) {
-                    t = (CONFIG.TERRAIN.segments + overlap - row) / overlap;
-                    neighbor = {
-                        height: getHeightFromChunk(neighbors[3], localX, localZ - CONFIG.TERRAIN.chunkSize),
-                        biomeIndex: getBiomeFromChunk(neighbors[3], localX, localZ - CONFIG.TERRAIN.chunkSize)
-                    };
-                } else if (col <= -1 && neighbors[0]) {
-                    t = (col + overlap) / overlap;
-                    neighbor = {
                         height: getHeightFromChunk(neighbors[0], localX + CONFIG.TERRAIN.chunkSize, localZ),
                         biomeIndex: getBiomeFromChunk(neighbors[0], localX + CONFIG.TERRAIN.chunkSize, localZ)
                     };
@@ -643,4 +641,16 @@ class SimpleTerrainRenderer {
     }
 }
 
-export { SimpleTerrainRenderer };
+export { SimpleTerrainRenderer };FromChunk(neighbors[2], localX, localZ + CONFIG.TERRAIN.chunkSize),
+                        biomeIndex: getBiomeFromChunk(neighbors[2], localX, localZ + CONFIG.TERRAIN.chunkSize)
+                    };
+                } else if (row >= CONFIG.TERRAIN.segments && neighbors[3]) {
+                    t = (CONFIG.TERRAIN.segments + overlap - row) / overlap;
+                    neighbor = {
+                        height: getHeightFromChunk(neighbors[3], localX, localZ - CONFIG.TERRAIN.chunkSize),
+                        biomeIndex: getBiomeFromChunk(neighbors[3], localX, localZ - CONFIG.TERRAIN.chunkSize)
+                    };
+                } else if (col <= -1 && neighbors[0]) {
+                    t = (col + overlap) / overlap;
+                    neighbor = {
+                        height: getHeight
