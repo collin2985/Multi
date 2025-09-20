@@ -18,7 +18,7 @@ const CONFIG = Object.freeze({
         maxCacheSize: 10000
     },
     GRAPHICS: {
-        textureSize: 48,
+        textureSize: 128,
         textureRepeat: 2
     },
     CAMERA: {
@@ -207,7 +207,7 @@ export class SimpleTerrainRenderer {
             varying vec3 vNormal;
             varying vec2 vUv;
             void main(){
-                float repeat=5.3;
+                float repeat=12.0;
                 vec3 dirt=texture2D(uDirt,vUv*repeat).rgb;
                 vec3 grass=texture2D(uGrass,vUv*repeat).rgb;
                 vec3 rock=texture2D(uRock,vUv*repeat).rgb;
