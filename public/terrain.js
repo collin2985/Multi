@@ -400,7 +400,7 @@ class SimpleTerrainRenderer {
                 const nz = heightD - heightU;
                 const ny = 2.0;
                 const len = Math.sqrt(nx*nx + ny*ny + nz*nz);
-                return [nx/len, ny/len, nz/nz];
+                return [nx/len, ny/len, nz/len];
             }
 
             function interpolateHeight(neighborHeight, worldX, worldZ, seed, t) {
@@ -525,6 +525,18 @@ class SimpleTerrainRenderer {
                 if (row <= -1 && neighbors[2]) {
                     t = (row + overlap) / overlap;
                     neighbor = {
+                        height: getHeightFromChunk(neighbors[2], localX, localZ + CONFIG.TERRAIN.chunkSize),
+                        biomeIndex: getBiomeFromChunk(neighbors[2], localX, localZ + CONFIG.TERRAIN.chunkSize)
+                    };
+                } else if (row >= CONFIG.TERRAIN.segments && neighbors[3]) {
+                    t = (CONFIG.TERRAIN.segments + overlap - row) / overlap;
+                    neighbor = {
+                        height: getHeightFromChunk(neighbors[3], localX, localZ - CONFIG.TERRAIN.chunkSize),
+                        biomeIndex: getBiomeFromChunk(neighbors[3], localX, localZ - CONFIG.TERRAIN.chunkSize)
+                    };
+                } else if (col <= -1 && neighbors[0]) {
+                    t = (col + overlap) / overlap;
+                    neighbor = {
                         height: getHeightFromChunk(neighbors[0], localX + CONFIG.TERRAIN.chunkSize, localZ),
                         biomeIndex: getBiomeFromChunk(neighbors[0], localX + CONFIG.TERRAIN.chunkSize, localZ)
                     };
@@ -641,16 +653,4 @@ class SimpleTerrainRenderer {
     }
 }
 
-export { SimpleTerrainRenderer };FromChunk(neighbors[2], localX, localZ + CONFIG.TERRAIN.chunkSize),
-                        biomeIndex: getBiomeFromChunk(neighbors[2], localX, localZ + CONFIG.TERRAIN.chunkSize)
-                    };
-                } else if (row >= CONFIG.TERRAIN.segments && neighbors[3]) {
-                    t = (CONFIG.TERRAIN.segments + overlap - row) / overlap;
-                    neighbor = {
-                        height: getHeightFromChunk(neighbors[3], localX, localZ - CONFIG.TERRAIN.chunkSize),
-                        biomeIndex: getBiomeFromChunk(neighbors[3], localX, localZ - CONFIG.TERRAIN.chunkSize)
-                    };
-                } else if (col <= -1 && neighbors[0]) {
-                    t = (col + overlap) / overlap;
-                    neighbor = {
-                        height: getHeight
+export { SimpleTerrainRenderer };
