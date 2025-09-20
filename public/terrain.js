@@ -18,7 +18,7 @@ const CONFIG = Object.freeze({
         maxCacheSize: 10000
     },
     GRAPHICS: {
-        textureSize: 24,
+        textureSize: 48,
         textureRepeat: 2
     },
     CAMERA: {

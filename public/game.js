@@ -568,7 +568,7 @@ function animate() {
     checkAndReconnectPeers();
     processChunkQueue();
 
-    const cameraOffset = new THREE.Vector3(0, 40, 25);  //0, 15, 5 sets a good height
+    const cameraOffset = new THREE.Vector3(0, 15, 5);  //0, 15, 5 sets a good height
     const cameraTargetPosition = playerObject.position.clone().add(cameraOffset);
     const smoothedCameraPosition = camera.position.lerp(cameraTargetPosition, 0.5);
     camera.position.copy(smoothedCameraPosition);
