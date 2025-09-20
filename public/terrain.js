@@ -207,6 +207,9 @@ class SimpleTerrainRenderer {
                     // FIXED: Include rock in base color blend
                     vec3 baseColor = dirt * wDirt + grass * wGrass + snow * wSnow + rock * wRock;
 
+                    // CRITICAL FIX: Apply additional rock on steep slopes (this was missing!)
+                    baseColor = mix(baseColor, rock, slopeFactor * 0.7); // Added slope-based rock overlay
+
                     // Lighting and effects
                     float light = max(dot(normalize(vNormal), normalize(uLightDir)), 0.0) * 0.7 + 0.3;
                     float ao = 1.0 - clamp(vNormal.y * 0.5 + (1.0 - smoothstep(-1.0, 1.0, vWorldPosition.y)) * 0.15, 0.0, 0.6);
