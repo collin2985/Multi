@@ -207,7 +207,7 @@ export class SimpleTerrainRenderer {
             varying vec3 vNormal;
             varying vec2 vUv;
             void main(){
-                float repeat=12;
+                float repeat=12.0;
                 vec3 dirt=texture2D(uDirt,vUv*repeat).rgb;
                 vec3 grass=texture2D(uGrass,vUv*repeat).rgb;
                 vec3 rock=texture2D(uRock,vUv*repeat).rgb;
