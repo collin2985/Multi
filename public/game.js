@@ -329,7 +329,7 @@ function handleP2PMessage(message, fromPeer) {
             }
             break;
         case 'player_sync':
-            const syncPeer = pears.get(fromPeer);
+            const syncPeer = peers.get(fromPeer);
             const syncAvatar = avatars.get(fromPeer);
             if (syncPeer && syncAvatar) {
                 syncAvatar.position.fromArray(message.payload.position);
@@ -584,7 +584,11 @@ function animate() {
     }
 
     // Adjust player Y-position to terrain height
-    playerObject.position.y = terrainRenderer.getHeightAtPosition(playerObject.position.x, playerObject.position.z) + playerHeightOffset;
+    try {
+        playerObject.position.y = terrainRenderer.getHeightAtPosition(playerObject.position.x, playerObject.position.z) + playerHeightOffset;
+    } catch (error) {
+        ui.updateStatus(`❌ Error adjusting player height: ${error.message}`);
+    }
 
     avatars.forEach((avatar, peerId) => {
         const peer = peers.get(peerId);
