@@ -23,6 +23,10 @@ const CONFIG = Object.freeze({
     },
     CAMERA: {
         offset: { x: 0, y: 35, z: -20 }
+    },
+    TERRAIN_EDIT: {
+        INTENSITY: 1.5,
+        RADIUS: 2.0
     }
 });
 
@@ -104,8 +108,7 @@ function getWorkerCode() {
         }
         function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
         const perlin = new OptimizedPerlin(12345);
-        const calculateHeight = (x,z) => {
-            if(workerHeightCache.has(\`\${x},\${z}\`)) return workerHeightCache.get(\`\${x},\${z}\`);
+        function calculateBaseHeight(x,z) {
             let base=0, amp=1, freq=0.02;
             for(let o=0;o<3;o++){ base+=perlin.noise(x*freq,z*freq,10+o*7)*amp; amp*=0.5; freq*=2; }
             let maskRaw = perlin.noise(x*0.006,z*0.006,400);
@@ -115,21 +118,31 @@ function getWorkerCode() {
             mountain *= 40 * mask;
             const elevNorm = clamp((base+mountain+2)/25,0,1);
             let jagged = perlin.noise(x*0.8,z*0.8,900)*1.2*elevNorm + perlin.noise(x*1.6,z*1.6,901)*0.6*elevNorm;
-            const height = base + mountain + jagged;
-            workerHeightCache.set(\`\${x},\${z}\`, height);
-            return height;
-        };
+            return base + mountain + jagged;
+        }
+        function getDelta(mod, px, pz) {
+            const distSq = (px - mod.x) ** 2 + (pz - mod.z) ** 2;
+            const dist = Math.sqrt(distSq);
+            if (dist > mod.radius) return 0;
+            const falloff = Math.exp(-distSq / (2 * mod.radius ** 2));
+            return mod.heightDelta * falloff;
+        }
         self.onmessage = function(e) {
             const { type, data } = e.data;
-            if(type==='calculateHeightBatch'){
-                const { points, batchId } = data;
+            if(type === 'calculateHeightBatch' || type === 'applyModifications') {
+                const { points, batchId, mods = [] } = data;
                 const results = [];
                 const eps = 0.1;
                 for(let i=0;i<points.length;i++){
                     const { x, z, index } = points[i];
-                    const h = calculateHeight(x,z);
-                    const hL = calculateHeight(x-eps,z), hR = calculateHeight(x+eps,z);
-                    const hD = calculateHeight(x,z-eps), hU = calculateHeight(x,z+eps);
+                    let h = workerHeightCache.has(\`\${x},\${z}\`) ? workerHeightCache.get(\`\${x},\${z}\`) : calculateBaseHeight(x,z);
+                    mods.forEach(mod => {
+                        h += getDelta(mod, x, z);
+                    });
+                    const hL = calculateBaseHeight(x-eps,z) + mods.reduce((sum, mod) => sum + getDelta(mod, x-eps, z), 0);
+                    const hR = calculateBaseHeight(x+eps,z) + mods.reduce((sum, mod) => sum + getDelta(mod, x+eps, z), 0);
+                    const hD = calculateBaseHeight(x,z-eps) + mods.reduce((sum, mod) => sum + getDelta(mod, x, z-eps), 0);
+                    const hU = calculateBaseHeight(x,z+eps) + mods.reduce((sum, mod) => sum + getDelta(mod, x, z+eps), 0);
                     const nx = hL - hR;
                     const ny = 2 * eps;
                     const nz = hD - hU;
@@ -139,6 +152,7 @@ function getWorkerCode() {
                         normal: { x: nx/len, y: ny/len, z: nz/len },
                         index
                     });
+                    workerHeightCache.set(\`\${x},\${z}\`, h);
                 }
                 self.postMessage({ type:'heightBatchResult', data:{ results, batchId } });
             }
@@ -157,6 +171,8 @@ export class SimpleTerrainRenderer {
         this.pendingChunks = new Map();
         this.heightCache = new Map();
         this.normalCache = new Map();
+        this.modificationCache = new Map(); // Cache for modification effects
+        this.chunkModifications = new Map(); // Store mods per chunk
         this.collisionManager = {
             addColliderToChunk: () => {},
             removeChunkColliders: () => {}
@@ -307,7 +323,7 @@ export class SimpleTerrainRenderer {
         }
     }
 
-    addTerrainChunk({ chunkX, chunkZ, seed }) {
+    addTerrainChunk({ chunkX, chunkZ, seed, modifications = [] }) {
         const key = `${chunkX/CONFIG.TERRAIN.chunkSize},${chunkZ/CONFIG.TERRAIN.chunkSize}`;
         if (this.terrainChunks.has(key)) return;
 
@@ -328,14 +344,41 @@ export class SimpleTerrainRenderer {
         if (pointsToCalculate.length > 0) {
             const batchId = `${chunkX},${chunkZ}`;
             this.pendingChunks.set(batchId, { geometry, x: chunkX, z: chunkZ });
+            this.chunkModifications.set(key, modifications);
             if (this.terrainWorker) {
                 this.terrainWorker.postMessage({
-                    type: 'calculateHeightBatch',
-                    data: { points: pointsToCalculate, batchId }
+                    type: 'applyModifications',
+                    data: { points: pointsToCalculate, batchId, mods: modifications }
                 });
             } else {
                 console.warn('Terrain worker not available, skipping terrain generation');
             }
+        }
+    }
+
+    updateChunkGeometry(chunkX, chunkZ, modifications) {
+        const key = `${chunkX/CONFIG.TERRAIN.chunkSize},${chunkZ/CONFIG.TERRAIN.chunkSize}`;
+        const mesh = this.terrainChunks.get(key);
+        if (!mesh) return;
+
+        const geometry = mesh.geometry;
+        const positions = geometry.attributes.position.array;
+        const pointsToCalculate = [];
+        for (let i = 0; i < positions.length; i += 3) {
+            const px = chunkX + positions[i];
+            const pz = chunkZ + positions[i + 2];
+            pointsToCalculate.push({ x: px, z: pz, index: i });
+        }
+        this.chunkModifications.set(key, modifications);
+        if (this.terrainWorker) {
+            const batchId = `${chunkX},${chunkZ}_update`;
+            this.pendingChunks.set(batchId, { geometry, x: chunkX, z: chunkZ });
+            this.terrainWorker.postMessage({
+                type: 'applyModifications',
+                data: { points: pointsToCalculate, batchId, mods: modifications }
+            });
+        } else {
+            console.warn('Terrain worker not available, skipping geometry update');
         }
     }
 
@@ -356,23 +399,48 @@ export class SimpleTerrainRenderer {
                 mesh.geometry.dispose();
             }
             this.terrainChunks.delete(chunkKey);
+            this.chunkModifications.delete(chunkKey);
         }
     }
 
     getHeightAtPosition(x, z) {
         const key = `${x},${z}`;
         if (this.heightCache.has(key)) return this.heightCache.get(key);
-        const ix = Math.round(x), iz = Math.round(z);
-        for (let dx = -1; dx <= 1; dx++) {
-            for (let dz = -1; dz <= 1; dz++) {
-                const k = `${ix + dx},${iz + dz}`;
-                if (this.heightCache.has(k)) return this.heightCache.get(k);
-            }
+
+        const chunkX = Math.floor(x / CONFIG.TERRAIN.chunkSize) * CONFIG.TERRAIN.chunkSize;
+        const chunkZ = Math.floor(z / CONFIG.TERRAIN.chunkSize) * CONFIG.TERRAIN.chunkSize;
+        const chunkKey = `${chunkX/CONFIG.TERRAIN.chunkSize},${chunkZ/CONFIG.TERRAIN.chunkSize}`;
+        const modifications = this.chunkModifications.get(chunkKey) || [];
+
+        // Check cache for modification effects
+        let height = this.heightCache.get(key);
+        if (!height) {
+            // Fallback to base height calculation (simplified, ideally via worker)
+            const perlin = new OptimizedPerlin(12345);
+            let base = 0, amp = 1, freq = 0.02;
+            for (let o = 0; o < 3; o++) { base += perlin.noise(x * freq, z * freq, 10 + o * 7) * amp; amp *= 0.5; freq *= 2; }
+            let maskRaw = perlin.noise(x * 0.006, z * 0.006, 400);
+            let mask = Math.pow((maskRaw + 1) * 0.5, 3);
+            let mountain = 0; amp = 1; freq = 0.04;
+            for (let o = 0; o < 4; o++) { mountain += Math.abs(perlin.noise(x * freq, z * freq, 500 + o * 11)) * amp; amp *= 0.5; freq *= 2; }
+            mountain *= 40 * mask;
+            const elevNorm = Math.max(0, Math.min(1, (base + mountain + 2) / 25));
+            let jagged = perlin.noise(x * 0.8, z * 0.8, 900) * 1.2 * elevNorm + perlin.noise(x * 1.6, z * 1.6, 901) * 0.6 * elevNorm;
+            height = base + mountain + jagged;
         }
-        const raycaster = new THREE.Raycaster();
-        raycaster.set(new THREE.Vector3(x, 200, z), new THREE.Vector3(0, -1, 0));
-        const meshes = Array.from(this.terrainChunks.values());
-        const intersects = raycaster.intersectObjects(meshes, false);
-        return intersects.length > 0 ? intersects[0].point.y : 0;
+
+        // Apply modifications
+        modifications.forEach(mod => {
+            const distSq = (x - mod.x) ** 2 + (z - mod.z) ** 2;
+            const dist = Math.sqrt(distSq);
+            if (dist <= mod.radius) {
+                const falloff = Math.exp(-distSq / (2 * mod.radius ** 2));
+                height += mod.heightDelta * falloff;
+            }
+        });
+
+        this.heightCache.set(key, height);
+        Utilities.limitCacheSize(this.heightCache, CONFIG.PERFORMANCE.maxCacheSize);
+        return height;
     }
 }
