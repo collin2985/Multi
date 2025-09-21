@@ -176,7 +176,6 @@ function saveChunk(chunkId) {
     }
 }
 
-// Load a chunk from file
 function loadChunk(chunkId) {
     if (chunkCache.has(chunkId)) {
         return chunkCache.get(chunkId);
@@ -187,7 +186,6 @@ function loadChunk(chunkId) {
     try {
         const fileData = fs.readFileSync(filePath, 'utf8');
         const chunkData = JSON.parse(fileData);
-        // Ensure terrainModifications exists
         if (!chunkData.terrainModifications) {
             chunkData.terrainModifications = [];
         }
@@ -195,8 +193,17 @@ function loadChunk(chunkId) {
         console.log(`Loaded chunk: ${chunkId}`);
         return chunkData;
     } catch (error) {
-        console.error(`Failed to load chunk ${chunkId}:`, error);
-        return null;
+        // Instead of logging error, create and return default chunk
+        console.log(`Creating new chunk: ${chunkId}`);
+        const chunkData = { 
+            players: [], 
+            boxPresent: false, 
+            seed: terrainSeed, 
+            terrainModifications: [] 
+        };
+        chunkCache.set(chunkId, chunkData);
+        saveChunk(chunkId);
+        return chunkData;
     }
 }
 

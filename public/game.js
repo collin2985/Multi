@@ -178,6 +178,22 @@ function connectToServer() {
         ui.updateConnectionStatus('disconnected', '❌ Server Error');
     };
 
+    function attemptWsReconnect() {
+    if (wsRetryAttempts >= wsMaxRetries) {
+        ui.updateStatus(`❌ Max reconnection attempts reached (${wsMaxRetries})`);
+        ui.updateConnectionStatus('disconnected', '❌ Connection Failed');
+        return;
+    }
+    
+    wsRetryAttempts++;
+    ui.updateStatus(`🔄 Reconnecting... (${wsRetryAttempts}/${wsMaxRetries})`);
+    ui.updateConnectionStatus('connecting', '🔄 Reconnecting...');
+    
+    setTimeout(() => {
+        connectToServer();
+    }, wsRetryInterval);
+}
+
     ws.onmessage = async function(event) {
         let messageData;
 
@@ -664,6 +680,23 @@ function animate() {
 // --- P2P RECONNECTION LOGIC ---
 let lastPeerCheckTime = 0;
 const peerCheckInterval = 5000;
+
+async function initiateConnection(peerId) {
+    ui.updateStatus(`Initiating P2P connection to ${peerId}`);
+    const connection = createPeerConnection(peerId, true);
+    
+    try {
+        const offer = await connection.createOffer();
+        await connection.setLocalDescription(offer);
+        sendServerMessage('webrtc_offer', {
+            recipientId: peerId,
+            senderId: clientId,
+            offer
+        });
+    } catch (error) {
+        ui.updateStatus(`❌ Failed to create offer for ${peerId}: ${error}`);
+    }
+}
 
 function checkAndReconnectPeers() {
     const now = performance.now();
