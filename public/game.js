@@ -400,13 +400,27 @@ function handleTerrainEditResponse(payload) {
     if (payload.success) {
         const { modification, affectedChunkIds } = payload;
         ui.updateStatus(`✅ Terrain ${modification.heightDelta > 0 ? 'raised' : 'lowered'} successfully at (${modification.x.toFixed(2)}, ${modification.z.toFixed(2)})`);
+        // NEW: Deduplicate modifications by timestamp
         affectedChunkIds.forEach(chunkId => {
             const parts = chunkId.split('_');
             const chunkX = parseInt(parts[1]) * 50;
             const chunkZ = parseInt(parts[2]) * 50;
-            const mods = terrainRenderer.chunkModifications.get(`${chunkX/50},${chunkZ/50}`) || [];
-            mods.push(modification);
-            terrainRenderer.updateChunkGeometry(chunkX, chunkZ, mods);
+            const key = `${chunkX/50},${chunkZ/50}`;
+            const mods = terrainRenderer.chunkModifications.get(key) || [];
+            // Check if mod with same timestamp exists
+            const existingMod = mods.find(m => m.timestamp === modification.timestamp);
+            if (!existingMod) {
+                mods.push(modification);
+                // NEW: Ensure chunk is loaded before updating
+                if (!terrainRenderer.terrainChunks.has(key)) {
+                    console.log(`Chunk ${key} not loaded, queuing load before update`);
+                    terrainRenderer.addTerrainChunk({ chunkX, chunkZ, seed: terrainSeed, modifications: mods });
+                } else {
+                    terrainRenderer.updateChunkGeometry(chunkX, chunkZ, mods);
+                }
+            } else {
+                console.log(`Skipped duplicate mod at timestamp ${modification.timestamp} for chunk ${key}`);
+            }
         });
     } else {
         ui.updateStatus(`❌ Terrain edit failed: ${payload.error}`);
@@ -455,7 +469,14 @@ function handleChunkStateChange(payload) {
     const parts = payload.chunkId.split('_');
     const chunkX = parseInt(parts[1]) * 50;
     const chunkZ = parseInt(parts[2]) * 50;
-    terrainRenderer.addTerrainChunk({ chunkX, chunkZ, seed: terrainSeed, modifications: chunkState.terrainModifications });
+    // NEW: Deduplicate modifications by timestamp
+    const key = `${chunkX/50},${chunkZ/50}`;
+    const currentMods = terrainRenderer.chunkModifications.get(key) || [];
+    const newMods = chunkState.terrainModifications.filter(
+        mod => !currentMods.some(existing => existing.timestamp === mod.timestamp)
+    );
+    const updatedMods = [...currentMods, ...newMods];
+    terrainRenderer.addTerrainChunk({ chunkX, chunkZ, seed: terrainSeed, modifications: updatedMods });
     boxInScene = chunkState.boxPresent;
     ui.updateButtonStates(isInChunk, boxInScene);
     ui.updatePeerInfo(peers, avatars);

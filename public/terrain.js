@@ -25,7 +25,7 @@ const CONFIG = Object.freeze({
         offset: { x: 0, y: 35, z: -20 }
     },
     TERRAIN_EDIT: {
-        INTENSITY: 1.5,
+        INTENSITY: 0.75, // Synced with server.js (reduced from 1.5)
         RADIUS: 2.0
     }
 });
@@ -52,6 +52,19 @@ const Utilities = {
     },
     logError(message, error) {
         console.error(`${message}:`, error);
+    },
+    // NEW: Clear cache entries within a radius to force recomputation after edits
+    clearCacheInRadius(cache, x, z, radius) {
+        const radiusSq = radius * radius;
+        const keysToDelete = [];
+        for (const key of cache.keys()) {
+            const [px, pz] = key.split(',').map(Number);
+            const distSq = (px - x) ** 2 + (pz - z) ** 2;
+            if (distSq <= radiusSq) {
+                keysToDelete.push(key);
+            }
+        }
+        keysToDelete.forEach(key => cache.delete(key));
     }
 };
 
@@ -339,7 +352,10 @@ export class SimpleTerrainRenderer {
         if (type === 'heightBatchResult') {
             const { results, batchId } = data;
             const pending = this.pendingChunks.get(batchId);
-            if (!pending) return;
+            if (!pending) {
+                console.warn(`No pending chunk for batchId ${batchId}`);
+                return;
+            }
 
             const { geometry, x, z } = pending;
             const positions = geometry.attributes.position.array;
@@ -368,7 +384,12 @@ export class SimpleTerrainRenderer {
 
     addTerrainChunk({ chunkX, chunkZ, seed, modifications = [] }) {
         const key = `${chunkX/CONFIG.TERRAIN.chunkSize},${chunkZ/CONFIG.TERRAIN.chunkSize}`;
-        if (this.terrainChunks.has(key)) return;
+        // CHANGED: Check if chunk exists; update instead of adding new
+        if (this.terrainChunks.has(key)) {
+            console.log(`Chunk ${key} already exists, updating geometry instead`);
+            this.updateChunkGeometry(chunkX, chunkZ, modifications);
+            return;
+        }
 
         const geometry = new THREE.PlaneGeometry(
             CONFIG.TERRAIN.chunkSize,
@@ -431,7 +452,11 @@ export class SimpleTerrainRenderer {
     updateChunkGeometry(chunkX, chunkZ, modifications) {
         const key = `${chunkX/CONFIG.TERRAIN.chunkSize},${chunkZ/CONFIG.TERRAIN.chunkSize}`;
         const mesh = this.terrainChunks.get(key);
-        if (!mesh) return;
+        if (!mesh) {
+            console.warn(`Chunk ${key} not found for update, queuing load`);
+            this.addTerrainChunk({ chunkX, chunkZ, seed: 12345, modifications });
+            return;
+        }
 
         const geometry = mesh.geometry;
         const positions = geometry.attributes.position.array;
@@ -443,7 +468,7 @@ export class SimpleTerrainRenderer {
         }
         this.chunkModifications.set(key, modifications);
         if (this.terrainWorker) {
-            const batchId = `${chunkX},${chunkZ}_update`;
+            const batchId = `${chunkX},${chunkZ}_update_${Date.now()}`; // CHANGED: Unique batchId with timestamp
             this.pendingChunks.set(batchId, { geometry, x: chunkX, z: chunkZ });
             this.terrainWorker.postMessage({
                 type: 'applyModifications',
@@ -478,6 +503,14 @@ export class SimpleTerrainRenderer {
             geometry.attributes.position.needsUpdate = true;
             geometry.attributes.normal.needsUpdate = true;
         }
+        // CHANGED: Clear cache in edit radius for this chunk
+        if (modifications.length > 0) {
+            const lastMod = modifications[modifications.length - 1];
+            if (lastMod) {
+                Utilities.clearCacheInRadius(this.heightCache, lastMod.x, lastMod.z, CONFIG.TERRAIN_EDIT.RADIUS);
+                Utilities.clearCacheInRadius(this.normalCache, lastMod.x, lastMod.z, CONFIG.TERRAIN_EDIT.RADIUS);
+            }
+        }
     }
 
     calculateBaseHeight(x, z, perlin) {
@@ -502,11 +535,22 @@ export class SimpleTerrainRenderer {
     }
 
     finishTerrainChunk(geometry, x, z) {
-        const mesh = new THREE.Mesh(geometry, this.terrainMaterial);
-        mesh.position.set(x, 0, z);
-        this.scene.add(mesh);
-        const chunkKey = `${x/CONFIG.TERRAIN.chunkSize},${z/CONFIG.TERRAIN.chunkSize}`;
-        this.terrainChunks.set(chunkKey, mesh);
+        const key = `${x/CONFIG.TERRAIN.chunkSize},${z/CONFIG.TERRAIN.chunkSize}`;
+        // CHANGED: Ensure no duplicate meshes by checking if chunk exists
+        let mesh = this.terrainChunks.get(key);
+        if (mesh) {
+            // Update existing mesh's geometry
+            mesh.geometry.dispose();
+            mesh.geometry = geometry;
+            console.log(`Updated mesh for chunk ${key}`);
+        } else {
+            // Create new mesh
+            mesh = new THREE.Mesh(geometry, this.terrainMaterial);
+            mesh.position.set(x, 0, z);
+            this.scene.add(mesh);
+            this.terrainChunks.set(key, mesh);
+            console.log(`Added new mesh for chunk ${key}`);
+        }
     }
 
     removeTerrainChunk({ chunkX, chunkZ }) {
@@ -519,6 +563,19 @@ export class SimpleTerrainRenderer {
             }
             this.terrainChunks.delete(chunkKey);
             this.chunkModifications.delete(chunkKey);
+            // CHANGED: Clear caches for removed chunk
+            const chunkSize = CONFIG.TERRAIN.chunkSize;
+            const keysToDelete = [];
+            for (const key of this.heightCache.keys()) {
+                const [x, z] = key.split(',').map(Number);
+                if (Math.floor(x / chunkSize) === chunkX / chunkSize && Math.floor(z / chunkSize) === chunkZ / chunkSize) {
+                    keysToDelete.push(key);
+                }
+            }
+            keysToDelete.forEach(key => {
+                this.heightCache.delete(key);
+                this.normalCache.delete(key);
+            });
         }
     }
 
