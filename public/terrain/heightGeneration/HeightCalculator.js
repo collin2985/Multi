@@ -44,10 +44,12 @@ export class HeightCalculator {
         }
         mountain *= 40 * mask;
 
-        // Sea mask for rare, large seas
+
+
+
         let seaMaskRaw = this.perlin.noise(x * 0.0008, z * 0.0008, 600);
         let normalizedSea = (seaMaskRaw + 1) * 0.5;
-        let seaMask = normalizedSea > 0.7 ? Math.pow((normalizedSea - 0.7) / (1 - 0.7), 7) : 0;
+        let seaMask = normalizedSea > 0.3 ? Math.pow((normalizedSea - 0.3) / (1 - 0.3), 2) : 0;
 
         // Sea basin generation
         let seaBasin = 0;
