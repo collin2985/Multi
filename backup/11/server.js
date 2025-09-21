@@ -6,9 +6,9 @@ const wss = new WebSocket.Server({ port: 8080 });
 console.log('Server started on port 8080');
 
 // Constants for terrain editing
-const TERRAIN_EDIT_INTENSITY = 1.0; //intensity
+const TERRAIN_EDIT_INTENSITY = 1.5;
 const TERRAIN_EDIT_RADIUS = 2.0;
-const MAX_SLOPE_THRESHOLD = 1.0; // tan(30 degrees)
+const MAX_SLOPE_THRESHOLD = 0.577; // tan(30 degrees)
 const EDIT_COOLDOWN_MS = 1000;
 const terrainSeed = 12345; // Existing global seed
 
