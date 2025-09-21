@@ -184,17 +184,23 @@ function getWorkerCode() {
             return mod.heightDelta * falloff;
         }
         self.onmessage = function(e) {
-            const { type, data } = e.data;
-            if(type === 'calculateHeightBatch' || type === 'applyModifications') {
-                const { points, batchId, mods = [] } = data;
+    const { type, data } = e.data;
+    if(type === 'calculateHeightBatch' || type === 'applyModifications' || type === 'applyHeightOverrides') {
+        const { points, batchId, mods = [], heightOverrides = {} } = data;
+        const useHeightOverrides = type === 'applyHeightOverrides';
                 const results = [];
                 const eps = 0.1;
                 for(let i=0;i<points.length;i++){
-                    const { x, z, index } = points[i];
-                    let h = workerHeightCache.has(\`\${x},\${z}\`) ? workerHeightCache.get(\`\${x},\${z}\`) : calculateBaseHeight(x,z);
-                    mods.forEach(mod => {
-                        h += getDelta(mod, x, z);
-                    });
+    const { x, z, index } = points[i];
+    let h;
+    if (useHeightOverrides && heightOverrides[\`\${x},\${z}\`] !== undefined) {
+        h = heightOverrides[\`\${x},\${z}\`];
+    } else {
+        h = workerHeightCache.has(\`\${x},\${z}\`) ? workerHeightCache.get(\`\${x},\${z}\`) : calculateBaseHeight(x,z);
+        mods.forEach(mod => {
+            h += getDelta(mod, x, z);
+        });
+    }
                     const hL = calculateBaseHeight(x-eps,z) + mods.reduce((sum, mod) => sum + getDelta(mod, x-eps, z), 0);
                     const hR = calculateBaseHeight(x+eps,z) + mods.reduce((sum, mod) => sum + getDelta(mod, x+eps, z), 0);
                     const hD = calculateBaseHeight(x,z-eps) + mods.reduce((sum, mod) => sum + getDelta(mod, x, z-eps), 0);
@@ -351,36 +357,36 @@ export class SimpleTerrainRenderer {
     handleWorkerMessage(e) {
         const { type, data } = e.data;
         if (type === 'heightBatchResult') {
-            const { results, batchId } = data;
-            const pending = this.pendingChunks.get(batchId);
-            if (!pending) {
-                console.warn(`No pending chunk for batchId ${batchId}`);
-                return;
-            }
+    const { results, batchId } = data;
+    const pending = this.pendingChunks.get(batchId);
+    if (!pending) {
+        console.warn(`No pending chunk for batchId ${batchId}`);
+        return;
+    }
 
-            const { geometry, x, z } = pending;
-            const positions = geometry.attributes.position.array;
-            const normals = geometry.attributes.normal.array;
+    const { geometry, x, z } = pending;
+    const positions = geometry.attributes.position.array;
+    const normals = geometry.attributes.normal.array;
 
-            for (let i = 0; i < results.length; i++) {
-                const { x: px, z: pz, height, normal, index } = results[i];
-                positions[index + 1] = height;
-                normals[index] = normal.x;
-                normals[index + 1] = normal.y;
-                normals[index + 2] = normal.z;
-                this.heightCache.set(`${px},${pz}`, height);
-                this.normalCache.set(`${px},${pz}`, normal);
-            }
+    for (let i = 0; i < results.length; i++) {
+        const { x: px, z: pz, height, normal, index } = results[i];
+        positions[index + 1] = height;
+        normals[index] = normal.x;
+        normals[index + 1] = normal.y;
+        normals[index + 2] = normal.z;
+        this.heightCache.set(`${px},${pz}`, height);
+        this.normalCache.set(`${px},${pz}`, normal);
+    }
 
-            geometry.attributes.position.needsUpdate = true;
-            geometry.attributes.normal.needsUpdate = true;
+    geometry.attributes.position.needsUpdate = true;
+    geometry.attributes.normal.needsUpdate = true;
 
-            this.finishTerrainChunk(geometry, x, z);
-            this.pendingChunks.delete(batchId);
+    this.finishTerrainChunk(geometry, x, z);
+    this.pendingChunks.delete(batchId);
 
-            Utilities.limitCacheSize(this.heightCache, CONFIG.PERFORMANCE.maxCacheSize);
-            Utilities.limitCacheSize(this.normalCache, CONFIG.PERFORMANCE.maxCacheSize);
-        }
+    Utilities.limitCacheSize(this.heightCache, CONFIG.PERFORMANCE.maxCacheSize);
+    Utilities.limitCacheSize(this.normalCache, CONFIG.PERFORMANCE.maxCacheSize);
+}
     }
 
     addTerrainChunk({ chunkX, chunkZ, seed, modifications = [] }) {
@@ -412,10 +418,10 @@ export class SimpleTerrainRenderer {
     this.pendingChunks.set(batchId, { geometry, x: chunkX, z: chunkZ });
     this.chunkModifications.set(key, modifications);
     if (this.terrainWorker) {
-        this.terrainWorker.postMessage({
-                    type: 'applyModifications',
-                    data: { points: pointsToCalculate, batchId, mods: modifications }
-                });
+    this.terrainWorker.postMessage({
+        type: 'applyHeightOverrides',
+        data: { points: pointsToCalculate, batchId, heightOverrides: modifications }
+    });
             } else {
                 console.warn('Terrain worker not available, generating chunk in main thread');
                 // Fallback to main-thread calculation

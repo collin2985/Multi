@@ -302,7 +302,7 @@ wss.on('connection', ws => {
                 let chunkData = loadChunk(chunkId);
                 if (!chunkData) {
                     // Initialize chunk if it doesn't exist
-                    chunkData = { players: [], boxPresent: false, seed: terrainSeed, terrainModifications: [] };
+chunkData = { players: [], boxPresent: false, seed: terrainSeed, heightOverrides: {} };
                     chunkCache.set(chunkId, chunkData);
                     saveChunk(chunkId);
                 }
@@ -422,7 +422,15 @@ wss.on('connection', ws => {
                 const heightDelta = (editType === 'raise' ? TERRAIN_EDIT_INTENSITY : -TERRAIN_EDIT_INTENSITY);
                 const proposedMod = { x, z, heightDelta, timestamp: Date.now(), playerId: editClientId, radius: TERRAIN_EDIT_RADIUS };
 
-                if (!isSlopeValid(proposedMod)) {
+                    let slopeValid = true;
+try {
+    slopeValid = isSlopeValid(proposedMod);
+} catch (error) {
+    console.error(`Slope validation failed for edit at (${x}, ${z}):`, error.message);
+    slopeValid = false;
+}
+
+if (!slopeValid) {
                     ws.send(JSON.stringify({
                         type: 'terrain_edit_response',
                         payload: { success: false, error: 'Edit would create slope steeper than 30 degrees' }
@@ -433,18 +441,44 @@ wss.on('connection', ws => {
                 // Valid: Update lastEditTime
                 editClientData.lastEditTime = Date.now();
 
-                // Apply to affected chunks
-                const affectedChunkIds = getAffectedChunks(x, z, TERRAIN_EDIT_RADIUS);
-                affectedChunkIds.forEach(affectedId => {
-                    let affectedData = loadChunk(affectedId);
-                    if (!affectedData) {
-                        affectedData = { players: [], boxPresent: false, seed: terrainSeed, terrainModifications: [] };
-                        chunkCache.set(affectedId, affectedData);
-                    }
-                    affectedData.terrainModifications.push(proposedMod);
-                    saveChunk(affectedId);
-                    notificationQueue.push({ chunkId: affectedId });
-                });
+                // REPLACE with this new height-based system:
+const affectedChunkIds = getAffectedChunks(x, z, TERRAIN_EDIT_RADIUS);
+affectedChunkIds.forEach(affectedId => {
+    let affectedData = loadChunk(affectedId);
+    if (!affectedData) {
+        affectedData = { players: [], boxPresent: false, seed: terrainSeed, heightOverrides: {} };
+        chunkCache.set(affectedId, affectedData);
+    }
+    
+    // Ensure heightOverrides exists for backward compatibility
+    if (!affectedData.heightOverrides) {
+        affectedData.heightOverrides = {};
+    }
+    
+    // Calculate affected grid points within radius (1.0 unit precision)
+    const minGridX = Math.floor(x - TERRAIN_EDIT_RADIUS);
+    const maxGridX = Math.ceil(x + TERRAIN_EDIT_RADIUS);
+    const minGridZ = Math.floor(z - TERRAIN_EDIT_RADIUS);
+    const maxGridZ = Math.ceil(z + TERRAIN_EDIT_RADIUS);
+    
+    for (let gridX = minGridX; gridX <= maxGridX; gridX++) {
+        for (let gridZ = minGridZ; gridZ <= maxGridZ; gridZ++) {
+            const dist = Math.sqrt((gridX - x) ** 2 + (gridZ - z) ** 2);
+            if (dist <= TERRAIN_EDIT_RADIUS) {
+                // Calculate falloff and new absolute height
+                const falloff = Math.exp(-(dist ** 2) / (2 * TERRAIN_EDIT_RADIUS ** 2));
+                const baseHeight = calculateBaseHeight(gridX, gridZ);
+                const currentHeight = affectedData.heightOverrides[`${gridX},${gridZ}`] || baseHeight;
+                const newHeight = currentHeight + (heightDelta * falloff);
+                
+                affectedData.heightOverrides[`${gridX},${gridZ}`] = newHeight;
+            }
+        }
+    }
+    
+    saveChunk(affectedId);
+    notificationQueue.push({ chunkId: affectedId });
+});
 
                 // Broadcast to affected proximities
                 const affectedPlayers = new Set();
