@@ -486,18 +486,31 @@ affectedChunkIds.forEach(affectedId => {
                     getPlayersInProximity(affectedId).forEach(p => affectedPlayers.add(p.id));
                 });
                 affectedPlayers.forEach(playerId => {
-                    const playerData = clients.get(playerId);
-                    if (playerData && playerData.ws.readyState === WebSocket.OPEN) {
-                        playerData.ws.send(JSON.stringify({
-                            type: 'terrain_edit_response',
-                            payload: {
-                                success: true,
-                                modification: proposedMod,
-                                affectedChunkIds
-                            }
-                        }));
-                    }
-                });
+    const playerData = clients.get(playerId);
+    if (playerData && playerData.ws.readyState === WebSocket.OPEN) {
+        // Send the affected chunks with their height overrides
+        const chunkUpdates = {};
+        affectedChunkIds.forEach(chunkId => {
+            const chunkData = chunkCache.get(chunkId);
+            if (chunkData && chunkData.heightOverrides) {
+                chunkUpdates[chunkId] = chunkData.heightOverrides;
+            }
+        });
+        
+        playerData.ws.send(JSON.stringify({
+            type: 'terrain_edit_response',
+            payload: {
+                success: true,
+                chunkHeightUpdates: chunkUpdates,
+                affectedChunkIds
+            }
+        }));
+    }
+});
+
+
+
+
                 console.log(`Processed terrain_edit_request for ${editClientId} in ${requestChunkId}`);
 
                 break;
