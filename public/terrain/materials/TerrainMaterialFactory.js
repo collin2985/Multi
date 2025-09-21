@@ -40,18 +40,30 @@ export class TerrainMaterialFactory {
                 vec3 snow = texture2D(uSnow, vUv * repeat).rgb;
                 vec3 sand = texture2D(uSand, vUv * repeat).rgb;
                 
-                float wDirt = 1.0 - smoothstep(-2.0, 1.0, vHeight);
-                float wGrass = smoothstep(-2.0, 1.0, vHeight) * (1.0 - smoothstep(1.0, 7.5, vHeight));
-                float wSnow = smoothstep(1.0, 7.5, vHeight);
-float wSand = smoothstep(-5.0, -3.0, vHeight) * (1.0 - smoothstep(-3.0, -2.0, vHeight)); // New height range for sand
+                // FIXED: Expanded sand range to cover deep seas (-25 to -2)
+                float wSand = smoothstep(-25.0, -15.0, vHeight) * (1.0 - smoothstep(-5.0, -2.0, vHeight));
+                float wDirt = smoothstep(-2.0, 1.0, vHeight) * (1.0 - smoothstep(1.0, 3.0, vHeight));
+                float wGrass = smoothstep(1.0, 3.0, vHeight) * (1.0 - smoothstep(3.0, 7.5, vHeight));
+                float wSnow = smoothstep(7.5, 12.0, vHeight);
+                
+                // Normalize weights to ensure they sum to 1
+                float totalWeight = wSand + wDirt + wGrass + wSnow;
+                if (totalWeight > 0.0) {
+                    wSand /= totalWeight;
+                    wDirt /= totalWeight;
+                    wGrass /= totalWeight;
+                    wSnow /= totalWeight;
+                }
                 
                 float slopeFactor = smoothstep(0.05, 0.2, vSlope);
                 
-                vec3 baseColor = dirt * wDirt + grass * wGrass + snow * wSnow + sand * wSand;
+                vec3 baseColor = sand * wSand + dirt * wDirt + grass * wGrass + snow * wSnow;
                 baseColor = mix(baseColor, rock, slopeFactor);
                 
+                // Enhanced lighting for underwater areas
                 float dp = max(0.0, dot(normalize(vNormal), normalize(uLightDir)));
-                baseColor *= (0.5 + dp * 0.5);
+                float lightFactor = vHeight < -2.0 ? 0.3 + dp * 0.3 : 0.5 + dp * 0.5; // Dimmer underwater
+                baseColor *= lightFactor;
                 
                 gl_FragColor = vec4(baseColor, 1.0);
             }
@@ -106,7 +118,8 @@ float wSand = smoothstep(-5.0, -3.0, vHeight) * (1.0 - smoothstep(-3.0, -2.0, vH
             grass: createTexture({ r: 34, g: 139, b: 34 }, { r: 0, g: 100, b: 0 }),
             rock: createTexture({ r: 105, g: 105, b: 105 }, { r: 128, g: 128, b: 128 }),
             snow: createTexture({ r: 255, g: 250, b: 250 }, { r: 240, g: 248, b: 255 }),
-            sand: createTexture({ r: 194, g: 178, b: 128 }, { r: 210, g: 180, b: 140 })
+            // Enhanced sand colors for better underwater visibility
+            sand: createTexture({ r: 194, g: 178, b: 128 }, { r: 160, g: 140, b: 100 })
         };
     }
 }

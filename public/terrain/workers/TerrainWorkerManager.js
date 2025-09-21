@@ -111,6 +111,7 @@ export class TerrainWorkerManager {
                     return workerHeightCache.get(\`\${x},\${z}\`);
                 }
                 
+                // Base terrain
                 let base = 0, amp = 1, freq = 0.02;
                 for (let o = 0; o < 3; o++) {
                     base += perlin.noise(x * freq, z * freq, 10 + o * 7) * amp;
@@ -118,6 +119,7 @@ export class TerrainWorkerManager {
                     freq *= 2;
                 }
                 
+                // Mountain generation
                 let maskRaw = perlin.noise(x * 0.006, z * 0.006, 400);
                 let mask = Math.pow((maskRaw + 1) * 0.5, 3);
                 let mountain = 0;
@@ -131,9 +133,11 @@ export class TerrainWorkerManager {
                 }
                 mountain *= 40 * mask;
                 
+                // FIXED SEA GENERATION - Now matches main thread
                 let seaMaskRaw = perlin.noise(x * 0.0008, z * 0.0008, 600);
                 let normalizedSea = (seaMaskRaw + 1) * 0.5;
-                let seaMask = normalizedSea > 0.7 ? Math.pow((normalizedSea - 0.7) / (1 - 0.7), 7) : 0;
+                // Make seas more common and less restrictive
+                let seaMask = normalizedSea > 0.4 ? Math.pow((normalizedSea - 0.4) / (1 - 0.4), 2) : 0;
                 
                 let seaBasin = 0;
                 amp = 2;
@@ -144,8 +148,9 @@ export class TerrainWorkerManager {
                     amp *= 0.5;
                     freq *= 2;
                 }
-                let seaDepth = seaMask * seaBasin * 50;
-                let heightBeforeJagged = base + mountain - seaDepth - (seaMask * 5);
+                // Increase sea depth to reach -20 or deeper
+                let seaDepth = seaMask * seaBasin * 40;
+                let heightBeforeJagged = base + mountain - seaDepth - (seaMask * 8); // Increased offset
                 
                 const elevNorm = clamp((heightBeforeJagged + 2) / 25, 0, 1);
                 let jagged = perlin.noise(x * 0.8, z * 0.8, 900) * 1.2 * elevNorm + 

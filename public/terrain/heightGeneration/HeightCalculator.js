@@ -44,12 +44,11 @@ export class HeightCalculator {
         }
         mountain *= 40 * mask;
 
-
-
-
+        // Sea mask generation - FIXED TO MATCH WORKER
         let seaMaskRaw = this.perlin.noise(x * 0.0008, z * 0.0008, 600);
         let normalizedSea = (seaMaskRaw + 1) * 0.5;
-        let seaMask = normalizedSea > 0.3 ? Math.pow((normalizedSea - 0.3) / (1 - 0.3), 2) : 0;
+        // Make seas more common and less restrictive
+        let seaMask = normalizedSea > 0.4 ? Math.pow((normalizedSea - 0.4) / (1 - 0.4), 2) : 0;
 
         // Sea basin generation
         let seaBasin = 0;
@@ -61,8 +60,9 @@ export class HeightCalculator {
             amplitude *= 0.5;
             frequency *= 2;
         }
-        let seaDepth = seaMask * seaBasin * 24; // Scaled to reach ~ -10 max depth (with a value of 8)
-        let heightBeforeJagged = base + mountain - seaDepth - (seaMask * 2); // Offset to place shore at ~ -2
+        // Increase sea depth to reach -20 or deeper
+        let seaDepth = seaMask * seaBasin * 40;
+        let heightBeforeJagged = base + mountain - seaDepth - (seaMask * 8); // Increased offset
 
         // Elevation-based details
         const elevNorm = this.clamp((heightBeforeJagged + 2) / 25, 0, 1);
