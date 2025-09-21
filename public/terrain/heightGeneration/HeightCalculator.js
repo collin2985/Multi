@@ -61,7 +61,7 @@ export class HeightCalculator {
             amplitude *= 0.5;
             frequency *= 2;
         }
-        let seaDepth = seaMask * seaBasin * 8; // Scaled to reach ~ -10 max depth
+        let seaDepth = seaMask * seaBasin * 24; // Scaled to reach ~ -10 max depth (with a value of 8)
         let heightBeforeJagged = base + mountain - seaDepth - (seaMask * 2); // Offset to place shore at ~ -2
 
         // Elevation-based details

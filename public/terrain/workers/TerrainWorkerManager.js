@@ -144,7 +144,7 @@ export class TerrainWorkerManager {
                     amp *= 0.5;
                     freq *= 2;
                 }
-                let seaDepth = seaMask * seaBasin * 8;
+                let seaDepth = seaMask * seaBasin * 24;
                 let heightBeforeJagged = base + mountain - seaDepth - (seaMask * 2);
                 
                 const elevNorm = clamp((heightBeforeJagged + 2) / 25, 0, 1);
