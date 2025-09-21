@@ -131,11 +131,27 @@ export class TerrainWorkerManager {
                 }
                 mountain *= 40 * mask;
                 
-                const elevNorm = clamp((base + mountain + 2) / 25, 0, 1);
+                let seaMaskRaw = perlin.noise(x * 0.0008, z * 0.0008, 600);
+                let normalizedSea = (seaMaskRaw + 1) * 0.5;
+                let seaMask = normalizedSea > 0.7 ? Math.pow((normalizedSea - 0.7) / (1 - 0.7), 7) : 0;
+                
+                let seaBasin = 0;
+                amp = 2;
+                freq = 0.01;
+                
+                for (let o = 0; o < 3; o++) {
+                    seaBasin += Math.abs(perlin.noise(x * freq, z * freq, 700 + o * 13)) * amp;
+                    amp *= 0.5;
+                    freq *= 2;
+                }
+                let seaDepth = seaMask * seaBasin * 8;
+                let heightBeforeJagged = base + mountain - seaDepth - (seaMask * 2);
+                
+                const elevNorm = clamp((heightBeforeJagged + 2) / 25, 0, 1);
                 let jagged = perlin.noise(x * 0.8, z * 0.8, 900) * 1.2 * elevNorm + 
                            perlin.noise(x * 1.6, z * 1.6, 901) * 0.6 * elevNorm;
                 
-                const height = base + mountain + jagged;
+                const height = heightBeforeJagged + jagged;
                 workerHeightCache.set(\`\${x},\${z}\`, height);
                 return height;
             };

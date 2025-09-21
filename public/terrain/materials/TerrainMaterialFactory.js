@@ -25,6 +25,7 @@ export class TerrainMaterialFactory {
             uniform sampler2D uGrass;
             uniform sampler2D uRock;
             uniform sampler2D uSnow;
+            uniform sampler2D uSand;
             
             varying float vHeight;
             varying float vSlope;
@@ -37,14 +38,16 @@ export class TerrainMaterialFactory {
                 vec3 grass = texture2D(uGrass, vUv * repeat).rgb;
                 vec3 rock = texture2D(uRock, vUv * repeat).rgb;
                 vec3 snow = texture2D(uSnow, vUv * repeat).rgb;
+                vec3 sand = texture2D(uSand, vUv * repeat).rgb;
                 
                 float wDirt = 1.0 - smoothstep(-2.0, 1.0, vHeight);
                 float wGrass = smoothstep(-2.0, 1.0, vHeight) * (1.0 - smoothstep(1.0, 7.5, vHeight));
                 float wSnow = smoothstep(1.0, 7.5, vHeight);
+                float wSand = smoothstep(-2.5, -1.5, vHeight) * (1.0 - smoothstep(-1.5, -0.5, vHeight));
                 
                 float slopeFactor = smoothstep(0.05, 0.2, vSlope);
                 
-                vec3 baseColor = dirt * wDirt + grass * wGrass + snow * wSnow;
+                vec3 baseColor = dirt * wDirt + grass * wGrass + snow * wSnow + sand * wSand;
                 baseColor = mix(baseColor, rock, slopeFactor);
                 
                 float dp = max(0.0, dot(normalize(vNormal), normalize(uLightDir)));
@@ -62,6 +65,7 @@ export class TerrainMaterialFactory {
                 uGrass: { value: null },
                 uRock: { value: null },
                 uSnow: { value: null },
+                uSand: { value: null },
                 uLightDir: { value: new THREE.Vector3(1, 1, 1).normalize() }
             },
             side: THREE.FrontSide
@@ -101,7 +105,8 @@ export class TerrainMaterialFactory {
             dirt: createTexture({ r: 101, g: 67, b: 33 }, { r: 139, g: 90, b: 43 }),
             grass: createTexture({ r: 34, g: 139, b: 34 }, { r: 0, g: 100, b: 0 }),
             rock: createTexture({ r: 105, g: 105, b: 105 }, { r: 128, g: 128, b: 128 }),
-            snow: createTexture({ r: 255, g: 250, b: 250 }, { r: 240, g: 248, b: 255 })
+            snow: createTexture({ r: 255, g: 250, b: 250 }, { r: 240, g: 248, b: 255 }),
+            sand: createTexture({ r: 194, g: 178, b: 128 }, { r: 210, g: 180, b: 140 })
         };
     }
 }

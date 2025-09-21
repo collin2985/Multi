@@ -1,4 +1,4 @@
-// terrain/SimpleTerrainRenderer.js - Main class
+// terrain/SimpleTerrainRenderer.js
 import * as THREE from 'three';
 import { CONFIG } from './config.js';
 import { Utilities } from './utilities.js';
@@ -31,6 +31,7 @@ export class SimpleTerrainRenderer {
         this.terrainMaterial.uniforms.uGrass.value = textures.grass;
         this.terrainMaterial.uniforms.uRock.value = textures.rock;
         this.terrainMaterial.uniforms.uSnow.value = textures.snow;
+        this.terrainMaterial.uniforms.uSand.value = textures.sand;
     }
 
     addTerrainChunk({ chunkX, chunkZ, seed }) {

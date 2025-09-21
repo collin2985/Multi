@@ -44,12 +44,30 @@ export class HeightCalculator {
         }
         mountain *= 40 * mask;
 
-        // Elevation-based details
-        const elevNorm = this.clamp((base + mountain + 2) / 25, 0, 1);
-        let jagged = this.perlin.noise(x * 0.8, z * 0.8, 900) * 1.2 * elevNorm + 
-                   this.perlin.noise(x * 1.6, z * 1.6, 901) * 0.6 * elevNorm;
+        // Sea mask for rare, large seas
+        let seaMaskRaw = this.perlin.noise(x * 0.0008, z * 0.0008, 600);
+        let normalizedSea = (seaMaskRaw + 1) * 0.5;
+        let seaMask = normalizedSea > 0.7 ? Math.pow((normalizedSea - 0.7) / (1 - 0.7), 7) : 0;
 
-        const height = base + mountain + jagged;
+        // Sea basin generation
+        let seaBasin = 0;
+        amplitude = 2;
+        frequency = 0.01;
+        
+        for (let octave = 0; octave < 3; octave++) {
+            seaBasin += Math.abs(this.perlin.noise(x * frequency, z * frequency, 700 + octave * 13)) * amplitude;
+            amplitude *= 0.5;
+            frequency *= 2;
+        }
+        let seaDepth = seaMask * seaBasin * 8; // Scaled to reach ~ -10 max depth
+        let heightBeforeJagged = base + mountain - seaDepth - (seaMask * 2); // Offset to place shore at ~ -2
+
+        // Elevation-based details
+        const elevNorm = this.clamp((heightBeforeJagged + 2) / 25, 0, 1);
+        let jagged = this.perlin.noise(x * 0.8, z * 0.8, 900) * 1.2 * elevNorm + 
+                     this.perlin.noise(x * 1.6, z * 1.6, 901) * 0.6 * elevNorm;
+
+        const height = heightBeforeJagged + jagged;
         this.heightCache.set(key, height);
         return height;
     }
