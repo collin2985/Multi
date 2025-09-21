@@ -43,7 +43,7 @@ export class TerrainMaterialFactory {
                 float wDirt = 1.0 - smoothstep(-2.0, 1.0, vHeight);
                 float wGrass = smoothstep(-2.0, 1.0, vHeight) * (1.0 - smoothstep(1.0, 7.5, vHeight));
                 float wSnow = smoothstep(1.0, 7.5, vHeight);
-                float wSand = smoothstep(-2.5, -1.5, vHeight) * (1.0 - smoothstep(-1.5, -0.5, vHeight));
+float wSand = smoothstep(-5.0, -3.0, vHeight) * (1.0 - smoothstep(-3.0, -2.0, vHeight)); // New height range for sand
                 
                 float slopeFactor = smoothstep(0.05, 0.2, vSlope);
                 

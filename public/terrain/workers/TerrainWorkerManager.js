@@ -144,8 +144,8 @@ export class TerrainWorkerManager {
                     amp *= 0.5;
                     freq *= 2;
                 }
-                let seaDepth = seaMask * seaBasin * 24;
-                let heightBeforeJagged = base + mountain - seaDepth - (seaMask * 2);
+                let seaDepth = seaMask * seaBasin * 50;
+                let heightBeforeJagged = base + mountain - seaDepth - (seaMask * 5);
                 
                 const elevNorm = clamp((heightBeforeJagged + 2) / 25, 0, 1);
                 let jagged = perlin.noise(x * 0.8, z * 0.8, 900) * 1.2 * elevNorm + 
