@@ -35,14 +35,14 @@ export const ui = {
     initializeUI(callbacks) {
         addBtn.onclick = () => {
             callbacks.sendServerMessage('add_box_request', {
-                chunkId: `chunk_${callbacks.currentChunkX()}_${callbacks.currentChunkZ()}`,
+                chunkId: `chunk_${callbacks.currentChunkX}_${callbacks.currentChunkZ}`, // Updated to use current chunk
                 position: { x: 0, y: 0, z: -3 }
             });
         };
 
         removeBtn.onclick = () => {
             callbacks.sendServerMessage('remove_box_request', {
-                chunkId: `chunk_${callbacks.currentChunkX()}_${callbacks.currentChunkZ()}`
+                chunkId: `chunk_${callbacks.currentChunkX}_${callbacks.currentChunkZ}` // Updated to use current chunk
             });
         };
         
@@ -50,8 +50,5 @@ export const ui = {
         window.addEventListener('resize', () => {
             callbacks.onResize();
         });
-
-        // Add terrain editing help text
-        this.updateStatus("Q to lower terrain, E to raise terrain (pauses movement for 1s)");
     },
 };

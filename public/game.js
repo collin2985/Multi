@@ -1,3 +1,4 @@
+// game.js
 import * as THREE from 'three';
 import { SimpleTerrainRenderer } from './terrain.js';
 import { ui } from './ui.js';
@@ -21,11 +22,6 @@ let chunkLoadQueue = [];
 let isProcessingChunks = false;
 const terrainSeed = 12345; // Fixed, client-side terrain seed
 let initialChunksLoaded = false;
-
-// Terrain editing constants
-const EDIT_COOLDOWN_MS = 1000;
-let lastEditTime = 0;
-let editingCooldown = false;
 
 // Click-to-move state
 const raycaster = new THREE.Raycaster();
@@ -70,12 +66,11 @@ box.name = 'serverBox';
 
 terrainRenderer = new SimpleTerrainRenderer(scene);
 
-// --- EVENT HANDLERS ---
+// --- CLICK-TO-MOVE HANDLER ---
 window.addEventListener('pointerdown', onPointerDown);
-window.addEventListener('keydown', onKeyDown);
 
 function onPointerDown(event) {
-    if (event.target.tagName !== 'CANVAS' || editingCooldown) return;
+    if (event.target.tagName !== 'CANVAS') return;
 
     pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
     pointer.y = - (event.clientY / window.innerHeight) * 2 + 1;
@@ -99,40 +94,6 @@ function onPointerDown(event) {
             }
         });
     }
-}
-
-function onKeyDown(event) {
-    if (!isInChunk || editingCooldown || Date.now() - lastEditTime < EDIT_COOLDOWN_MS) return;
-
-    const chunkSize = 50;
-    const gridSize = chunkSize / 100; // segments=100
-    const x = Math.round(playerObject.position.x / gridSize) * gridSize;
-    const z = Math.round(playerObject.position.z / gridSize) * gridSize;
-    const chunkId = `chunk_${currentPlayerChunkX}_${currentPlayerChunkZ}`;
-    let editType = null;
-
-    if (event.key.toLowerCase() === 'q') {
-        editType = 'lower';
-    } else if (event.key.toLowerCase() === 'e') {
-        editType = 'raise';
-    } else {
-        return;
-    }
-
-    // Pause movement
-    isMoving = false;
-    editingCooldown = true;
-    setTimeout(() => { editingCooldown = false; }, EDIT_COOLDOWN_MS);
-
-    lastEditTime = Date.now();
-    sendServerMessage('terrain_edit_request', {
-        editType,
-        x,
-        z,
-        chunkId,
-        clientId
-    });
-    ui.updateStatus(`Attempting to ${editType} terrain at (${x.toFixed(2)}, ${z.toFixed(2)})...`);
 }
 
 // --- WEBSOCKET CONNECTION ---
@@ -178,22 +139,6 @@ function connectToServer() {
         ui.updateConnectionStatus('disconnected', '❌ Server Error');
     };
 
-    function attemptWsReconnect() {
-    if (wsRetryAttempts >= wsMaxRetries) {
-        ui.updateStatus(`❌ Max reconnection attempts reached (${wsMaxRetries})`);
-        ui.updateConnectionStatus('disconnected', '❌ Connection Failed');
-        return;
-    }
-    
-    wsRetryAttempts++;
-    ui.updateStatus(`🔄 Reconnecting... (${wsRetryAttempts}/${wsMaxRetries})`);
-    ui.updateConnectionStatus('connecting', '🔄 Reconnecting...');
-    
-    setTimeout(() => {
-        connectToServer();
-    }, wsRetryInterval);
-}
-
     ws.onmessage = async function(event) {
         let messageData;
 
@@ -228,9 +173,6 @@ function connectToServer() {
                 break;
             case 'proximity_update':
                 handleProximityUpdate(data.payload);
-                break;
-            case 'terrain_edit_response':
-                handleTerrainEditResponse(data.payload);
                 break;
             default:
                 ui.updateStatus(`❓ Unknown server message type: ${data.type}`);
@@ -352,18 +294,20 @@ function handleP2PMessage(message, fromPeer) {
                 if (message.payload.target) {
                     syncPeer.targetPosition = new THREE.Vector3().fromArray(message.payload.target);
                     syncPeer.moveStartTime = performance.now();
+                    ui.updateStatus(`📍 Synced ${fromPeer} to ${message.payload.position}, moving to ${message.payload.target}`);
+                } else {
+                    ui.updateStatus(`📍 Synced ${fromPeer} to ${message.payload.position}`);
                 }
             }
             break;
+        default:
+            ui.updateStatus(`❓ Unknown P2P message type: ${message.type}`);
     }
 }
 
-async function handleWebRTCOffer(payload) {
-    if (payload.recipientId !== clientId) return;
-    const peerId = payload.senderId;
-    let connection = peers.get(peerId)?.connection;
-    if (!connection) {
-        connection = createPeerConnection(peerId, false);
+async function initiateConnection(peerId) {
+    const connection = createPeerConnection(peerId, true);
+    try {
         const offer = await connection.createOffer();
         await connection.setLocalDescription(offer);
         sendServerMessage('webrtc_offer', {
@@ -371,7 +315,15 @@ async function handleWebRTCOffer(payload) {
             senderId: clientId,
             offer
         });
+    } catch (error) {
+        ui.updateStatus(`❌ Failed to create offer for ${peerId}: ${error}`);
     }
+}
+
+async function handleWebRTCOffer(payload) {
+    if (payload.recipientId !== clientId) return;
+    const peerId = payload.senderId;
+    const connection = createPeerConnection(peerId, false);
     try {
         await connection.setRemoteDescription(new RTCSessionDescription(payload.offer));
         const answer = await connection.createAnswer();
@@ -409,37 +361,6 @@ async function handleWebRTCIceCandidate(payload) {
         } catch (error) {
             ui.updateStatus(`❌ Failed to add ICE candidate from ${peerId}: ${error}`);
         }
-    }
-}
-
-function handleTerrainEditResponse(payload) {
-    if (payload.success) {
-        const { modification, affectedChunkIds } = payload;
-        ui.updateStatus(`✅ Terrain ${modification.heightDelta > 0 ? 'raised' : 'lowered'} successfully at (${modification.x.toFixed(2)}, ${modification.z.toFixed(2)})`);
-        // NEW: Deduplicate modifications by timestamp
-        affectedChunkIds.forEach(chunkId => {
-            const parts = chunkId.split('_');
-            const chunkX = parseInt(parts[1]) * 50;
-            const chunkZ = parseInt(parts[2]) * 50;
-            const key = `${chunkX/50},${chunkZ/50}`;
-            const mods = terrainRenderer.chunkModifications.get(key) || [];
-            // Check if mod with same timestamp exists
-const existingMod = mods.find(m => m.timestamp === modification.timestamp && m.playerId === modification.playerId);
-            if (!existingMod) {
-                mods.push(modification);
-                // NEW: Ensure chunk is loaded before updating
-                if (!terrainRenderer.terrainChunks.has(key)) {
-                    console.log(`Chunk ${key} not loaded, queuing load before update`);
-                    terrainRenderer.addTerrainChunk({ chunkX, chunkZ, seed: terrainSeed, modifications: mods });
-                } else {
-                    terrainRenderer.updateChunkGeometry(chunkX, chunkZ, mods);
-                }
-            } else {
-                console.log(`Skipped duplicate mod at timestamp ${modification.timestamp} for chunk ${key}`);
-            }
-        });
-    } else {
-        ui.updateStatus(`❌ Terrain edit failed: ${payload.error}`);
     }
 }
 
@@ -481,19 +402,12 @@ function broadcastP2P(message) {
 
 function handleChunkStateChange(payload) {
     const chunkState = payload.state;
-    ui.updateStatus(`🏠 Chunk update: ${chunkState.players.length} players, box: ${chunkState.boxPresent}, mods: ${chunkState.terrainModifications.length}`);
+    ui.updateStatus(`🏠 Chunk update: ${chunkState.players.length} players, box: ${chunkState.boxPresent}`);
     const parts = payload.chunkId.split('_');
     const chunkX = parseInt(parts[1]) * 50;
     const chunkZ = parseInt(parts[2]) * 50;
-    // NEW: Deduplicate modifications by timestamp
-    const key = `${chunkX/50},${chunkZ/50}`;
-    const currentMods = terrainRenderer.chunkModifications.get(key) || [];
-    const newMods = chunkState.terrainModifications.filter(
-        mod => !currentMods.some(existing => existing.timestamp === mod.timestamp)
-    );
-    const updatedMods = [...currentMods, ...newMods];
-    terrainRenderer.addTerrainChunk({ chunkX, chunkZ, seed: terrainSeed, modifications: updatedMods });
-    boxInScene = chunkState.boxPresent;
+    terrainRenderer.addTerrainChunk({ chunkX, chunkZ, seed: terrainSeed });
+    boxInScene = chunkState.boxPresent; // Update boxInScene
     ui.updateButtonStates(isInChunk, boxInScene);
     ui.updatePeerInfo(peers, avatars);
 }
@@ -521,6 +435,7 @@ function handleProximityUpdate(payload) {
     ui.updatePeerInfo(peers, avatars);
 }
 
+// NEW: Stagger P2P initiations to reduce lag
 function staggerP2PInitiations(newPlayers) {
     newPlayers.forEach((player, index) => {
         setTimeout(() => {
@@ -596,9 +511,8 @@ function processChunkQueue() {
 }
 
 // --- ANIMATION LOOP ---
-const playerSpeed = 0.1;
+const playerSpeed = 0.005;  //player speed should be 0.005 max to prevent unloaded chunks
 const stopThreshold = 0.01;
-const playerHeightOffset = 1; // Sphere radius
 let lastFrameTime = performance.now();
 
 function animate() {
@@ -618,13 +532,6 @@ function animate() {
             const alpha = Math.min(1, moveStep / distance);
             playerObject.position.lerp(playerTargetPosition, alpha);
         }
-    }
-
-    // Adjust player Y-position to terrain height
-    try {
-        playerObject.position.y = terrainRenderer.getHeightAtPosition(playerObject.position.x, playerObject.position.z) + playerHeightOffset;
-    } catch (error) {
-        ui.updateStatus(`❌ Error adjusting player height: ${error.message}`);
     }
 
     avatars.forEach((avatar, peerId) => {
@@ -681,23 +588,6 @@ function animate() {
 let lastPeerCheckTime = 0;
 const peerCheckInterval = 5000;
 
-async function initiateConnection(peerId) {
-    ui.updateStatus(`Initiating P2P connection to ${peerId}`);
-    const connection = createPeerConnection(peerId, true);
-    
-    try {
-        const offer = await connection.createOffer();
-        await connection.setLocalDescription(offer);
-        sendServerMessage('webrtc_offer', {
-            recipientId: peerId,
-            senderId: clientId,
-            offer
-        });
-    } catch (error) {
-        ui.updateStatus(`❌ Failed to create offer for ${peerId}: ${error}`);
-    }
-}
-
 function checkAndReconnectPeers() {
     const now = performance.now();
     if (now - lastPeerCheckTime < peerCheckInterval) {
@@ -724,8 +614,6 @@ ui.updateConnectionStatus('connecting', '🔄 Connecting...');
 ui.initializeUI({
     sendServerMessage: sendServerMessage,
     clientId: clientId,
-    currentChunkX: () => currentPlayerChunkX,
-    currentChunkZ: () => currentPlayerChunkZ,
     onResize: () => {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
