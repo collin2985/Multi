@@ -137,7 +137,7 @@ export class TerrainWorkerManager {
                 let seaMaskRaw = perlin.noise(x * 0.0008, z * 0.0008, 600);
                 let normalizedSea = (seaMaskRaw + 1) * 0.5;
                 // Make seas more common and less restrictive
-                let seaMask = normalizedSea > 0.4 ? Math.pow((normalizedSea - 0.4) / (1 - 0.4), 2) : 0;
+                let seaMask = normalizedSea > 0.6 ? Math.pow((normalizedSea - 0.6) / (1 - 0.6), 2) : 0;
                 
                 let seaBasin = 0;
                 amp = 2;
@@ -150,7 +150,7 @@ export class TerrainWorkerManager {
                 }
                 // Increase sea depth to reach -20 or deeper
                 let seaDepth = seaMask * seaBasin * 40;
-                let heightBeforeJagged = base + mountain - seaDepth - (seaMask * 8); // Increased offset
+                let heightBeforeJagged = base + mountain - seaDepth - (seaMask * 15); // Increased offset
                 
                 const elevNorm = clamp((heightBeforeJagged + 2) / 25, 0, 1);
                 let jagged = perlin.noise(x * 0.8, z * 0.8, 900) * 1.2 * elevNorm + 
