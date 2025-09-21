@@ -96,6 +96,20 @@ function onPointerDown(event) {
     }
 }
 
+
+function attemptWsReconnect() {
+    if (wsRetryAttempts < wsMaxRetries) {
+        wsRetryAttempts++;
+        ui.updateStatus(`Attempting reconnection ${wsRetryAttempts} of ${wsMaxRetries}...`);
+        setTimeout(() => {
+            connectToServer();
+        }, wsRetryInterval);
+    } else {
+        ui.updateStatus(`❌ Max reconnection attempts reached. Please refresh.`);
+        ui.updateConnectionStatus('disconnected', '❌ Disconnected');
+    }
+}
+
 // --- WEBSOCKET CONNECTION ---
 function connectToServer() {
     if (ws && ws.readyState === WebSocket.OPEN) {

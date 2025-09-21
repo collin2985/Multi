@@ -1,4 +1,7 @@
 // terrain/noise/OptimizedPerlin.js
+// Please note: a duplicate of this code exists in 
+// TerrainWorkerManager.js because workers cannnot call this file
+// so any changes should be made there as well
 export class OptimizedPerlin {
     constructor(seed = 12345) {
         this.p = new Array(512);
