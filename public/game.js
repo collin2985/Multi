@@ -1,6 +1,6 @@
 // game.js
 import * as THREE from 'three';
-import { SimpleTerrainRenderer } from './terrain.js';
+import { SimpleTerrainRenderer } from './terrain/SimpleTerrainRenderer.js';
 import { ui } from './ui.js';
 
 // --- GLOBAL STATE ---
