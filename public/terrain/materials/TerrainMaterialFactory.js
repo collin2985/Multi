@@ -42,8 +42,8 @@ export class TerrainMaterialFactory {
                 
                 // FIXED: Expanded sand range to cover deep seas (-25 to -2)
                 float wSand = smoothstep(-25.0, -15.0, vHeight) * (1.0 - smoothstep(-5.0, -2.0, vHeight));
-                float wDirt = smoothstep(-2.0, 1.0, vHeight) * (1.0 - smoothstep(1.0, 3.0, vHeight));
-                float wGrass = smoothstep(1.0, 3.0, vHeight) * (1.0 - smoothstep(3.0, 7.5, vHeight));
+                float wDirt = smoothstep(-2.0, 1.0, vHeight) * (1.0 - smoothstep(1.0, 1.0, vHeight));
+                float wGrass = smoothstep(-1.0, 3.0, vHeight) * (1.0 - smoothstep(-1.0, 7.5, vHeight));
                 float wSnow = smoothstep(7.5, 12.0, vHeight);
                 
                 // Normalize weights to ensure they sum to 1
