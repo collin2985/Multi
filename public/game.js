@@ -408,7 +408,7 @@ function handleTerrainEditResponse(payload) {
             const key = `${chunkX/50},${chunkZ/50}`;
             const mods = terrainRenderer.chunkModifications.get(key) || [];
             // Check if mod with same timestamp exists
-            const existingMod = mods.find(m => m.timestamp === modification.timestamp);
+const existingMod = mods.find(m => m.timestamp === modification.timestamp && m.playerId === modification.playerId);
             if (!existingMod) {
                 mods.push(modification);
                 // NEW: Ensure chunk is loaded before updating

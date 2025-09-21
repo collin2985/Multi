@@ -6,7 +6,7 @@ const wss = new WebSocket.Server({ port: 8080 });
 console.log('Server started on port 8080');
 
 // Constants for terrain editing
-const TERRAIN_EDIT_INTENSITY = 1.0; //intensity
+const TERRAIN_EDIT_INTENSITY = 0.75; //intensity
 const TERRAIN_EDIT_RADIUS = 2.0;
 const MAX_SLOPE_THRESHOLD = 1.0; // tan(30 degrees)
 const EDIT_COOLDOWN_MS = 1000;
@@ -147,12 +147,12 @@ function isSlopeValid(proposedMod) {
             sampleH += getDelta(proposedMod, sx, sz);
         }
 
-        const horizDist = dist;
-        const vertDiff = Math.abs(centerH - sampleH);
-        const slope = vertDiff / horizDist;
-        if (slope > MAX_SLOPE_THRESHOLD) {
-            return false;
-        }
+        const horizDist = Math.max(dist, 0.01); // Prevent division by zero
+const vertDiff = Math.abs(centerH - sampleH);
+const slope = vertDiff / horizDist;
+if (slope > MAX_SLOPE_THRESHOLD) {
+    return false;
+}
     }
     return true;
 }

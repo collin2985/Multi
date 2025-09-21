@@ -234,6 +234,7 @@ export class SimpleTerrainRenderer {
             removeChunkColliders: () => {}
         };
         this.initialize();
+        this.cachedPerlin = null;
     }
 
     initialize() {
@@ -406,11 +407,12 @@ export class SimpleTerrainRenderer {
             pointsToCalculate.push({ x: px, z: pz, index: i });
         }
         if (pointsToCalculate.length > 0) {
-            const batchId = `${chunkX},${chunkZ}`;
-            this.pendingChunks.set(batchId, { geometry, x: chunkX, z: chunkZ });
-            this.chunkModifications.set(key, modifications);
-            if (this.terrainWorker) {
-                this.terrainWorker.postMessage({
+    const batchId = `${chunkX},${chunkZ}`;
+    // Set pending BEFORE sending message to prevent race condition
+    this.pendingChunks.set(batchId, { geometry, x: chunkX, z: chunkZ });
+    this.chunkModifications.set(key, modifications);
+    if (this.terrainWorker) {
+        this.terrainWorker.postMessage({
                     type: 'applyModifications',
                     data: { points: pointsToCalculate, batchId, mods: modifications }
                 });
@@ -468,15 +470,17 @@ export class SimpleTerrainRenderer {
         }
         this.chunkModifications.set(key, modifications);
         if (this.terrainWorker) {
-            const batchId = `${chunkX},${chunkZ}_update_${Date.now()}`; // CHANGED: Unique batchId with timestamp
-            this.pendingChunks.set(batchId, { geometry, x: chunkX, z: chunkZ });
-            this.terrainWorker.postMessage({
+    const batchId = `${chunkX},${chunkZ}_update_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Set pending BEFORE sending message
+    this.pendingChunks.set(batchId, { geometry, x: chunkX, z: chunkZ });
+    this.terrainWorker.postMessage({
                 type: 'applyModifications',
                 data: { points: pointsToCalculate, batchId, mods: modifications }
             });
         } else {
             console.warn('Terrain worker not available, updating geometry in main thread');
-            const perlin = new OptimizedPerlin(12345);
+this.cachedPerlin = this.cachedPerlin || new OptimizedPerlin(12345);
+const perlin = this.cachedPerlin;
             const normals = geometry.attributes.normal.array;
             const eps = 0.1;
             for (let i = 0; i < pointsToCalculate.length; i++) {
@@ -503,14 +507,11 @@ export class SimpleTerrainRenderer {
             geometry.attributes.position.needsUpdate = true;
             geometry.attributes.normal.needsUpdate = true;
         }
-        // CHANGED: Clear cache in edit radius for this chunk
-        if (modifications.length > 0) {
-            const lastMod = modifications[modifications.length - 1];
-            if (lastMod) {
-                Utilities.clearCacheInRadius(this.heightCache, lastMod.x, lastMod.z, CONFIG.TERRAIN_EDIT.RADIUS);
-                Utilities.clearCacheInRadius(this.normalCache, lastMod.x, lastMod.z, CONFIG.TERRAIN_EDIT.RADIUS);
-            }
-        }
+// Clear cache for all modifications in this update
+modifications.forEach(mod => {
+    Utilities.clearCacheInRadius(this.heightCache, mod.x, mod.z, CONFIG.TERRAIN_EDIT.RADIUS);
+    Utilities.clearCacheInRadius(this.normalCache, mod.x, mod.z, CONFIG.TERRAIN_EDIT.RADIUS);
+});
     }
 
     calculateBaseHeight(x, z, perlin) {
@@ -589,10 +590,12 @@ export class SimpleTerrainRenderer {
         const modifications = this.chunkModifications.get(chunkKey) || [];
 
         let height = this.heightCache.get(key);
-        if (!height) {
+if (height === undefined) {
             // Fallback to main-thread calculation
             const perlin = new OptimizedPerlin(12345);
-            height = this.calculateBaseHeight(x, z, perlin);
+            this.cachedPerlin = this.cachedPerlin || new OptimizedPerlin(12345);
+
+height = this.calculateBaseHeight(x, z, this.cachedPerlin);
         }
 
         // Apply modifications
