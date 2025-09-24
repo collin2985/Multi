@@ -174,11 +174,16 @@ export class WaterRenderer {
         causticsTexture.wrapS = causticsTexture.wrapT = THREE.RepeatWrapping;
 
         // Uniforms for realistic water
+
+const shallowColor = new THREE.Color(0x4dd0e1);
+const deepColor = new THREE.Color(0x001f5f);
+const foamColor = new THREE.Color(0xffffff);
+
         this.uniforms = {
             u_time: { value: 0.0 },
-            u_shallow_color: { value: new THREE.Color(0x4dd0e1) },
-            u_deep_color: { value: new THREE.Color(0x001f5f) },
-            u_foam_color: { value: new THREE.Color(0xffffff) },
+            u_shallow_color: { value: new THREE.Vector4(shallowColor.r, shallowColor.g, shallowColor.b, 1.0) },
+            u_deep_color: { value: new THREE.Vector4(deepColor.r, deepColor.g, deepColor.b, 1.0) },
+            u_foam_color: { value: new THREE.Vector4(foamColor.r, foamColor.g, foamColor.b, 1.0) },
             u_wave_height: { value: 0.2 },
             u_wave_frequency: { value: 0.01 },
             u_normal_map: { value: normalMap },
