@@ -91,11 +91,15 @@ const waterFragmentShader = `
         vec3 blendedNormal = normalize(normalA + normalB * 0.7 + normalC * 0.5);
         vec3 perturbedNormal = normalize(mix(vWorldNormal, blendedNormal, u_normal_scale));
 
-        // --- 2. Depth-Based Color Variation ---
-        float depth = clamp(vDepth / 5.0, 0.0, 1.0);
-        
-        // Color transition from shallow turquoise to deep blue
-        vec3 waterBaseColor = mix(u_shallow_color, u_deep_color, depth);
+// --- 2. Depth-Based Color Variation ---
+// Replaced vDepth / 5.0 with smoothstep over the -1.0 to 1.0 range.
+// shallow_end: 1.0 (vDepth=1.0) -> depth=1.0 (shallow)
+// deep_end: -1.0 (vDepth=-1.0) -> depth=0.0 (deep)
+float depth = smoothstep(-1.0, 1.0, vDepth);
+        
+// Color transition from shallow turquoise to deep blue
+vec3 waterBaseColor = mix(u_shallow_color, u_deep_color, 1.0 - depth); // MIXING IS INVERTED!        
+
 
         // --- 3. Enhanced Fresnel Effect ---
         vec3 viewDir = normalize(vViewPosition);
@@ -117,12 +121,19 @@ const waterFragmentShader = `
         // Apply foam texture in shallow areas and wave crests
         vec2 foamUv = vUv * 20.0 + vec2(u_time * 0.002, u_time * 0.001);
         vec3 foamColor = texture2D(u_foam_texture, foamUv).rgb;
-        foam *= (1.0 - depth) * 0.5 + 0.5; // More foam in shallow areas
+// --- 6. Foam Effect with Texture ---
+// ... (wave height calculation remains the same)
+// Use the shallow-water depth factor to enhance the foam:
+foam *= depth * 0.5 + 0.5; // Stronger near depth=1.0 (shallow)
         
-        // --- 7. Caustics Effect with Texture ---
-        vec2 causticsUv = vUv * 25.0 + vec2(u_time * 0.005, u_time * 0.003);
-        vec3 causticsColor = texture2D(u_caustics_texture, causticsUv).rgb;
-        float causticsIntensity = causticsColor.r * (1.0 - depth); // Caustics stronger in shallow areas
+// --- 7. Caustics Effect with Texture ---
+vec2 causticsUv = vUv * 25.0 + vec2(u_time * 0.005, u_time * 0.003);
+vec3 causticsColor = texture2D(u_caustics_texture, causticsUv).rgb;
+
+// CAUSTICS ARE STRONGEST WHEN DEPTH IS 1.0 (SHALLOW)
+float causticsIntensity = causticsColor.r * depth; 
+// ...
+finalColor += causticsColor * causticsIntensity * vec3(0.2, 0.4, 0.4);
 
         // --- 8. Final Color Composition ---
         vec3 finalColor = waterBaseColor;
