@@ -6,6 +6,7 @@ const waterVertexShader = `
     uniform float u_wave_height;
     uniform float u_wave_frequency;
     uniform float u_average_terrain_height;
+    uniform float u_water_level; // Added missing uniform
     varying vec2 vUv;
     varying vec3 vViewPosition;
     varying vec3 vWorldNormal;

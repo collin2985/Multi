@@ -1,9 +1,9 @@
-// terrain/SimpleTerrainRenderer.js
 import * as THREE from 'three';
 import { CONFIG } from './config.js';
 import { Utilities } from './utilities.js';
 import { TerrainWorkerManager } from './workers/TerrainWorkerManager.js';
 import { TerrainMaterialFactory } from './materials/TerrainMaterialFactory.js';
+import { HeightCalculator } from './heightGeneration/HeightCalculator.js'; // Added missing import
 
 export class SimpleTerrainRenderer {
     constructor(scene) {
@@ -144,7 +144,7 @@ export class SimpleTerrainRenderer {
         return intersects.length > 0 ? intersects[0].point.y : 0;
     }
 
-    // New method to query terrain height for water renderer
+    // Query terrain height for water renderer
     getTerrainHeightAt(x, z) {
         const key = `${x},${z}`;
         if (this.heightCache.has(key)) {
