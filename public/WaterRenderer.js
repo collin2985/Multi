@@ -78,9 +78,9 @@ const waterFragmentShader = `
     
     void main() {
         // --- 1. Enhanced Normal Mapping ---
-        vec2 scrolledUvA = vUv * 2.0 + vec2(u_time * 0.005, u_time * 0.004);
-        vec2 scrolledUvB = vUv * 1.5 + vec2(u_time * -0.004, u_time * 0.003);
-        vec2 scrolledUvC = vUv * 2.5 + vec2(u_time * 0.003, u_time * -0.002);
+        vec2 scrolledUvA = vUv * 100.0 + vec2(u_time * 0.005, u_time * 0.004);
+        vec2 scrolledUvB = vUv * 100.5 + vec2(u_time * -0.004, u_time * 0.003);
+        vec2 scrolledUvC = vUv * 200.5 + vec2(u_time * 0.003, u_time * -0.002);
 
         vec3 normalSampleA = texture2D(u_normal_map, scrolledUvA).rgb;
         vec3 normalSampleB = texture2D(u_normal_map, scrolledUvB).rgb;
@@ -117,14 +117,14 @@ const waterFragmentShader = `
         float waveIntensity = abs(vWaveHeight);
         float foam = smoothstep(u_foam_threshold - 0.1, u_foam_threshold + 0.1, waveIntensity);
         
-        vec2 foamUv = vUv * 20.0 + vec2(u_time * 0.002, u_time * 0.001);
+        vec2 foamUv = vUv * 200.0 + vec2(u_time * 0.002, u_time * 0.001);
         vec3 foamColor = texture2D(u_foam_texture, foamUv).rgb;
         
         // Foam bias towards shallow areas
         foam *= depth * 0.5 + 0.5;
         
         // --- 7. Caustics Effect with Texture ---
-        vec2 causticsUv = vUv * 25.0 + vec2(u_time * 0.005, u_time * 0.003);
+        vec2 causticsUv = vUv * 100.0 + vec2(u_time * 0.005, u_time * 0.003);
         vec3 causticsColor = texture2D(u_caustics_texture, causticsUv).rgb;
         
         // Caustics strongest in shallow areas
