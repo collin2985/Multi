@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 
-// Enhanced vertex shader with wave displacement
+// --- Vertex Shader ---
 const waterVertexShader = `
     uniform float u_time;
     uniform float u_wave_height;
     uniform float u_wave_frequency;
     uniform float u_average_terrain_height;
-    uniform float u_water_level; // Added missing uniform
+    uniform float u_water_level; 
     varying vec2 vUv;
     varying vec3 vViewPosition;
     varying vec3 vWorldNormal;
@@ -51,6 +51,7 @@ const waterVertexShader = `
     }
 `;
 
+// --- Fragment Shader ---
 const waterFragmentShader = `
     uniform float u_time;
     uniform vec3 u_shallow_color;
@@ -112,7 +113,7 @@ const waterFragmentShader = `
         float specular = pow(max(dot(perturbedNormal, halfVector), 0.0), u_shininess);
         vec3 specularColor = u_sun_color * specular;
 
-        // --- 6. Foam Effect with Texture (Fixed Logic) ---
+        // --- 6. Foam Effect with Texture ---
         float waveIntensity = abs(vWaveHeight);
         float foam = smoothstep(u_foam_threshold - 0.1, u_foam_threshold + 0.1, waveIntensity);
         
@@ -122,7 +123,7 @@ const waterFragmentShader = `
         // Foam bias towards shallow areas (depth=1.0)
         foam *= depth * 0.5 + 0.5; 
         
-        // --- 7. Caustics Effect with Texture (Fixed Logic) ---
+        // --- 7. Caustics Effect with Texture ---
         vec2 causticsUv = vUv * 25.0 + vec2(u_time * 0.005, u_time * 0.003);
         vec3 causticsColor = texture2D(u_caustics_texture, causticsUv).rgb;
         
@@ -130,7 +131,7 @@ const waterFragmentShader = `
         float causticsIntensity = causticsColor.r * depth; 
 
 // --- 8. Final Color Composition (CONSOLIDATED & FIXED) ---
-        vec3 finalColor = waterBaseColor; // Initialized ONCE
+        vec3 finalColor = waterBaseColor;
         
         finalColor = mix(finalColor, skyColor, fresnel * 0.6);
         finalColor += specularColor * 0.8;
@@ -145,6 +146,7 @@ const waterFragmentShader = `
     }
 `;
 
+// --- JavaScript Class ---
 export class WaterRenderer {
     constructor(scene, waterLevel = 1, terrainRenderer) {
         this.scene = scene;
