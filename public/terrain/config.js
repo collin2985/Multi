@@ -8,7 +8,7 @@ export const CONFIG = Object.freeze({
     },
     PERFORMANCE: {
         updateThrottle: 100,
-        maxCacheSize: 10000
+        maxCacheSize: 20000 // Increased for water queries
     },
     GRAPHICS: {
         textureSize: 128,

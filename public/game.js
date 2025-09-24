@@ -1,4 +1,6 @@
 // game.js
+
+
 import * as THREE from 'three';
 import { SimpleTerrainRenderer } from './terrain/SimpleTerrainRenderer.js';
 import { ui } from './ui.js';
@@ -67,7 +69,7 @@ box.position.set(0, 0, -3);
 box.name = 'serverBox';
 
 terrainRenderer = new SimpleTerrainRenderer(scene);
-waterRenderer = new WaterRenderer(scene);
+waterRenderer = new WaterRenderer(scene, 0, terrainRenderer); // Pass terrainRenderer
 
 // --- CLICK-TO-MOVE HANDLER ---
 window.addEventListener('pointerdown', onPointerDown);
@@ -98,7 +100,6 @@ function onPointerDown(event) {
         });
     }
 }
-
 
 function attemptWsReconnect() {
     if (wsRetryAttempts < wsMaxRetries) {

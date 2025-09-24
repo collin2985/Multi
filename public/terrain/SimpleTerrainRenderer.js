@@ -144,6 +144,35 @@ export class SimpleTerrainRenderer {
         return intersects.length > 0 ? intersects[0].point.y : 0;
     }
 
+    // New method to query terrain height for water renderer
+    getTerrainHeightAt(x, z) {
+        const key = `${x},${z}`;
+        if (this.heightCache.has(key)) {
+            return this.heightCache.get(key);
+        }
+
+        // Try nearby cached values
+        const ix = Math.round(x);
+        const iz = Math.round(z);
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dz = -1; dz <= 1; dz++) {
+                const nearbyKey = `${ix + dx},${iz + dz}`;
+                if (this.heightCache.has(nearbyKey)) {
+                    return this.heightCache.get(nearbyKey);
+                }
+            }
+        }
+
+        // Fallback to HeightCalculator
+        if (!this.fallbackCalculator) {
+            this.fallbackCalculator = new HeightCalculator(12345); // Match terrainSeed
+        }
+        const height = this.fallbackCalculator.getTerrainHeight(x, z);
+        this.heightCache.set(key, height);
+        Utilities.limitCacheSize(this.heightCache, CONFIG.PERFORMANCE.maxCacheSize);
+        return height;
+    }
+
     dispose() {
         // Clean up resources
         this.terrainChunks.forEach(mesh => {

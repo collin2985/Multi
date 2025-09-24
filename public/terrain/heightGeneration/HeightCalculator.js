@@ -47,8 +47,7 @@ export class HeightCalculator {
         // Sea mask generation - FIXED TO MATCH WORKER
         let seaMaskRaw = this.perlin.noise(x * 0.0008, z * 0.0008, 600);
         let normalizedSea = (seaMaskRaw + 1) * 0.5;
-        // Make seas more common and less restrictive
-let seaMask = normalizedSea > 0.75 ? 1 : 0; // Changed from 0.6 to 0.75 and removed pow for binary effect
+        let seaMask = normalizedSea > 0.75 ? 1 : 0; // Changed from 0.6 to 0.75 and removed pow for binary effect
         // Sea basin generation
         let seaBasin = 0;
         amplitude = 2;
@@ -89,5 +88,10 @@ let seaMask = normalizedSea > 0.75 ? 1 : 0; // Changed from 0.6 to 0.75 and remo
 
     clearCache() {
         this.heightCache.clear();
+    }
+
+    // New method to expose height access for water renderer
+    getTerrainHeight(x, z) {
+        return this.calculateHeight(x, z); // Uses cache internally
     }
 }
