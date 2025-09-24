@@ -81,7 +81,7 @@ const waterFragmentShader = `
 // --- WaterRenderer Class ---
 
 export class WaterRenderer {
-    constructor(scene, waterLevel = -1) {
+    constructor(scene, waterLevel = 1) {
         this.scene = scene;
         this.waterLevel = waterLevel;
         this.mesh = null;
