@@ -1,3 +1,5 @@
+// terrain/SimpleTerrainRenderer.js
+
 import * as THREE from 'three';
 import { CONFIG } from './config.js';
 import { Utilities } from './utilities.js';

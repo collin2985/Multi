@@ -1,3 +1,4 @@
+// WaterRenderer.js
 import * as THREE from 'three';
 
 // --- Vertex Shader ---
@@ -186,7 +187,7 @@ const waterFragmentShader = `
 
 // --- JavaScript Class ---
 export class WaterRenderer {
-    constructor(scene, waterLevel = 1, terrainRenderer) {
+    constructor(scene, waterLevel = 2, terrainRenderer) {
         this.scene = scene;
         this.waterLevel = waterLevel;
         this.terrainRenderer = terrainRenderer;
