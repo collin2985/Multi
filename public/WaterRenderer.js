@@ -13,10 +13,20 @@ const waterVertexShader = `
     varying vec3 vWorldPosition;
     varying float vWaveHeight;
     varying float vDepth;
+    varying float vWaveSlope;
 
     // Simple wave function for surface displacement
     float wave(vec2 pos, float freq, float speed) {
         return sin(pos.x * freq + u_time * speed) * cos(pos.y * freq * 0.7 + u_time * speed * 0.8);
+    }
+
+    // Calculate wave derivative for slope (foam generation)
+    float waveDerivativeX(vec2 pos, float freq, float speed) {
+        return freq * cos(pos.x * freq + u_time * speed) * cos(pos.y * freq * 0.7 + u_time * speed * 0.8);
+    }
+
+    float waveDerivativeZ(vec2 pos, float freq, float speed) {
+        return -freq * 0.7 * sin(pos.x * freq + u_time * speed) * sin(pos.y * freq * 0.7 + u_time * speed * 0.8);
     }
 
     void main() {
@@ -24,25 +34,33 @@ const waterVertexShader = `
         
         vec3 pos = position;
         
-        // Add multiple wave layers for more realistic water movement
+        // Much smaller scale waves for realistic game-scale water
         float waveDisplacement = 0.0;
-        waveDisplacement += wave(pos.xz, u_wave_frequency, 2.0) * 0.4;
-        waveDisplacement += wave(pos.xz * 1.5, u_wave_frequency * 1.3, 1.5) * 0.3;
-        waveDisplacement += wave(pos.xz * 2.1, u_wave_frequency * 0.8, 2.5) * 0.2;
+        waveDisplacement += wave(pos.xz, u_wave_frequency, 1.5) * 0.5;
+        waveDisplacement += wave(pos.xz * 1.8, u_wave_frequency * 1.7, 2.1) * 0.3;
+        waveDisplacement += wave(pos.xz * 2.3, u_wave_frequency * 0.9, 1.8) * 0.2;
         
         pos.y += waveDisplacement * u_wave_height;
         vWaveHeight = waveDisplacement;
+        
+        // Calculate wave slope for foam
+        float slopeX = 0.0;
+        float slopeZ = 0.0;
+        slopeX += waveDerivativeX(pos.xz, u_wave_frequency, 1.5) * 0.5;
+        slopeX += waveDerivativeX(pos.xz * 1.8, u_wave_frequency * 1.7, 2.1) * 0.3;
+        slopeZ += waveDerivativeZ(pos.xz, u_wave_frequency, 1.5) * 0.5;
+        slopeZ += waveDerivativeZ(pos.xz * 1.8, u_wave_frequency * 1.7, 2.1) * 0.3;
+        
+        vWaveSlope = length(vec2(slopeX, slopeZ)) * u_wave_height;
         
         vec4 worldPosition = modelMatrix * vec4(pos, 1.0);
         vWorldPosition = worldPosition.xyz;
         vViewPosition = cameraPosition - worldPosition.xyz;
         
-        // Calculate normal for lighting (approximate)
-        vWorldNormal = normalize(vec3(
-            -u_wave_height * u_wave_frequency * cos(pos.x * u_wave_frequency + u_time * 2.0),
-            1.0,
-            -u_wave_height * u_wave_frequency * cos(pos.z * u_wave_frequency + u_time * 2.0)
-        ));
+        // Calculate normal for lighting (more accurate)
+        vec3 tangentX = vec3(1.0, slopeX * u_wave_height, 0.0);
+        vec3 tangentZ = vec3(0.0, slopeZ * u_wave_height, 1.0);
+        vWorldNormal = normalize(cross(tangentX, tangentZ));
 
         // Calculate depth using average terrain height
         vDepth = u_water_level - u_average_terrain_height + vWaveHeight * u_wave_height;
@@ -75,12 +93,14 @@ const waterFragmentShader = `
     varying vec3 vWorldPosition;
     varying float vWaveHeight;
     varying float vDepth;
+    varying float vWaveSlope;
     
     void main() {
-        // --- 1. Enhanced Normal Mapping ---
-        vec2 scrolledUvA = vUv * 100.0 + vec2(u_time * 0.005, u_time * 0.004);
-        vec2 scrolledUvB = vUv * 100.5 + vec2(u_time * -0.004, u_time * 0.003);
-        vec2 scrolledUvC = vUv * 200.5 + vec2(u_time * 0.003, u_time * -0.002);
+        // --- 1. More Subtle Normal Mapping ---
+        // Much smaller scales and slower movement
+        vec2 scrolledUvA = vUv * 8.0 + vec2(u_time * 0.001, u_time * 0.0008);
+        vec2 scrolledUvB = vUv * 12.0 + vec2(u_time * -0.0006, u_time * 0.0012);
+        vec2 scrolledUvC = vUv * 15.0 + vec2(u_time * 0.0004, u_time * -0.0007);
 
         vec3 normalSampleA = texture2D(u_normal_map, scrolledUvA).rgb;
         vec3 normalSampleB = texture2D(u_normal_map, scrolledUvB).rgb;
@@ -90,18 +110,19 @@ const waterFragmentShader = `
         vec3 normalB = normalize(normalSampleB * 2.0 - 1.0);
         vec3 normalC = normalize(normalSampleC * 2.0 - 1.0);
         
-        vec3 blendedNormal = normalize(normalA + normalB * 0.7 + normalC * 0.5);
-        vec3 perturbedNormal = normalize(mix(vWorldNormal, blendedNormal, u_normal_scale));
+        vec3 blendedNormal = normalize(normalA + normalB * 0.5 + normalC * 0.3);
+        vec3 perturbedNormal = normalize(mix(vWorldNormal, blendedNormal, u_normal_scale * 0.3));
 
         // --- 2. Depth-Based Color Variation ---
-        float depth = smoothstep(-1.0, 1.0, vDepth);
+        float depth = smoothstep(-2.0, 3.0, vDepth);
+        depth = clamp(depth, 0.0, 1.0);
         
         // Color transition
-        vec3 waterBaseColor = mix(u_shallow_color.rgb, u_deep_color.rgb, 1.0 - depth);
+        vec3 waterBaseColor = mix(u_shallow_color.rgb, u_deep_color.rgb, depth);
 
-        // --- 3. Enhanced Fresnel Effect ---
+        // --- 3. Fresnel Effect ---
         vec3 viewDir = normalize(vViewPosition);
-        float fresnel = pow(1.0 - max(dot(viewDir, perturbedNormal), 0.0), 2.0);
+        float fresnel = pow(1.0 - max(dot(viewDir, perturbedNormal), 0.0), 1.5);
         
         // --- 4. Reflection ---
         vec3 reflectedDir = reflect(-viewDir, perturbedNormal);
@@ -113,34 +134,51 @@ const waterFragmentShader = `
         float specular = pow(max(dot(perturbedNormal, halfVector), 0.0), u_shininess);
         vec3 specularColor = u_sun_color * specular;
 
-        // --- 6. Foam Effect with Texture ---
-        float waveIntensity = abs(vWaveHeight);
-        float foam = smoothstep(u_foam_threshold - 0.1, u_foam_threshold + 0.1, waveIntensity);
+        // --- 6. Foam Effect Based on Wave Slope ---
+        // Foam appears where waves are steep (breaking)
+        float foam = smoothstep(u_foam_threshold, u_foam_threshold + 0.3, vWaveSlope);
         
-        vec2 foamUv = vUv * 200.0 + vec2(u_time * 0.002, u_time * 0.001);
-        vec3 foamColor = texture2D(u_foam_texture, foamUv).rgb;
+        // Smaller foam texture scale
+        vec2 foamUv = vUv * 25.0 + vec2(u_time * 0.005, u_time * 0.003);
+        vec3 foamTexColor = texture2D(u_foam_texture, foamUv).rgb;
         
-        // Foam bias towards shallow areas
-        foam *= depth * 0.5 + 0.5;
+        // Add some temporal variation to foam
+        float foamNoise = sin(vWaveSlope * 10.0 + u_time * 3.0) * 0.5 + 0.5;
+        foam *= foamNoise * 0.5 + 0.5;
         
-        // --- 7. Caustics Effect with Texture ---
-        vec2 causticsUv = vUv * 100.0 + vec2(u_time * 0.005, u_time * 0.003);
-        vec3 causticsColor = texture2D(u_caustics_texture, causticsUv).rgb;
+        // --- 7. Subtle Caustics Effect ---
+        // Much smaller scale and more complex movement
+        vec2 causticsUv1 = vUv * 6.0 + vec2(u_time * 0.002, u_time * 0.0015);
+        vec2 causticsUv2 = vUv * 8.5 + vec2(u_time * -0.0012, u_time * 0.0018);
         
-        // Caustics strongest in shallow areas
-        float causticsIntensity = causticsColor.r * depth;
+        vec3 caustics1 = texture2D(u_caustics_texture, causticsUv1).rgb;
+        vec3 caustics2 = texture2D(u_caustics_texture, causticsUv2).rgb;
+        
+        // Blend caustics and make them depth-dependent
+        vec3 causticsColor = mix(caustics1, caustics2, 0.5);
+        float causticsIntensity = (1.0 - depth) * 0.3; // Stronger in shallow water
+        
+        // Add temporal variation to caustics
+        causticsIntensity *= sin(u_time * 1.5) * 0.3 + 0.7;
 
         // --- 8. Final Color Composition ---
         vec3 finalColor = waterBaseColor;
         
-        finalColor = mix(finalColor, skyColor, fresnel * 0.6);
-        finalColor += specularColor * 0.8;
-        finalColor += causticsColor * causticsIntensity * vec3(0.2, 0.4, 0.4);
-        finalColor = mix(finalColor, foamColor, foam * 0.7);
+        // Apply reflection based on fresnel
+        finalColor = mix(finalColor, skyColor, fresnel * 0.4);
+        
+        // Add specular highlights
+        finalColor += specularColor * 0.6;
+        
+        // Add subtle caustics
+        finalColor += causticsColor * causticsIntensity * vec3(0.8, 1.0, 0.9);
+        
+        // Apply foam
+        finalColor = mix(finalColor, foamTexColor * u_foam_color.rgb, foam * 0.8);
 
         // --- 9. Transparency ---
-        float alpha = mix(u_transparency, 1.0, depth);
-        alpha = mix(alpha, 1.0, foam);
+        float alpha = mix(u_transparency, 0.9, depth);
+        alpha = mix(alpha, 1.0, foam * 0.5);
 
         gl_FragColor = vec4(finalColor, alpha);
     }
@@ -160,7 +198,7 @@ export class WaterRenderer {
 
     init() {
         // Create a plane to match loaded terrain area
-        const geometry = new THREE.PlaneGeometry(200, 200, 64, 64);
+        const geometry = new THREE.PlaneGeometry(200, 200, 128, 128); // Higher resolution for better waves
         
         const textureLoader = new THREE.TextureLoader();
         const normalMap = textureLoader.load('./terrain/water_normal.png');
@@ -173,36 +211,31 @@ export class WaterRenderer {
         foamTexture.wrapS = foamTexture.wrapT = THREE.RepeatWrapping;
         causticsTexture.wrapS = causticsTexture.wrapT = THREE.RepeatWrapping;
 
-        // Uniforms for realistic water
-
-const shallowColor = new THREE.Color(0x4dd0e1);
-const deepColor = new THREE.Color(0x001f5f);
-const foamColor = new THREE.Color(0xffffff);
+        // Colors for realistic water
+        const shallowColor = new THREE.Color(0x4dd0e1);
+        const deepColor = new THREE.Color(0x001f5f);
+        const foamColor = new THREE.Color(0xffffff);
 
         this.uniforms = {
             u_time: { value: 0.0 },
             u_shallow_color: { value: new THREE.Vector4(shallowColor.r, shallowColor.g, shallowColor.b, 1.0) },
             u_deep_color: { value: new THREE.Vector4(deepColor.r, deepColor.g, deepColor.b, 1.0) },
             u_foam_color: { value: new THREE.Vector4(foamColor.r, foamColor.g, foamColor.b, 1.0) },
-            u_wave_height: { value: 0.2 },
-            u_wave_frequency: { value: 0.01 },
+            u_wave_height: { value: 0.05 }, // Much smaller waves
+            u_wave_frequency: { value: 0.8 }, // Higher frequency for smaller waves
             u_normal_map: { value: normalMap },
             u_sky_reflection: { value: skyReflection },
             u_foam_texture: { value: foamTexture },
             u_caustics_texture: { value: causticsTexture },
-            u_normal_scale: { value: 0.05 },
-            u_transparency: { value: 0.4 },
+            u_normal_scale: { value: 0.8 }, // Stronger normal mapping
+            u_transparency: { value: 0.6 },
             u_water_level: { value: this.waterLevel },
             u_sun_direction: { value: new THREE.Vector3(0.5, 0.8, 0.3).normalize() },
             u_sun_color: { value: new THREE.Color(0xfff8dc) },
-            u_shininess: { value: 64.0 },
-            u_foam_threshold: { value: 0.8 },
+            u_shininess: { value: 128.0 },
+            u_foam_threshold: { value: 2.0 }, // Adjusted for slope-based foam
             u_average_terrain_height: { value: 0.0 }
         };
-
-        // Log shader code for debugging
-        console.log('Vertex Shader:\n', waterVertexShader);
-        console.log('Fragment Shader:\n', waterFragmentShader);
 
         const material = new THREE.ShaderMaterial({
             uniforms: this.uniforms,
@@ -211,7 +244,7 @@ const foamColor = new THREE.Color(0xffffff);
             transparent: true,
             fog: false,
             side: THREE.DoubleSide,
-            defines: {} // Prevent unwanted shader preprocessing
+            defines: {}
         });
 
         this.mesh = new THREE.Mesh(geometry, material);
@@ -267,9 +300,9 @@ const foamColor = new THREE.Color(0xffffff);
         const height = this.uniforms.u_wave_height.value;
         
         let waveHeight = 0;
-        waveHeight += Math.sin(x * freq + time * 2.0) * Math.cos(z * freq * 0.7 + time * 1.6) * 0.4;
-        waveHeight += Math.sin(x * freq * 1.5 + time * 1.5) * Math.cos(z * freq * 0.91 + time * 1.2) * 0.3;
-        waveHeight += Math.sin(x * freq * 2.1 + time * 2.5) * Math.cos(z * freq * 1.47 + time * 2.0) * 0.2;
+        waveHeight += Math.sin(x * freq + time * 1.5) * Math.cos(z * freq * 0.7 + time * 1.2) * 0.5;
+        waveHeight += Math.sin(x * freq * 1.8 + time * 2.1) * Math.cos(z * freq * 1.19 + time * 1.68) * 0.3;
+        waveHeight += Math.sin(x * freq * 2.3 + time * 1.8) * Math.cos(z * freq * 1.61 + time * 1.44) * 0.2;
         
         return this.waterLevel + waveHeight * height;
     }
