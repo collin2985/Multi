@@ -1,4 +1,3 @@
-// WaterRenderer.js
 import * as THREE from 'three';
 
 // Enhanced vertex shader with wave displacement
@@ -76,9 +75,9 @@ const waterFragmentShader = `
 
     void main() {
         // --- 1. Enhanced Normal Mapping ---
-        vec2 scrolledUvA = vUv * 8.0 + vec2(u_time * 0.02, u_time * 0.015);
-        vec2 scrolledUvB = vUv * 6.0 + vec2(u_time * -0.018, u_time * 0.012);
-        vec2 scrolledUvC = vUv * 12.0 + vec2(u_time * 0.01, u_time * -0.008);
+        vec2 scrolledUvA = vUv * 20.0 + vec2(u_time * 0.005, u_time * 0.004);
+        vec2 scrolledUvB = vUv * 15.0 + vec2(u_time * -0.004, u_time * 0.003);
+        vec2 scrolledUvC = vUv * 25.0 + vec2(u_time * 0.003, u_time * -0.002);
 
         vec3 normalSampleA = texture2D(u_normal_map, scrolledUvA).rgb;
         vec3 normalSampleB = texture2D(u_normal_map, scrolledUvB).rgb;
@@ -92,7 +91,7 @@ const waterFragmentShader = `
         vec3 perturbedNormal = normalize(mix(vWorldNormal, blendedNormal, u_normal_scale));
 
         // --- 2. Depth-Based Color Variation ---
-        float depth = clamp(vDepth / 20.0, 0.0, 1.0);
+        float depth = clamp(vDepth / 5.0, 0.0, 1.0);
         
         // Color transition from shallow turquoise to deep blue
         vec3 waterBaseColor = mix(u_shallow_color, u_deep_color, depth);
@@ -115,12 +114,12 @@ const waterFragmentShader = `
         float waveIntensity = abs(vWaveHeight);
         float foam = smoothstep(u_foam_threshold - 0.1, u_foam_threshold + 0.1, waveIntensity);
         // Apply foam texture in shallow areas and wave crests
-        vec2 foamUv = vUv * 8.0 + vec2(u_time * 0.01, u_time * 0.005);
+        vec2 foamUv = vUv * 20.0 + vec2(u_time * 0.002, u_time * 0.001);
         vec3 foamColor = texture2D(u_foam_texture, foamUv).rgb;
         foam *= (1.0 - depth) * 0.5 + 0.5; // More foam in shallow areas
         
         // --- 7. Caustics Effect with Texture ---
-        vec2 causticsUv = vUv * 10.0 + vec2(u_time * 0.03, u_time * 0.02);
+        vec2 causticsUv = vUv * 25.0 + vec2(u_time * 0.005, u_time * 0.003);
         vec3 causticsColor = texture2D(u_caustics_texture, causticsUv).rgb;
         float causticsIntensity = causticsColor.r * (1.0 - depth); // Caustics stronger in shallow areas
 
@@ -151,8 +150,8 @@ export class WaterRenderer {
     }
 
     init() {
-        // Create a larger, more detailed plane
-        const geometry = new THREE.PlaneGeometry(6000, 6000, 256, 256);
+        // Create a smaller plane to match loaded terrain area
+        const geometry = new THREE.PlaneGeometry(200, 200, 64, 64);
         
         const textureLoader = new THREE.TextureLoader();
         const normalMap = textureLoader.load('./terrain/water_normal.png');
@@ -165,26 +164,26 @@ export class WaterRenderer {
         foamTexture.wrapS = foamTexture.wrapT = THREE.RepeatWrapping;
         causticsTexture.wrapS = causticsTexture.wrapT = THREE.RepeatWrapping;
 
-        // Enhanced uniforms for realistic water
+        // Enhanced uniforms for realistic water, adjusted for game scale
         this.uniforms = {
             u_time: { value: 0.0 },
             u_shallow_color: { value: new THREE.Color(0x4dd0e1) }, // Bright turquoise
             u_deep_color: { value: new THREE.Color(0x0d47a1) },    // Deep ocean blue
             u_foam_color: { value: new THREE.Color(0xffffff) },    // White foam (fallback)
-            u_wave_height: { value: 0.8 },
-            u_wave_frequency: { value: 0.02 },
+            u_wave_height: { value: 0.3 },                        // Smaller waves (0.12 meters)
+            u_wave_frequency: { value: 0.08 },                    // Tighter waves
             u_normal_map: { value: normalMap },
             u_sky_reflection: { value: skyReflection },
             u_foam_texture: { value: foamTexture },
             u_caustics_texture: { value: causticsTexture },
-            u_normal_scale: { value: 0.4 },
+            u_normal_scale: { value: 0.25 },                      // Subtler normal mapping
             u_transparency: { value: 0.7 },
             u_water_level: { value: this.waterLevel },
             u_sun_direction: { value: new THREE.Vector3(0.5, 0.8, 0.3).normalize() },
             u_sun_color: { value: new THREE.Color(0xfff8dc) },
             u_shininess: { value: 64.0 },
-            u_foam_threshold: { value: 0.6 },
-            u_average_terrain_height: { value: 0.0 } // Uniform for depth
+            u_foam_threshold: { value: 0.8 },                     // Less frequent foam
+            u_average_terrain_height: { value: 0.0 }              // Uniform for depth
         };
 
         const material = new THREE.ShaderMaterial({
