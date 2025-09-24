@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { SimpleTerrainRenderer } from './terrain/SimpleTerrainRenderer.js';
 import { ui } from './ui.js';
+import { WaterRenderer } from './WaterRenderer.js';
 
 // --- GLOBAL STATE ---
 const clientId = 'client_' + Math.random().toString(36).substr(2, 12);
@@ -22,6 +23,7 @@ let chunkLoadQueue = [];
 let isProcessingChunks = false;
 const terrainSeed = 12345; // Fixed, client-side terrain seed
 let initialChunksLoaded = false;
+let waterRenderer = null;
 
 // Click-to-move state
 const raycaster = new THREE.Raycaster();
@@ -65,6 +67,7 @@ box.position.set(0, 0, -3);
 box.name = 'serverBox';
 
 terrainRenderer = new SimpleTerrainRenderer(scene);
+waterRenderer = new WaterRenderer(scene);
 
 // --- CLICK-TO-MOVE HANDLER ---
 window.addEventListener('pointerdown', onPointerDown);
@@ -533,6 +536,7 @@ function animate() {
     requestAnimationFrame(animate);
     const now = performance.now();
     const deltaTime = now - lastFrameTime;
+    waterRenderer.update(now);
 
     if (isMoving) {
         const distance = playerObject.position.distanceTo(playerTargetPosition);
