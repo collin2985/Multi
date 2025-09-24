@@ -2,7 +2,6 @@ import * as THREE from 'three';
 
 // --- Vertex Shader ---
 const waterVertexShader = `
-    #version 100
     uniform float u_time;
     uniform float u_wave_height;
     uniform float u_wave_frequency;
@@ -54,7 +53,6 @@ const waterVertexShader = `
 
 // --- Fragment Shader ---
 const waterFragmentShader = `
-    #version 100
     precision highp float;
     uniform float u_time;
     uniform vec4 u_shallow_color;
@@ -80,9 +78,9 @@ const waterFragmentShader = `
     
     void main() {
         // --- 1. Enhanced Normal Mapping ---
-        vec2 scrolledUvA = vUv * 20.0 + vec2(u_time * 0.005, u_time * 0.004);
-        vec2 scrolledUvB = vUv * 15.0 + vec2(u_time * -0.004, u_time * 0.003);
-        vec2 scrolledUvC = vUv * 25.0 + vec2(u_time * 0.003, u_time * -0.002);
+        vec2 scrolledUvA = vUv * 2.0 + vec2(u_time * 0.005, u_time * 0.004);
+        vec2 scrolledUvB = vUv * 1.5 + vec2(u_time * -0.004, u_time * 0.003);
+        vec2 scrolledUvC = vUv * 2.5 + vec2(u_time * 0.003, u_time * -0.002);
 
         vec3 normalSampleA = texture2D(u_normal_map, scrolledUvA).rgb;
         vec3 normalSampleB = texture2D(u_normal_map, scrolledUvB).rgb;
