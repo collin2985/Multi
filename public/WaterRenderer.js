@@ -73,48 +73,37 @@ const waterFragmentShader = `
     varying vec3 vWorldPosition;
     varying float vWaveHeight;
     varying float vDepth;
-
     void main() {
         // --- 1. Enhanced Normal Mapping ---
         vec2 scrolledUvA = vUv * 20.0 + vec2(u_time * 0.005, u_time * 0.004);
         vec2 scrolledUvB = vUv * 15.0 + vec2(u_time * -0.004, u_time * 0.003);
         vec2 scrolledUvC = vUv * 25.0 + vec2(u_time * 0.003, u_time * -0.002);
-
         vec3 normalSampleA = texture2D(u_normal_map, scrolledUvA).rgb;
         vec3 normalSampleB = texture2D(u_normal_map, scrolledUvB).rgb;
         vec3 normalSampleC = texture2D(u_normal_map, scrolledUvC).rgb;
-        
         vec3 normalA = normalize(normalSampleA * 2.0 - 1.0);
         vec3 normalB = normalize(normalSampleB * 2.0 - 1.0);
         vec3 normalC = normalize(normalSampleC * 2.0 - 1.0);
-        
         vec3 blendedNormal = normalize(normalA + normalB * 0.7 + normalC * 0.5);
         vec3 perturbedNormal = normalize(mix(vWorldNormal, blendedNormal, u_normal_scale));
-
 // --- 2. Depth-Based Color Variation ---
 // Replaced vDepth / 5.0 with smoothstep over the -1.0 to 1.0 range.
 // shallow_end: 1.0 (vDepth=1.0) -> depth=1.0 (shallow)
 // deep_end: -1.0 (vDepth=-1.0) -> depth=0.0 (deep)
-float depth = smoothstep(-1.0, 1.0, vDepth);
-        
+float depth = smoothstep(-1.0, 1.0, vDepth); 
 // Color transition from shallow turquoise to deep blue
 vec3 waterBaseColor = mix(u_shallow_color, u_deep_color, 1.0 - depth); // MIXING IS INVERTED!        
-
-
         // --- 3. Enhanced Fresnel Effect ---
         vec3 viewDir = normalize(vViewPosition);
         float fresnel = pow(1.0 - max(dot(viewDir, perturbedNormal), 0.0), 2.0);
-        
         // --- 4. Reflection ---
         vec3 reflectedDir = reflect(-viewDir, perturbedNormal);
         vec2 skyUv = reflectedDir.xz * 0.5 + 0.5;
         vec3 skyColor = texture2D(u_sky_reflection, skyUv).rgb;
-
         // --- 5. Specular Highlights (Sun Reflection) ---
         vec3 halfVector = normalize(u_sun_direction + viewDir);
         float specular = pow(max(dot(perturbedNormal, halfVector), 0.0), u_shininess);
         vec3 specularColor = u_sun_color * specular;
-
         // --- 6. Foam Effect with Texture ---
         float waveIntensity = abs(vWaveHeight);
         float foam = smoothstep(u_foam_threshold - 0.1, u_foam_threshold + 0.1, waveIntensity);
@@ -124,28 +113,23 @@ vec3 waterBaseColor = mix(u_shallow_color, u_deep_color, 1.0 - depth); // MIXING
 // --- 6. Foam Effect with Texture ---
 // ... (wave height calculation remains the same)
 // Use the shallow-water depth factor to enhance the foam:
-foam *= depth * 0.5 + 0.5; // Stronger near depth=1.0 (shallow)
-        
+foam *= depth * 0.5 + 0.5; // Stronger near depth=1.0 (shallow)        
 // --- 7. Caustics Effect with Texture ---
 vec2 causticsUv = vUv * 25.0 + vec2(u_time * 0.005, u_time * 0.003);
 vec3 causticsColor = texture2D(u_caustics_texture, causticsUv).rgb;
-
 // CAUSTICS ARE STRONGEST WHEN DEPTH IS 1.0 (SHALLOW)
 float causticsIntensity = causticsColor.r * depth; 
 // ...
 finalColor += causticsColor * causticsIntensity * vec3(0.2, 0.4, 0.4);
-
         // --- 8. Final Color Composition ---
         vec3 finalColor = waterBaseColor;
         finalColor = mix(finalColor, skyColor, fresnel * 0.6);
         finalColor += specularColor * 0.8;
         finalColor += causticsColor * causticsIntensity * vec3(0.2, 0.4, 0.4);
         finalColor = mix(finalColor, foamColor, foam * 0.7);
-
         // --- 9. Transparency ---
         float alpha = mix(u_transparency, 1.0, depth);
         alpha = mix(alpha, 1.0, foam);
-
         gl_FragColor = vec4(finalColor, alpha);
     }
 `;
