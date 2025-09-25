@@ -108,7 +108,7 @@ const waterFragmentShader = `
         // 0 - 1.5   : shallow
         // 1.5 - 2.0 : transition
         // > 2.0     : deep
-        float shallowFactor = clamp(local_depth / 1.5, 0.0, 1.0);
+        float shallowFactor2 = clamp(local_depth / 1.5, 0.0, 1.0);
         float transitionFactor = smoothstep(1.5, 2.0, local_depth);
         float deepFactor = step(2.0, local_depth);
 
@@ -118,7 +118,7 @@ const waterFragmentShader = `
         // Transparency / alpha
         float alpha;
         if (local_depth <= 1.5) {
-            alpha = mix(0.3, 0.8, shallowFactor);  // fade in shallow
+            alpha = mix(0.3, 0.8, shallowFactor2);  // fade in shallow
         } else if (local_depth <= 2.0) {
             alpha = mix(0.8, 1.0, transitionFactor); // transition zone
         } else {
