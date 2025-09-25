@@ -12,7 +12,7 @@ export class SimpleTerrainRenderer {
         this.heightCache = new Map();
         this.normalCache = new Map();
         this.workerManager = workerManager || new TerrainWorkerManager();
-        this.terrainMaterial = terrainMaterial || new TerrainMaterialFactory().createMaterial();
+        this.terrainMaterial = terrainMaterial || new TerrainMaterialFactory().createTerrainMaterial();
         this.waterRenderer = null; // NEW: Reference to waterRenderer
     }
 
