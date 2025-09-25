@@ -63,8 +63,8 @@ const waterVertexShader = `
 
 // --- Fragment Shader ---
 const waterFragmentShader = `
-    uniform float u_terrain_height;
     precision highp float;
+    uniform float u_terrain_height;
     uniform float u_time;
     uniform vec4 u_shallow_color;
     uniform vec4 u_deep_color;
@@ -104,7 +104,7 @@ const waterFragmentShader = `
         vec3 normalC = normalize(normalSampleC * 2.0 - 1.0);
         vec3 blendedNormal = normalize(normalA + normalB * 0.5 + normalC * 0.3);
         vec3 perturbedNormal = normalize(mix(vWorldNormal, blendedNormal, u_normal_scale * 0.3));
-        float depth = smoothstep(0.0, 0.35, local_depth);
+        float depth = smoothstep(0.0, 3.35, local_depth);
         depth = clamp(depth, 0.0, 1.0);
         vec3 waterBaseColor = mix(u_shallow_color.rgb, u_deep_color.rgb, depth);
         vec3 viewDir = normalize(vViewPosition);
@@ -205,7 +205,7 @@ export class WaterRenderer {
             u_sun_color: { value: new THREE.Color(0xfff8dc) },
             u_shininess: { value: 1.0 },
             u_foam_threshold: { value: 5.0 },
-            u_texture_scale: { value: 4.4 },
+            u_texture_scale: { value: 10 },
             u_chunk_offset: { value: new THREE.Vector2(0, 0) } // NEW: Chunk offset for shaders
         };
         
