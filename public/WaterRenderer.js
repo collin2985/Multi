@@ -63,6 +63,7 @@ const waterVertexShader = `
 
 // --- Fragment Shader ---
 const waterFragmentShader = `
+    uniform float u_terrain_height;
     precision highp float;
     uniform float u_time;
     uniform vec4 u_shallow_color;
@@ -89,8 +90,6 @@ const waterFragmentShader = `
     varying float vWaveSlope;
 
     void main() {
-        // NEW: Use terrainRenderer.getTerrainHeightAt instead of calculateHeight
-        uniform float u_terrain_height;
         float local_depth = vWorldPosition.y - u_terrain_height;
         if (local_depth < 0.0) discard;
         vec2 scrolledUvA = vUv * 8.0 * u_texture_scale + vec2(u_time * 0.003, u_time * 0.0024);
