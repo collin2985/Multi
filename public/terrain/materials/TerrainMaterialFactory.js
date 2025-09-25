@@ -41,7 +41,7 @@ export class TerrainMaterialFactory {
                 vec3 sand = texture2D(uSand, vUv * repeat).rgb;
                 
                 // FIXED: Expanded sand range to cover deep seas (-25 to -2)
-                float wSand = smoothstep(0.8, 1.0, vHeight) * (1.0 - smoothstep(-5.0, -2.0, vHeight));
+                float wSand = smoothstep(0.8, 1.0, vHeight) * (1.0 - smoothstep(0.7, 1.1, vHeight));
                 float wDirt = smoothstep(-2.0, 1.0, vHeight) * (1.0 - smoothstep(0.8, 1.0, vHeight));
                 float wGrass = smoothstep(-1.0, 3.0, vHeight) * (1.0 - smoothstep(-1.0, 7.5, vHeight));
                 float wSnow = smoothstep(7.5, 12.0, vHeight);
