@@ -1,3 +1,4 @@
+// WaterRenderer.js
 import * as THREE from 'three';
 
 const dat = window.dat; 
@@ -131,7 +132,7 @@ const waterFragmentShader = `
 
 // --- JavaScript Class ---
 export class WaterRenderer {
-    constructor(scene = null, waterLevel = 2 /* TEST-ONLY: , terrainRenderer = null */) {
+    constructor(scene = null, waterLevel = 3 /* TEST-ONLY: , terrainRenderer = null */) {
         this.scene = scene || this.createTestScene();
         this.waterLevel = waterLevel;
         /* TEST: this.terrainRenderer = terrainRenderer; */
