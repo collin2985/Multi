@@ -14,6 +14,13 @@ export class SimpleTerrainRenderer {
         this.workerManager = workerManager || new TerrainWorkerManager();
         this.terrainMaterial = terrainMaterial || TerrainMaterialFactory.createTerrainMaterial();
         this.waterRenderer = null; // NEW: Reference to waterRenderer
+        const textures = TerrainMaterialFactory.createProceduralTextures();
+        this.terrainMaterial.uniforms.uDirt.value = textures.dirt;
+        this.terrainMaterial.uniforms.uGrass.value = textures.grass;
+        this.terrainMaterial.uniforms.uRock.value = textures.rock;
+        this.terrainMaterial.uniforms.uRock2.value = textures.rock2;
+        this.terrainMaterial.uniforms.uSnow.value = textures.snow;
+        this.terrainMaterial.uniforms.uSand.value = textures.sand;
     }
 
     // NEW: Set waterRenderer reference
