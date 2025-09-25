@@ -220,7 +220,7 @@ const waterFragmentShader = `
         finalColor += specularColor * 0.6;
         finalColor += causticsColor * causticsIntensity * vec3(0.8, 1.0, 0.9);
         finalColor = mix(finalColor, foamTexColor * u_foam_color.rgb, foam * 0.8);
-        float alpha = mix(u_transparency, 0.9, depth);
+        float alpha = mix(0.3, 1.0, depth);
         alpha = mix(alpha, 1.0, foam * 0.5);
         gl_FragColor = vec4(finalColor, alpha);
     }
@@ -228,7 +228,7 @@ const waterFragmentShader = `
 
 // --- JavaScript Class ---
 export class WaterRenderer {
-    constructor(scene = null, waterLevel = 2, terrainRenderer = null ) {
+    constructor(scene = null, waterLevel = 3, terrainRenderer = null ) {
         this.scene = scene || this.createTestScene();
         this.waterLevel = waterLevel;
         this.terrainRenderer = terrainRenderer; 
