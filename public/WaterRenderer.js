@@ -227,7 +227,7 @@ vec2 foamUv = vUv * 25.0 + vec2(u_time * 0.015, u_time * 0.009);
 
 // --- JavaScript Class ---
 export class WaterRenderer {
-    constructor(scene = null, waterLevel = 1, terrainRenderer = null ) {
+    constructor(scene = null, waterLevel = 0.9, terrainRenderer = null ) {
         this.scene = scene || this.createTestScene();
         this.waterLevel = waterLevel;
         this.terrainRenderer = terrainRenderer; 

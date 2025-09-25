@@ -69,7 +69,7 @@ box.position.set(0, 0, -3);
 box.name = 'serverBox';
 
 terrainRenderer = new SimpleTerrainRenderer(scene);
-waterRenderer = new WaterRenderer(scene, 1, terrainRenderer); // Pass terrainRenderer
+waterRenderer = new WaterRenderer(scene, 0.9, terrainRenderer); // Pass terrainRenderer
 
 // --- CLICK-TO-MOVE HANDLER ---
 window.addEventListener('pointerdown', onPointerDown);
