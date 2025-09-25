@@ -180,10 +180,10 @@ const waterFragmentShader = `
         float terrain_height = calculateHeight(vWorldPosition.x, vWorldPosition.z);
         float local_depth = vWorldPosition.y - terrain_height;
         if (local_depth < 0.0) discard;
-vec2 scrolledUvA = vUv * 8.0 * u_texture_scale + vec2(u_time * 0.0015, u_time * 0.0012);
-vec2 scrolledUvB = vUv * 12.0 * u_texture_scale + vec2(u_time * -0.0009, u_time * 0.0018);
-vec2 scrolledUvC = vUv * 15.0 * u_texture_scale + vec2(u_time * 0.0006, u_time * -0.00105);
-vec2 foamUv = vUv * 25.0 + vec2(u_time * 0.0075, u_time * 0.0045);
+vec2 scrolledUvA = vUv * 8.0 * u_texture_scale + vec2(u_time * 0.003, u_time * 0.0024);
+vec2 scrolledUvB = vUv * 12.0 * u_texture_scale + vec2(u_time * -0.0018, u_time * 0.0036);
+vec2 scrolledUvC = vUv * 15.0 * u_texture_scale + vec2(u_time * 0.0012, u_time * -0.0021);
+vec2 foamUv = vUv * 25.0 + vec2(u_time * 0.015, u_time * 0.009);
         vec3 normalSampleA = texture2D(u_normal_map, scrolledUvA).rgb;
         vec3 normalSampleB = texture2D(u_normal_map, scrolledUvB).rgb;
         vec3 normalSampleC = texture2D(u_normal_map, scrolledUvC).rgb;
