@@ -1,9 +1,9 @@
 // SimpleTerrainRenderer.js
 import * as THREE from 'three';
 import { CONFIG } from './config.js';
-import { TerrainWorkerManager } from './TerrainWorkerManager.js';
-import { TerrainMaterialFactory } from './TerrainMaterialFactory.js';
-import { Utilities } from './Utilities.js';
+import { TerrainWorkerManager } from './workers/TerrainWorkerManager.js';
+import { TerrainMaterialFactory } from './materials/TerrainMaterialFactory.js';
+import { Utilities } from './utilities.js';
 
 export class SimpleTerrainRenderer {
     constructor(scene, workerManager = null, terrainMaterial = null) {
