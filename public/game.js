@@ -17,8 +17,7 @@ let currentPlayerChunkX = 0;
 let currentPlayerChunkZ = 0;
 let lastChunkX = null;
 let lastChunkZ = null;
-
-const loadRadius = 1; // How many chunks to load around player
+const loadRadius = CONFIG.TERRAIN.renderDistance; // Use the value from config (which is 2)
 let lastChunkUpdateTime = 0;
 const chunkUpdateInterval = 1000; // Check every second
 let chunkLoadQueue = [];
@@ -48,6 +47,53 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0x000011);
 document.body.appendChild(renderer.domElement);
+
+function updateChunks(playerWorldX, playerWorldZ) {
+    const chunkSize = CONFIG.TERRAIN.chunkSize;
+    const radius = CONFIG.TERRAIN.renderDistance;
+    
+    // 1. Calculate the current chunk the player is in
+    const newChunkX = Math.floor(playerWorldX / chunkSize);
+    const newChunkZ = Math.floor(playerWorldZ / chunkSize);
+
+    // Only update if the player has moved into a new chunk or it's the first time
+    if (newChunkX === lastChunkX && newChunkZ === lastChunkZ && lastChunkX !== null) {
+        return; 
+    }
+
+    // 2. Determine which chunks to keep (within radius)
+    const chunksToKeep = new Set();
+    for (let x = -radius; x <= radius; x++) {
+        for (let z = -radius; z <= radius; z++) {
+            const chunkX = newChunkX + x;
+            const chunkZ = newChunkZ + z;
+            const key = `${chunkX},${chunkZ}`;
+            
+            chunksToKeep.add(key);
+
+            // If the chunk is not currently loaded, add it
+            if (!terrainRenderer.terrainChunks.has(key)) {
+                // terrainRenderer is from SimpleTerrainRenderer.js [cite: 133]
+                terrainRenderer.addTerrainChunk({ chunkX, chunkZ, seed: terrainSeed });
+            }
+        }
+    }
+
+    // 3. Remove chunks that are outside the radius
+    // Iterate over current loaded chunks (using a copy of keys to avoid modification issues)
+    Array.from(terrainRenderer.terrainChunks.keys()).forEach(key => {
+        if (!chunksToKeep.has(key)) {
+            const [chunkX, chunkZ] = key.split(',').map(Number);
+            terrainRenderer.removeTerrainChunk({ chunkX, chunkZ });
+        }
+    });
+
+    // 4. Update the last known chunk position
+    lastChunkX = newChunkX;
+    lastChunkZ = newChunkZ;
+    currentPlayerChunkX = newChunkX;
+    currentPlayerChunkZ = newChunkZ; // Update global state
+}
 
 // Lighting
 const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
@@ -553,6 +599,16 @@ function animate() {
     const now = performance.now();
     const deltaTime = now - lastFrameTime;
     waterRenderer.update(now); // NEW: Update water time
+
+if (now - lastChunkUpdateTime > chunkUpdateInterval) {
+    lastChunkUpdateTime = now;
+    
+    // Assuming your player object's position is available, e.g., camera or avatar
+    const playerX = camera.position.x; // Replace camera with your player object if needed
+    const playerZ = camera.position.z;
+
+    updateChunks(playerX, playerZ);
+}
 
     if (isMoving) {
         const distance = playerObject.position.distanceTo(playerTargetPosition);
