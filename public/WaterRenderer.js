@@ -90,9 +90,8 @@ const waterFragmentShader = `
 
     void main() {
         // NEW: Use terrainRenderer.getTerrainHeightAt instead of calculateHeight
-        float local_depth = vWorldPosition.y - terrain_height;
         uniform float u_terrain_height;
-        float terrain_height = u_terrain_height;
+        float local_depth = vWorldPosition.y - u_terrain_height;
         if (local_depth < 0.0) discard;
         vec2 scrolledUvA = vUv * 8.0 * u_texture_scale + vec2(u_time * 0.003, u_time * 0.0024);
         vec2 scrolledUvB = vUv * 12.0 * u_texture_scale + vec2(u_time * -0.0018, u_time * 0.0036);
@@ -178,6 +177,7 @@ export class WaterRenderer {
         const foamTexture = textureLoader.load('./terrain/foam.png');
         const causticsTexture = textureLoader.load('./terrain/caustics.png');
         
+        
         normalMap.wrapS = normalMap.wrapT = THREE.RepeatWrapping;
         skyReflection.wrapS = skyReflection.wrapT = THREE.RepeatWrapping;
         foamTexture.wrapS = foamTexture.wrapT = THREE.RepeatWrapping;
@@ -188,6 +188,7 @@ export class WaterRenderer {
         const foamColor = new THREE.Color(0xffffff);
         
         this.uniforms = {
+            u_terrain_height: { value: 0.0 },
             u_time: { value: 0.0 },
             u_shallow_color: { value: new THREE.Vector4(shallowColor.r, shallowColor.g, shallowColor.b, 1.0) },
             u_deep_color: { value: new THREE.Vector4(deepColor.r, deepColor.g, deepColor.b, 1.0) },
@@ -301,18 +302,23 @@ export class WaterRenderer {
     }
 
     update(time) {
-        this.uniforms.u_time.value = time * 0.001;
-            const worldX = this.mesh.position.x;
-    const worldZ = this.mesh.position.z;
+    this.uniforms.u_time.value = time * 0.001;
 
-    this.material.uniforms.u_terrain_height.value =
-        this.terrainRenderer.getTerrainHeightAt(worldX, worldZ);
-        // NEW: Update chunk offsets for each water chunk
-        this.waterChunks.forEach((mesh, key) => {
-            const [chunkX, chunkZ] = key.split(',').map(Number);
-            mesh.material.uniforms.u_chunk_offset.value.set(chunkX, chunkZ);
-        });
-    }
+    // Update each chunk
+    this.waterChunks.forEach((mesh, key) => {
+        const [chunkX, chunkZ] = key.split(',').map(Number);
+
+        // Update chunk offset uniform
+        mesh.material.uniforms.u_chunk_offset.value.set(chunkX, chunkZ);
+
+        // Get terrain height under this chunk
+        if (this.terrainRenderer) {
+            const terrainHeight = this.terrainRenderer.getTerrainHeightAt(chunkX, chunkZ);
+            mesh.material.uniforms.u_terrain_height.value = terrainHeight;
+        }
+    });
+}
+
 
 
 
