@@ -9,12 +9,16 @@ export const Utilities = {
         };
     },
 
-    limitCacheSize(cache, maxSize) {
-        if (cache.size > maxSize) {
-            const keysToDelete = Array.from(cache.keys()).slice(0, cache.size - maxSize);
-            keysToDelete.forEach(key => cache.delete(key));
-        }
-    },
+limitCacheSize(cache, maxSize) {
+    if (cache.size > maxSize) {
+        // Remove oldest 25% of entries when limit exceeded
+        const entriesToRemove = Math.floor(cache.size * 0.25);
+        const keysToDelete = Array.from(cache.keys()).slice(0, entriesToRemove);
+        keysToDelete.forEach(key => cache.delete(key));
+        
+        console.log(`Cache cleanup: removed ${entriesToRemove} entries, ${cache.size} remaining`);
+    }
+},
 
     getChunkRNG(seed, chunkX, chunkZ) {
         const chunkSeed = seed + chunkX * 73856093 + chunkZ * 19349663;

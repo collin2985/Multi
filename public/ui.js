@@ -33,22 +33,25 @@ export const ui = {
 
     // Sets up event listeners, accepting callbacks for actions
     initializeUI(callbacks) {
-        addBtn.onclick = () => {
-            callbacks.sendServerMessage('add_box_request', {
-                chunkId: `chunk_${callbacks.currentChunkX}_${callbacks.currentChunkZ}`, // Updated to use current chunk
-                position: { x: 0, y: 0, z: -3 }
-            });
-        };
-
-        removeBtn.onclick = () => {
-            callbacks.sendServerMessage('remove_box_request', {
-                chunkId: `chunk_${callbacks.currentChunkX}_${callbacks.currentChunkZ}` // Updated to use current chunk
-            });
-        };
-        
-        // --- RESIZE HANDLING ---
-        window.addEventListener('resize', () => {
-            callbacks.onResize();
+    addBtn.onclick = () => {
+        const chunkX = callbacks.getCurrentChunkX();
+        const chunkZ = callbacks.getCurrentChunkZ();
+        callbacks.sendServerMessage('add_box_request', {
+            chunkId: `chunk_${chunkX}_${chunkZ}`,
+            position: { x: 0, y: 0, z: -3 }
         });
-    },
+    };
+
+    removeBtn.onclick = () => {
+        const chunkX = callbacks.getCurrentChunkX();
+        const chunkZ = callbacks.getCurrentChunkZ();
+        callbacks.sendServerMessage('remove_box_request', {
+            chunkId: `chunk_${chunkX}_${chunkZ}`
+        });
+    };
+    
+    window.addEventListener('resize', () => {
+        callbacks.onResize();
+    });
+}
 };

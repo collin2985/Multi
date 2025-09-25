@@ -46,7 +46,7 @@ export class TerrainMaterialFactory {
                 float wSand = smoothstep(0.5, 1.3, vHeight) * (1.0 - smoothstep(0.5, 1.3, vHeight));
                 float wDirt = smoothstep(-25.0, 0.6, vHeight) * (1.0 - smoothstep(0.0, 1.0, vHeight));
                 float wGrass = smoothstep(0.9, 3.0, vHeight) * (1.0 - smoothstep(0.9, 3.0, vHeight));
-                float wRock2 = smoothstep(3.0, 9.0, vHeight) 
+                float wRock2 = smoothstep(3.0, 9.0, vHeight); 
                 float wSnow = smoothstep(7.5, 12.0, vHeight);
                 
                 // Normalize weights to ensure they sum to 1
@@ -61,7 +61,7 @@ export class TerrainMaterialFactory {
                 
                 float slopeFactor = smoothstep(0.05, 0.2, vSlope);
                 
-                vec3 baseColor = sand * wSand + dirt * wDirt + grass * wGrass + rock2 * wrock2 + snow * wSnow;
+                vec3 baseColor = sand * wSand + dirt * wDirt + grass * wGrass + rock2 * wRock2 + snow * wSnow;
                 baseColor = mix(baseColor, rock, slopeFactor);
                 
                 // Enhanced lighting for underwater areas

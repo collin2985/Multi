@@ -30,6 +30,8 @@ let waterRenderer = null;
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 const playerTargetPosition = new THREE.Vector3();
+const cameraOffset = new THREE.Vector3(0, 15, 5); // Move this OUTSIDE too
+let cameraTargetPosition = new THREE.Vector3();
 let isMoving = false;
 
 // --- WEBSOCKET RECONNECTION STATE ---
@@ -600,7 +602,7 @@ function animate() {
     processChunkQueue();
 
     const cameraOffset = new THREE.Vector3(0, 15, 5);  //0, 15, 5 sets a good height
-    const cameraTargetPosition = playerObject.position.clone().add(cameraOffset);
+cameraTargetPosition.copy(playerObject.position).add(cameraOffset);
     const smoothedCameraPosition = camera.position.lerp(cameraTargetPosition, 0.5);
     camera.position.copy(smoothedCameraPosition);
     camera.lookAt(playerObject.position);
@@ -645,6 +647,8 @@ ui.updateConnectionStatus('connecting', '🔄 Connecting...');
 ui.initializeUI({
     sendServerMessage: sendServerMessage,
     clientId: clientId,
+    getCurrentChunkX: () => currentPlayerChunkX, // Add these getters
+    getCurrentChunkZ: () => currentPlayerChunkZ,
     onResize: () => {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();

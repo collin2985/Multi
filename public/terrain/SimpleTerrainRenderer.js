@@ -1,4 +1,4 @@
-// SimpleTerrainRenderer.js
+// terrain/SimpleTerrainRenderer.js
 import * as THREE from 'three';
 import { CONFIG } from './config.js';
 import { TerrainWorkerManager } from './workers/TerrainWorkerManager.js';
@@ -12,7 +12,7 @@ export class SimpleTerrainRenderer {
         this.heightCache = new Map();
         this.normalCache = new Map();
         this.workerManager = workerManager || new TerrainWorkerManager();
-        this.terrainMaterial = terrainMaterial || new TerrainMaterialFactory().createTerrainMaterial();
+        this.terrainMaterial = terrainMaterial || TerrainMaterialFactory.createTerrainMaterial();
         this.waterRenderer = null; // NEW: Reference to waterRenderer
     }
 
@@ -22,67 +22,81 @@ export class SimpleTerrainRenderer {
     }
 
     addTerrainChunk({ chunkX, chunkZ, seed }) {
-        const key = `${chunkX},${chunkZ}`;
-        if (this.terrainChunks.has(key)) return;
+    // FIX: Make sure we're consistent about what chunkX/chunkZ represent
+    // They should be GRID positions (0, 1, 2, etc.), not world coordinates
+    const chunkSize = CONFIG.TERRAIN.chunkSize;
+    const worldX = chunkX * chunkSize; // Convert grid to world position
+    const worldZ = chunkZ * chunkSize;
+    
+    const key = `${chunkX},${chunkZ}`; // Use grid coordinates for key
+    if (this.terrainChunks.has(key)) return;
 
-        const geometry = new THREE.PlaneGeometry(
-            CONFIG.TERRAIN.chunkSize,
-            CONFIG.TERRAIN.chunkSize,
-            CONFIG.TERRAIN.segments,
-            CONFIG.TERRAIN.segments
-        );
-        geometry.rotateX(-Math.PI / 2);
-        const chunk = new THREE.Mesh(geometry, this.terrainMaterial);
-        chunk.position.set(
-            chunkX * CONFIG.TERRAIN.chunkSize,
-            0,
-            chunkZ * CONFIG.TERRAIN.chunkSize
-        );
-        chunk.name = `terrain_${key}`;
-        this.scene.add(chunk);
-        this.terrainChunks.set(key, chunk);
+    const geometry = new THREE.PlaneGeometry(
+        chunkSize,
+        chunkSize,
+        CONFIG.TERRAIN.segments,
+        CONFIG.TERRAIN.segments
+    );
+    geometry.rotateX(-Math.PI / 2);
+    const chunk = new THREE.Mesh(geometry, this.terrainMaterial);
+    chunk.position.set(worldX, 0, worldZ); // Use world coordinates for positioning
+    chunk.name = `terrain_${key}`;
+    this.scene.add(chunk);
+    this.terrainChunks.set(key, chunk);
 
-        const points = [];
-        const vertices = chunk.geometry.attributes.position.array;
-        for (let i = 0; i < vertices.length; i += 3) {
-            const x = vertices[i] + chunk.position.x;
-            const z = vertices[i + 2] + chunk.position.z;
-            points.push({ x, z });
-        }
-
-        const batchId = `${key}_${Date.now()}`;
-        this.workerManager.calculateHeightBatch(points, batchId, (result) => {
-            this.handleHeightBatchResult(result, chunk, key, seed);
-        });
-
-        // NEW: Add corresponding water chunk
-        if (this.waterRenderer) {
-            this.waterRenderer.addWaterChunk(chunkX * CONFIG.TERRAIN.chunkSize, chunkZ * CONFIG.TERRAIN.chunkSize);
-        }
+    // Generate points for height calculation using world coordinates
+    const points = [];
+    const vertices = chunk.geometry.attributes.position.array;
+    for (let i = 0; i < vertices.length; i += 3) {
+        const x = vertices[i] + worldX; // Add world offset
+        const z = vertices[i + 2] + worldZ;
+        points.push({ x, z, index: i / 3 });
     }
 
-    handleHeightBatchResult(result, chunk, key, seed) {
-        if (!this.terrainChunks.has(key)) return;
+    const batchId = `${key}_${Date.now()}`;
+    this.workerManager.calculateHeightBatch(points, batchId, (result) => {
+        this.handleHeightBatchResult(result, chunk, key, seed);
+    });
 
-        const vertices = chunk.geometry.attributes.position.array;
-        for (let i = 0, j = 0; i < vertices.length; i += 3, j++) {
-            const x = vertices[i] + chunk.position.x;
-            const z = vertices[i + 2] + chunk.position.z;
-            const height = result.heights[j];
-            vertices[i + 1] = height;
-
-            const cacheKey = `${x.toFixed(2)},${z.toFixed(2)}`;
-            this.heightCache.set(cacheKey, height);
-            if (result.normals && result.normals[j]) {
-                this.normalCache.set(cacheKey, new THREE.Vector3().fromArray(result.normals[j]));
-            }
-        }
-        chunk.geometry.attributes.position.needsUpdate = true;
-        chunk.geometry.computeVertexNormals();
-
-        Utilities.limitCacheSize(this.heightCache, CONFIG.PERFORMANCE.maxCacheSize);
-        Utilities.limitCacheSize(this.normalCache, CONFIG.PERFORMANCE.maxCacheSize);
+    // Update water renderer to use world coordinates too
+    if (this.waterRenderer) {
+        this.waterRenderer.addWaterChunk(worldX, worldZ);
     }
+}
+
+   handleHeightBatchResult(result, chunk, key, seed) {
+    if (!this.terrainChunks.has(key)) return;
+
+    const vertices = chunk.geometry.attributes.position.array;
+    
+    // FIX: The worker returns result.results, not result.heights
+    for (let i = 0; i < result.results.length; i++) {
+        const resultData = result.results[i];
+        const vertexIndex = resultData.index || i; // Use index if provided, otherwise use i
+        const arrayIndex = vertexIndex * 3; // Each vertex has x,y,z components
+        
+        // Update the vertex height
+        vertices[arrayIndex + 1] = resultData.height;
+        
+        // Cache the height and normal
+        const cacheKey = `${resultData.x.toFixed(2)},${resultData.z.toFixed(2)}`;
+        this.heightCache.set(cacheKey, resultData.height);
+        
+        if (resultData.normal) {
+            this.normalCache.set(cacheKey, new THREE.Vector3(
+                resultData.normal.x, 
+                resultData.normal.y, 
+                resultData.normal.z
+            ));
+        }
+    }
+    
+    chunk.geometry.attributes.position.needsUpdate = true;
+    chunk.geometry.computeVertexNormals();
+
+    Utilities.limitCacheSize(this.heightCache, CONFIG.PERFORMANCE.maxCacheSize);
+    Utilities.limitCacheSize(this.normalCache, CONFIG.PERFORMANCE.maxCacheSize);
+}
 
     removeTerrainChunk({ chunkX, chunkZ }) {
         const key = `${chunkX},${chunkZ}`;
@@ -172,19 +186,39 @@ export class SimpleTerrainRenderer {
     }
 
     dispose() {
-        this.terrainChunks.forEach((chunk, key) => {
-            this.scene.remove(chunk);
-            chunk.geometry.dispose();
-        });
-        this.terrainChunks.clear();
-        this.heightCache.clear();
-        this.normalCache.clear();
-        this.terrainMaterial.dispose();
-        this.workerManager.terminate();
-
-        // NEW: Clean up water chunks
-        if (this.waterRenderer) {
-            this.waterRenderer.clearWaterChunks();
+    // Clean up terrain chunks
+    this.terrainChunks.forEach((chunk, key) => {
+        this.scene.remove(chunk);
+        chunk.geometry.dispose();
+        if (chunk.material && chunk.material !== this.terrainMaterial) {
+            chunk.material.dispose(); // Only dispose if it's not the shared material
         }
+    });
+    this.terrainChunks.clear();
+    
+    // Clear caches more aggressively
+    this.heightCache.clear();
+    this.normalCache.clear();
+    
+    // Dispose shared material and its textures
+    if (this.terrainMaterial) {
+        // Dispose textures first
+        Object.values(this.terrainMaterial.uniforms).forEach(uniform => {
+            if (uniform.value && uniform.value.dispose) {
+                uniform.value.dispose();
+            }
+        });
+        this.terrainMaterial.dispose();
     }
+    
+    // Terminate worker
+    if (this.workerManager) {
+        this.workerManager.terminate();
+    }
+
+    // Clean up water chunks
+    if (this.waterRenderer) {
+        this.waterRenderer.dispose(); // Make sure WaterRenderer has this method
+    }
+}
 }
