@@ -96,7 +96,7 @@ const waterFragmentShader = `
         vec3 normalC = normalize(normalSampleC * 2.0 - 1.0);
         vec3 blendedNormal = normalize(normalA + normalB * 0.5 + normalC * 0.3);
         vec3 perturbedNormal = normalize(mix(vWorldNormal, blendedNormal, u_normal_scale * 0.3));
-        float depth = smoothstep(-2.0, 3.0, vDepth);
+        float depth = smoothstep(0.1, 1.0, vDepth); // <-- CHANGED RANGE
         depth = clamp(depth, 0.0, 1.0);
         vec3 waterBaseColor = mix(u_shallow_color.rgb, u_deep_color.rgb, depth);
         vec3 viewDir = normalize(vViewPosition);
@@ -135,7 +135,7 @@ export class WaterRenderer {
     constructor(scene = null, waterLevel = 3 /* TEST-ONLY: , terrainRenderer = null */) {
         this.scene = scene || this.createTestScene();
         this.waterLevel = waterLevel;
-        /* TEST: this.terrainRenderer = terrainRenderer; */
+        this.terrainRenderer = terrainRenderer; 
         this.mesh = null;
         this.uniforms = {};
         this.gui = null;
@@ -258,10 +258,22 @@ export class WaterRenderer {
         textureFolder.add(this.uniforms.u_texture_scale, 'value', 0.5, 5.0).name('Overall Scale').onChange(this.updateUniforms.bind(this));
     }
 
-    update(time) {
+update(time) {
         if (this.mesh) {
             this.uniforms.u_time.value = time * 0.001;
-            this.uniforms.u_average_terrain_height.value = 0.0;
+            
+            // --- MODIFIED LOGIC START ---
+            let currentTerrainHeight = 0.0;
+            if (this.terrainRenderer) {
+                // Get terrain height at the center of the water plane.
+                // For a proper implementation, this should be the height under the camera.
+                currentTerrainHeight = this.terrainRenderer.getTerrainHeightAt(
+                    this.mesh.position.x, 
+                    this.mesh.position.z
+                );
+            }
+            this.uniforms.u_average_terrain_height.value = currentTerrainHeight; // <-- USE DYNAMIC HEIGHT
+            // --- MODIFIED LOGIC END ---
         }
     }
 
