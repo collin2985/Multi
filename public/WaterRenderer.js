@@ -196,7 +196,7 @@ const waterFragmentShader = `
         vec3 normalC = normalize(normalSampleC * 2.0 - 1.0);
         vec3 blendedNormal = normalize(normalA + normalB * 0.5 + normalC * 0.3);
         vec3 perturbedNormal = normalize(mix(vWorldNormal, blendedNormal, u_normal_scale * 0.3));
-        float depth = smoothstep(0.01, 10.0, local_depth);
+        float depth = smoothstep(0.01, 0.5, local_depth);
         depth = clamp(depth, 0.0, 1.0);
         vec3 waterBaseColor = mix(u_shallow_color.rgb, u_deep_color.rgb, depth);
         vec3 viewDir = normalize(vViewPosition);
@@ -273,8 +273,8 @@ export class WaterRenderer {
     foamTexture.wrapS = foamTexture.wrapT = THREE.RepeatWrapping;
     causticsTexture.wrapS = causticsTexture.wrapT = THREE.RepeatWrapping;
     
-    const shallowColor = new THREE.Color(0x4dd0e1);
-    const deepColor = new THREE.Color(0x001f5f);
+    const shallowColor = new THREE.Color(0x87fff2);
+    const deepColor = new THREE.Color(0x000d67);
     const foamColor = new THREE.Color(0xffffff);
     
     // Precomputed permutation array from OptimizedPerlin with seed 12345
