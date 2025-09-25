@@ -1,43 +1,28 @@
-// terrain/SimpleTerrainRenderer.js
-
+// SimpleTerrainRenderer.js
 import * as THREE from 'three';
 import { CONFIG } from './config.js';
-import { Utilities } from './utilities.js';
-import { TerrainWorkerManager } from './workers/TerrainWorkerManager.js';
-import { TerrainMaterialFactory } from './materials/TerrainMaterialFactory.js';
-import { HeightCalculator } from './heightGeneration/HeightCalculator.js'; // Added missing import
+import { TerrainWorkerManager } from './TerrainWorkerManager.js';
+import { TerrainMaterialFactory } from './TerrainMaterialFactory.js';
+import { Utilities } from './Utilities.js';
 
 export class SimpleTerrainRenderer {
-    constructor(scene) {
+    constructor(scene, workerManager = null, terrainMaterial = null) {
         this.scene = scene;
         this.terrainChunks = new Map();
-        this.terrainMaterial = null;
-        this.workerManager = null;
-        this.pendingChunks = new Map();
         this.heightCache = new Map();
         this.normalCache = new Map();
-        
-        this.initialize();
+        this.workerManager = workerManager || new TerrainWorkerManager();
+        this.terrainMaterial = terrainMaterial || new TerrainMaterialFactory().createMaterial();
+        this.waterRenderer = null; // NEW: Reference to waterRenderer
     }
 
-    initialize() {
-        this.workerManager = new TerrainWorkerManager();
-        this.setupMaterial();
-    }
-
-    setupMaterial() {
-        this.terrainMaterial = TerrainMaterialFactory.createTerrainMaterial();
-        const textures = TerrainMaterialFactory.createProceduralTextures();
-        
-        this.terrainMaterial.uniforms.uDirt.value = textures.dirt;
-        this.terrainMaterial.uniforms.uGrass.value = textures.grass;
-        this.terrainMaterial.uniforms.uRock.value = textures.rock;
-        this.terrainMaterial.uniforms.uSnow.value = textures.snow;
-        this.terrainMaterial.uniforms.uSand.value = textures.sand;
+    // NEW: Set waterRenderer reference
+    setWaterRenderer(waterRenderer) {
+        this.waterRenderer = waterRenderer;
     }
 
     addTerrainChunk({ chunkX, chunkZ, seed }) {
-        const key = `${chunkX / CONFIG.TERRAIN.chunkSize},${chunkZ / CONFIG.TERRAIN.chunkSize}`;
+        const key = `${chunkX},${chunkZ}`;
         if (this.terrainChunks.has(key)) return;
 
         const geometry = new THREE.PlaneGeometry(
@@ -47,152 +32,159 @@ export class SimpleTerrainRenderer {
             CONFIG.TERRAIN.segments
         );
         geometry.rotateX(-Math.PI / 2);
+        const chunk = new THREE.Mesh(geometry, this.terrainMaterial);
+        chunk.position.set(
+            chunkX * CONFIG.TERRAIN.chunkSize,
+            0,
+            chunkZ * CONFIG.TERRAIN.chunkSize
+        );
+        chunk.name = `terrain_${key}`;
+        this.scene.add(chunk);
+        this.terrainChunks.set(key, chunk);
 
-        const positions = geometry.attributes.position.array;
-        const pointsToCalculate = [];
-        
-        for (let i = 0; i < positions.length; i += 3) {
-            const px = chunkX + positions[i];
-            const pz = chunkZ + positions[i + 2];
-            pointsToCalculate.push({ x: px, z: pz, index: i });
+        const points = [];
+        const vertices = chunk.geometry.attributes.position.array;
+        for (let i = 0; i < vertices.length; i += 3) {
+            const x = vertices[i] + chunk.position.x;
+            const z = vertices[i + 2] + chunk.position.z;
+            points.push({ x, z });
         }
 
-        if (pointsToCalculate.length > 0) {
-            const batchId = `${chunkX},${chunkZ}`;
-            this.pendingChunks.set(batchId, { geometry, x: chunkX, z: chunkZ });
-            
-            this.workerManager.calculateHeightBatch(pointsToCalculate, batchId, (data) => {
-                this.handleHeightBatchResult(data);
-            });
+        const batchId = `${key}_${Date.now()}`;
+        this.workerManager.calculateHeightBatch(points, batchId, (result) => {
+            this.handleHeightBatchResult(result, chunk, key, seed);
+        });
+
+        // NEW: Add corresponding water chunk
+        if (this.waterRenderer) {
+            this.waterRenderer.addWaterChunk(chunkX * CONFIG.TERRAIN.chunkSize, chunkZ * CONFIG.TERRAIN.chunkSize);
         }
     }
 
-    handleHeightBatchResult(data) {
-        const { results, batchId } = data;
-        const pending = this.pendingChunks.get(batchId);
-        if (!pending) return;
+    handleHeightBatchResult(result, chunk, key, seed) {
+        if (!this.terrainChunks.has(key)) return;
 
-        const { geometry, x, z } = pending;
-        const positions = geometry.attributes.position.array;
-        const normals = geometry.attributes.normal.array;
+        const vertices = chunk.geometry.attributes.position.array;
+        for (let i = 0, j = 0; i < vertices.length; i += 3, j++) {
+            const x = vertices[i] + chunk.position.x;
+            const z = vertices[i + 2] + chunk.position.z;
+            const height = result.heights[j];
+            vertices[i + 1] = height;
 
-        for (let i = 0; i < results.length; i++) {
-            const { x: px, z: pz, height, normal, index } = results[i];
-            positions[index + 1] = height;
-            normals[index] = normal.x;
-            normals[index + 1] = normal.y;
-            normals[index + 2] = normal.z;
-            
-            this.heightCache.set(`${px},${pz}`, height);
-            this.normalCache.set(`${px},${pz}`, normal);
+            const cacheKey = `${x.toFixed(2)},${z.toFixed(2)}`;
+            this.heightCache.set(cacheKey, height);
+            if (result.normals && result.normals[j]) {
+                this.normalCache.set(cacheKey, new THREE.Vector3().fromArray(result.normals[j]));
+            }
         }
-
-        geometry.attributes.position.needsUpdate = true;
-        geometry.attributes.normal.needsUpdate = true;
-
-        this.finishTerrainChunk(geometry, x, z);
-        this.pendingChunks.delete(batchId);
+        chunk.geometry.attributes.position.needsUpdate = true;
+        chunk.geometry.computeVertexNormals();
 
         Utilities.limitCacheSize(this.heightCache, CONFIG.PERFORMANCE.maxCacheSize);
         Utilities.limitCacheSize(this.normalCache, CONFIG.PERFORMANCE.maxCacheSize);
     }
 
-    finishTerrainChunk(geometry, x, z) {
-        const mesh = new THREE.Mesh(geometry, this.terrainMaterial);
-        mesh.position.set(x, 0, z);
-        this.scene.add(mesh);
-        
-        const chunkKey = `${x / CONFIG.TERRAIN.chunkSize},${z / CONFIG.TERRAIN.chunkSize}`;
-        this.terrainChunks.set(chunkKey, mesh);
-    }
-
     removeTerrainChunk({ chunkX, chunkZ }) {
-        const chunkKey = `${chunkX / CONFIG.TERRAIN.chunkSize},${chunkZ / CONFIG.TERRAIN.chunkSize}`;
-        const mesh = this.terrainChunks.get(chunkKey);
-        
-        if (mesh) {
-            this.scene.remove(mesh);
-            if (mesh.geometry) {
-                mesh.geometry.dispose();
+        const key = `${chunkX},${chunkZ}`;
+        const chunk = this.terrainChunks.get(key);
+        if (chunk) {
+            this.scene.remove(chunk);
+            chunk.geometry.dispose();
+            this.terrainChunks.delete(key);
+
+            // NEW: Remove corresponding water chunk
+            if (this.waterRenderer) {
+                this.waterRenderer.removeWaterChunk(chunkX * CONFIG.TERRAIN.chunkSize, chunkZ * CONFIG.TERRAIN.chunkSize);
             }
-            this.terrainChunks.delete(chunkKey);
+
+            // Clean up cache
+            const chunkSize = CONFIG.TERRAIN.chunkSize;
+            const vertices = chunk.geometry.attributes.position.array;
+            for (let i = 0; i < vertices.length; i += 3) {
+                const x = vertices[i] + chunk.position.x;
+                const z = vertices[i + 2] + chunk.position.z;
+                const cacheKey = `${x.toFixed(2)},${z.toFixed(2)}`;
+                this.heightCache.delete(cacheKey);
+                this.normalCache.delete(cacheKey);
+            }
         }
     }
 
-    getHeightAtPosition(x, z) {
-        const key = `${x},${z}`;
-        if (this.heightCache.has(key)) {
-            return this.heightCache.get(key);
-        }
-
-        // Try nearby cached values
-        const ix = Math.round(x);
-        const iz = Math.round(z);
-        for (let dx = -1; dx <= 1; dx++) {
-            for (let dz = -1; dz <= 1; dz++) {
-                const nearbyKey = `${ix + dx},${iz + dz}`;
-                if (this.heightCache.has(nearbyKey)) {
-                    return this.heightCache.get(nearbyKey);
-                }
-            }
-        }
-
-        // Fallback to raycasting
-        const raycaster = new THREE.Raycaster();
-        raycaster.set(new THREE.Vector3(x, 200, z), new THREE.Vector3(0, -1, 0));
-        const meshes = Array.from(this.terrainChunks.values());
-        const intersects = raycaster.intersectObjects(meshes, false);
-        
-        return intersects.length > 0 ? intersects[0].point.y : 0;
-    }
-
-    // Query terrain height for water renderer
     getTerrainHeightAt(x, z) {
-        const key = `${x},${z}`;
-        if (this.heightCache.has(key)) {
-            return this.heightCache.get(key);
+        const cacheKey = `${x.toFixed(2)},${z.toFixed(2)}`;
+        if (this.heightCache.has(cacheKey)) {
+            return this.heightCache.get(cacheKey);
         }
 
-        // Try nearby cached values
-        const ix = Math.round(x);
-        const iz = Math.round(z);
-        for (let dx = -1; dx <= 1; dx++) {
-            for (let dz = -1; dz <= 1; dz++) {
-                const nearbyKey = `${ix + dx},${iz + dz}`;
-                if (this.heightCache.has(nearbyKey)) {
-                    return this.heightCache.get(nearbyKey);
-                }
+        const chunkX = Math.floor(x / CONFIG.TERRAIN.chunkSize);
+        const chunkZ = Math.floor(z / CONFIG.TERRAIN.chunkSize);
+        const key = `${chunkX},${chunkZ}`;
+        const chunk = this.terrainChunks.get(key);
+        if (chunk) {
+            const raycaster = new THREE.Raycaster();
+            const rayOrigin = new THREE.Vector3(x, 1000, z);
+            const rayDirection = new THREE.Vector3(0, -1, 0);
+            raycaster.set(rayOrigin, rayDirection);
+            const intersects = raycaster.intersectObject(chunk, false);
+            if (intersects.length > 0) {
+                const height = intersects[0].point.y;
+                this.heightCache.set(cacheKey, height);
+                Utilities.limitCacheSize(this.heightCache, CONFIG.PERFORMANCE.maxCacheSize);
+                return height;
             }
         }
 
-        // Fallback to HeightCalculator
-        if (!this.fallbackCalculator) {
-            this.fallbackCalculator = new HeightCalculator(12345); // Match terrainSeed
-        }
-        const height = this.fallbackCalculator.getTerrainHeight(x, z);
-        this.heightCache.set(key, height);
+        const height = this.workerManager.fallbackCalculator.calculateHeight(x, z);
+        this.heightCache.set(cacheKey, height);
         Utilities.limitCacheSize(this.heightCache, CONFIG.PERFORMANCE.maxCacheSize);
         return height;
     }
 
+    getTerrainNormalAt(x, z) {
+        const cacheKey = `${x.toFixed(2)},${z.toFixed(2)}`;
+        if (this.normalCache.has(cacheKey)) {
+            return this.normalCache.get(cacheKey);
+        }
+
+        const chunkX = Math.floor(x / CONFIG.TERRAIN.chunkSize);
+        const chunkZ = Math.floor(z / CONFIG.TERRAIN.chunkSize);
+        const key = `${chunkX},${chunkZ}`;
+        const chunk = this.terrainChunks.get(key);
+        if (chunk) {
+            const raycaster = new THREE.Raycaster();
+            const rayOrigin = new THREE.Vector3(x, 1000, z);
+            const rayDirection = new THREE.Vector3(0, -1, 0);
+            raycaster.set(rayOrigin, rayDirection);
+            const intersects = raycaster.intersectObject(chunk, false);
+            if (intersects.length > 0) {
+                const normal = intersects[0].face.normal.clone();
+                chunk.localToWorld(normal);
+                this.normalCache.set(cacheKey, normal);
+                Utilities.limitCacheSize(this.normalCache, CONFIG.PERFORMANCE.maxCacheSize);
+                return normal;
+            }
+        }
+
+        const normal = this.workerManager.fallbackCalculator.calculateNormal(x, z);
+        this.normalCache.set(cacheKey, normal);
+        Utilities.limitCacheSize(this.normalCache, CONFIG.PERFORMANCE.maxCacheSize);
+        return normal;
+    }
+
     dispose() {
-        // Clean up resources
-        this.terrainChunks.forEach(mesh => {
-            this.scene.remove(mesh);
-            if (mesh.geometry) mesh.geometry.dispose();
+        this.terrainChunks.forEach((chunk, key) => {
+            this.scene.remove(chunk);
+            chunk.geometry.dispose();
         });
-        
         this.terrainChunks.clear();
         this.heightCache.clear();
         this.normalCache.clear();
-        this.pendingChunks.clear();
-        
-        if (this.terrainMaterial) {
-            this.terrainMaterial.dispose();
-        }
-        
-        if (this.workerManager) {
-            this.workerManager.terminate();
+        this.terrainMaterial.dispose();
+        this.workerManager.terminate();
+
+        // NEW: Clean up water chunks
+        if (this.waterRenderer) {
+            this.waterRenderer.clearWaterChunks();
         }
     }
 }

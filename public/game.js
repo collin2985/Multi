@@ -1,6 +1,5 @@
 // game.js
 
-
 import * as THREE from 'three';
 import { SimpleTerrainRenderer } from './terrain/SimpleTerrainRenderer.js';
 import { ui } from './ui.js';
@@ -70,6 +69,7 @@ box.name = 'serverBox';
 
 terrainRenderer = new SimpleTerrainRenderer(scene);
 waterRenderer = new WaterRenderer(scene, 0.9, terrainRenderer); // Pass terrainRenderer
+terrainRenderer.setWaterRenderer(waterRenderer); // NEW: Set reference for integration
 
 // --- CLICK-TO-MOVE HANDLER ---
 window.addEventListener('pointerdown', onPointerDown);
@@ -82,12 +82,23 @@ function onPointerDown(event) {
 
     raycaster.setFromCamera(pointer, camera);
 
+    // NEW: Include water chunks in raycasting
     const terrainObjects = Array.from(terrainRenderer.terrainChunks.values());
-    const intersects = raycaster.intersectObjects(terrainObjects, true);
+    const waterObjects = waterRenderer.getWaterChunks();
+    const allObjects = [...terrainObjects, ...waterObjects];
+    const intersects = raycaster.intersectObjects(allObjects, true);
 
     if (intersects.length > 0) {
         const intersect = intersects[0];
-        playerTargetPosition.copy(intersect.point);
+        let targetY = intersect.point.y;
+
+        // NEW: If intersected water, adjust y to water surface height
+        if (waterObjects.includes(intersect.object)) {
+            const time = performance.now();
+            targetY = waterRenderer.getWaterHeightAt(intersect.point.x, intersect.point.z, time);
+        }
+
+        playerTargetPosition.set(intersect.point.x, targetY + 1, intersect.point.z); // +1 for player height
         isMoving = true;
         ui.updateStatus(`🚀 Moving to clicked position: (${playerTargetPosition.x.toFixed(2)}, ${playerTargetPosition.z.toFixed(2)})`);
 
@@ -468,12 +479,12 @@ function staggerP2PInitiations(newPlayers) {
             scene.add(avatar);
             avatars.set(player.id, avatar);
             ui.updateStatus(`🟢 Avatar for ${player.id} added at (0,0,0)`);
-        }, index * 750); // 150ms delay per connection
+        }, index * 750); // 750ms delay per connection
     });
 }
 
 function updateChunksAroundPlayer(chunkX, chunkZ) {
-    const chunkSize = 50;
+    const chunkSize = CONFIG.TERRAIN.chunkSize; // NEW: Use CONFIG for consistency
     const shouldLoad = new Set();
     for (let x = chunkX - loadRadius; x <= chunkX + loadRadius; x++) {
         for (let z = chunkZ - loadRadius; z <= chunkZ + loadRadius; z++) {
@@ -484,20 +495,21 @@ function updateChunksAroundPlayer(chunkX, chunkZ) {
     const currentChunks = new Set(terrainRenderer.terrainChunks.keys());
     for (const chunkKey of currentChunks) {
         if (!shouldLoad.has(chunkKey)) {
-            const [chunkX, chunkZ] = chunkKey.split(',').map(Number);
-            terrainRenderer.removeTerrainChunk({ chunkX: chunkX * chunkSize, chunkZ: chunkZ * chunkSize });
-            ui.updateStatus(`Unloaded chunk (${chunkX}, ${chunkZ})`);
+            const [cx, cz] = chunkKey.split(',').map(Number);
+            terrainRenderer.removeTerrainChunk({ chunkX: cx * chunkSize, chunkZ: cz * chunkSize });
+            ui.updateStatus(`Unloaded terrain and water chunk (${cx}, ${cz})`); // NEW: Log water unload
         }
     }
 
     for (const chunkKey of shouldLoad) {
         if (!currentChunks.has(chunkKey)) {
-            const [chunkX, chunkZ] = chunkKey.split(',').map(Number);
+            const [cx, cz] = chunkKey.split(',').map(Number);
             chunkLoadQueue.push({
-                chunkX: chunkX * chunkSize,
-                chunkZ: chunkZ * chunkSize,
+                chunkX: cx * chunkSize,
+                chunkZ: cz * chunkSize,
                 seed: terrainSeed
             });
+            ui.updateStatus(`Queued load for terrain and water chunk (${cx}, ${cz})`); // NEW: Log water load
         }
     }
 
@@ -520,7 +532,7 @@ function processChunkQueue() {
         const chunk = chunkLoadQueue.shift();
 
         terrainRenderer.addTerrainChunk(chunk);
-        ui.updateStatus(`Loaded chunk at (${chunk.chunkX/50}, ${chunk.chunkZ/50})`);
+        ui.updateStatus(`Loaded terrain and water chunk at (${chunk.chunkX/50}, ${chunk.chunkZ/50})`); // NEW: Log water load
 
         setTimeout(() => {
             isProcessingChunks = false;
@@ -537,7 +549,7 @@ function animate() {
     requestAnimationFrame(animate);
     const now = performance.now();
     const deltaTime = now - lastFrameTime;
-    waterRenderer.update(now);
+    waterRenderer.update(now); // NEW: Update water time
 
     if (isMoving) {
         const distance = playerObject.position.distanceTo(playerTargetPosition);
@@ -571,7 +583,7 @@ function animate() {
     });
 
     if (now - lastChunkUpdateTime > chunkUpdateInterval) {
-        const chunkSize = 50;
+        const chunkSize = CONFIG.TERRAIN.chunkSize; // NEW: Use CONFIG
         const newChunkX = Math.floor((playerObject.position.x + chunkSize/2) / chunkSize);
         const newChunkZ = Math.floor((playerObject.position.z + chunkSize/2) / chunkSize);
 

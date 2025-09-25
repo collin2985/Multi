@@ -24,6 +24,7 @@ export class TerrainMaterialFactory {
             uniform sampler2D uDirt;
             uniform sampler2D uGrass;
             uniform sampler2D uRock;
+            uniform sampler2D uRock2;
             uniform sampler2D uSnow;
             uniform sampler2D uSand;
             
@@ -37,6 +38,7 @@ export class TerrainMaterialFactory {
                 vec3 dirt = texture2D(uDirt, vUv * repeat).rgb;
                 vec3 grass = texture2D(uGrass, vUv * repeat).rgb;
                 vec3 rock = texture2D(uRock, vUv * repeat).rgb;
+                vec3 rock2 = texture2D(uRock2, vUv * repeat).rgb;
                 vec3 snow = texture2D(uSnow, vUv * repeat).rgb;
                 vec3 sand = texture2D(uSand, vUv * repeat).rgb;
                 
@@ -44,20 +46,22 @@ export class TerrainMaterialFactory {
                 float wSand = smoothstep(0.5, 1.3, vHeight) * (1.0 - smoothstep(0.5, 1.3, vHeight));
                 float wDirt = smoothstep(-25.0, 0.6, vHeight) * (1.0 - smoothstep(0.0, 1.0, vHeight));
                 float wGrass = smoothstep(0.9, 3.0, vHeight) * (1.0 - smoothstep(0.9, 3.0, vHeight));
+                float wRock2 = smoothstep(3.0, 9.0, vHeight) 
                 float wSnow = smoothstep(7.5, 12.0, vHeight);
                 
                 // Normalize weights to ensure they sum to 1
-                float totalWeight = wSand + wDirt + wGrass + wSnow;
+                float totalWeight = wSand + wDirt + wGrass + wRock2 + wSnow;
                 if (totalWeight > 0.0) {
                     wSand /= totalWeight;
                     wDirt /= totalWeight;
                     wGrass /= totalWeight;
+                    wRock2 /= totalWeight;
                     wSnow /= totalWeight;
                 }
                 
                 float slopeFactor = smoothstep(0.05, 0.2, vSlope);
                 
-                vec3 baseColor = sand * wSand + dirt * wDirt + grass * wGrass + snow * wSnow;
+                vec3 baseColor = sand * wSand + dirt * wDirt + grass * wGrass + rock2 * wrock2 + snow * wSnow;
                 baseColor = mix(baseColor, rock, slopeFactor);
                 
                 // Enhanced lighting for underwater areas
@@ -76,6 +80,7 @@ export class TerrainMaterialFactory {
                 uDirt: { value: null },
                 uGrass: { value: null },
                 uRock: { value: null },
+                uRock2: { value: null },
                 uSnow: { value: null },
                 uSand: { value: null },
                 uLightDir: { value: new THREE.Vector3(1, 1, 1).normalize() }
@@ -117,6 +122,7 @@ export class TerrainMaterialFactory {
             dirt: createTexture({ r: 101, g: 67, b: 33 }, { r: 139, g: 90, b: 43 }),
             grass: createTexture({ r: 34, g: 139, b: 34 }, { r: 0, g: 100, b: 0 }),
             rock: createTexture({ r: 105, g: 105, b: 105 }, { r: 128, g: 128, b: 128 }),
+            rock2: createTexture({ r: 50, g: 50, b: 50 }, { r: 75, g: 75, b: 75 }),
             snow: createTexture({ r: 255, g: 250, b: 250 }, { r: 240, g: 248, b: 255 }),
             // Enhanced sand colors for better underwater visibility
             sand: createTexture({ r: 194, g: 178, b: 128 }, { r: 160, g: 140, b: 100 })
