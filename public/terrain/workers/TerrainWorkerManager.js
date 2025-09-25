@@ -149,8 +149,8 @@ export class TerrainWorkerManager {
                     freq *= 2;
                 }
                 // Increase sea depth to reach -20 or deeper
-                let seaDepth = seaMask * seaBasin * 40;
-                let heightBeforeJagged = base + mountain - seaDepth - (seaMask * 15); // Increased offset
+                let seaDepth = seaMask * seaBasin * 100;
+                let heightBeforeJagged = base + mountain - seaDepth - (seaMask * 3); // Increased offset
                 
                 const elevNorm = clamp((heightBeforeJagged + 2) / 25, 0, 1);
                 let jagged = perlin.noise(x * 0.8, z * 0.8, 900) * 1.2 * elevNorm + 
