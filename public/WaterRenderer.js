@@ -104,9 +104,26 @@ const waterFragmentShader = `
         vec3 normalC = normalize(normalSampleC * 2.0 - 1.0);
         vec3 blendedNormal = normalize(normalA + normalB * 0.5 + normalC * 0.3);
         vec3 perturbedNormal = normalize(mix(vWorldNormal, blendedNormal, u_normal_scale * 0.3));
-        float depth = smoothstep(0.0, 2.5, local_depth);
-        depth = clamp(depth, 0.0, 1.0);
-        vec3 waterBaseColor = mix(u_shallow_color.rgb, u_deep_color.rgb, depth);
+        // Depth zones:
+        // 0 - 1.5   : shallow
+        // 1.5 - 2.0 : transition
+        // > 2.0     : deep
+        float shallowFactor = clamp(local_depth / 1.5, 0.0, 1.0);
+        float transitionFactor = smoothstep(1.5, 2.0, local_depth);
+        float deepFactor = step(2.0, local_depth);
+
+        // Base color
+        vec3 waterBaseColor = mix(u_shallow_color.rgb, u_deep_color.rgb, transitionFactor);
+
+        // Transparency / alpha
+        float alpha;
+        if (local_depth <= 1.5) {
+            alpha = mix(0.3, 0.8, shallowFactor);  // fade in shallow
+        } else if (local_depth <= 2.0) {
+            alpha = mix(0.8, 1.0, transitionFactor); // transition zone
+        } else {
+            alpha = 1.0; // full opacity deep
+        }
         vec3 viewDir = normalize(vViewPosition);
         float fresnel = pow(1.0 - max(dot(viewDir, perturbedNormal), 0.0), 1.5);
         vec3 reflectedDir = reflect(-viewDir, perturbedNormal);
@@ -132,7 +149,6 @@ const waterFragmentShader = `
         finalColor += specularColor * 0.6;
         finalColor += causticsColor * causticsIntensity * vec3(0.8, 1.0, 0.9);
         finalColor = mix(finalColor, foamTexColor * u_foam_color.rgb, foam * 0.8);
-        float alpha = mix(0.3, 1.0, depth);
         alpha = mix(alpha, 1.0, foam * 0.5);
         gl_FragColor = vec4(finalColor, alpha);
     }
