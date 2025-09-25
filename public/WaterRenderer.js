@@ -128,8 +128,6 @@ const waterFragmentShader = `
         );
     }
 
-
-
     float calculateHeight(float x, float z) {
         float base = 0.0;
         float amplitude = 1.0;
@@ -271,8 +269,8 @@ export class WaterRenderer {
     foamTexture.wrapS = foamTexture.wrapT = THREE.RepeatWrapping;
     causticsTexture.wrapS = causticsTexture.wrapT = THREE.RepeatWrapping;
     
-    const shallowColor = new THREE.Color(0x87fff2);
-    const deepColor = new THREE.Color(0x000d67);
+    const shallowColor = new THREE.Color(0x00CED1);
+    const deepColor = new THREE.Color(0x000A40);
     const foamColor = new THREE.Color(0xffffff);
     
     // Precomputed permutation array from OptimizedPerlin with seed 12345
