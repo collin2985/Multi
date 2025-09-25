@@ -132,7 +132,7 @@ const waterFragmentShader = `
 
 // --- JavaScript Class ---
 export class WaterRenderer {
-    constructor(scene = null, waterLevel = 3 /* TEST-ONLY: , terrainRenderer = null */) {
+    constructor(scene = null, waterLevel = 2, terrainRenderer = null ) {
         this.scene = scene || this.createTestScene();
         this.waterLevel = waterLevel;
         this.terrainRenderer = terrainRenderer; 
