@@ -128,9 +128,7 @@ const waterFragmentShader = `
         );
     }
 
-    float clamp(float v, float a, float b) {
-        return max(a, min(b, v));
-    }
+
 
     float calculateHeight(float x, float z) {
         float base = 0.0;
