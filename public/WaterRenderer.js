@@ -205,7 +205,7 @@ export class WaterRenderer {
             u_sun_color: { value: new THREE.Color(0xfff8dc) },
             u_shininess: { value: 1.0 },
             u_foam_threshold: { value: 5.0 },
-            u_texture_scale: { value: 10 },
+            u_texture_scale: { value: 3 },
             u_chunk_offset: { value: new THREE.Vector2(0, 0) } // NEW: Chunk offset for shaders
         };
         
