@@ -90,8 +90,9 @@ const waterFragmentShader = `
 
     void main() {
         // NEW: Use terrainRenderer.getTerrainHeightAt instead of calculateHeight
-        float terrain_height = 0.0; // Placeholder, will be updated via terrainRenderer
         float local_depth = vWorldPosition.y - terrain_height;
+        uniform float u_terrain_height;
+        float terrain_height = u_terrain_height;
         if (local_depth < 0.0) discard;
         vec2 scrolledUvA = vUv * 8.0 * u_texture_scale + vec2(u_time * 0.003, u_time * 0.0024);
         vec2 scrolledUvB = vUv * 12.0 * u_texture_scale + vec2(u_time * -0.0018, u_time * 0.0036);
@@ -116,8 +117,9 @@ const waterFragmentShader = `
         vec3 halfVector = normalize(u_sun_direction + viewDir);
         float specular = pow(max(dot(perturbedNormal, halfVector), 0.0), u_shininess);
         vec3 specularColor = u_sun_color * specular;
-        float foam = smoothstep(u_foam_threshold, u_foam_threshold + 0.3, vWaveSlope);
         vec3 foamTexColor = texture2D(u_foam_texture, foamUv).rgb;
+        float shallowFactor = smoothstep(0.0, 1.0, local_depth); // 0-2m depth = shoreline
+        float foam = shallowFactor * smoothstep(u_foam_threshold, u_foam_threshold + 0.3, vWaveSlope);
         float foamNoise = sin(vWaveSlope * 10.0 + u_time * 3.0) * 0.5 + 0.5;
         foam *= foamNoise * 0.5 + 0.5;
         vec2 causticsUv1 = vUv * 6.0 + vec2(u_time * 0.002, u_time * 0.0015);
@@ -203,7 +205,7 @@ export class WaterRenderer {
             u_sun_color: { value: new THREE.Color(0xfff8dc) },
             u_shininess: { value: 1.0 },
             u_foam_threshold: { value: 5.0 },
-            u_texture_scale: { value: 2.4 },
+            u_texture_scale: { value: 4.4 },
             u_chunk_offset: { value: new THREE.Vector2(0, 0) } // NEW: Chunk offset for shaders
         };
         
@@ -300,6 +302,11 @@ export class WaterRenderer {
 
     update(time) {
         this.uniforms.u_time.value = time * 0.001;
+            const worldX = this.mesh.position.x;
+    const worldZ = this.mesh.position.z;
+
+    this.material.uniforms.u_terrain_height.value =
+        this.terrainRenderer.getTerrainHeightAt(worldX, worldZ);
         // NEW: Update chunk offsets for each water chunk
         this.waterChunks.forEach((mesh, key) => {
             const [chunkX, chunkZ] = key.split(',').map(Number);
@@ -307,6 +314,10 @@ export class WaterRenderer {
         });
     }
 
+
+
+
+    
     getWaterHeightAt(x, z, time) {
         const freq = this.uniforms.u_wave_frequency.value;
         const height = this.uniforms.u_wave_height.value;
