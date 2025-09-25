@@ -122,7 +122,7 @@ export class TerrainMaterialFactory {
             dirt: createTexture({ r: 101, g: 67, b: 33 }, { r: 139, g: 90, b: 43 }),
             grass: createTexture({ r: 34, g: 139, b: 34 }, { r: 0, g: 100, b: 0 }),
             rock: createTexture({ r: 105, g: 105, b: 105 }, { r: 128, g: 128, b: 128 }),
-            rock2: createTexture({ r: 50, g: 50, b: 50 }, { r: 75, g: 75, b: 75 }),
+            rock2: createTexture({ r: 100, g: 100, b: 100 }, { r: 130, g: 130, b: 130 }), 
             snow: createTexture({ r: 255, g: 250, b: 250 }, { r: 240, g: 248, b: 255 }),
             // Enhanced sand colors for better underwater visibility
             sand: createTexture({ r: 194, g: 178, b: 128 }, { r: 160, g: 140, b: 100 })
