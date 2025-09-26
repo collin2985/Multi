@@ -48,11 +48,12 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0x000011);
 document.body.appendChild(renderer.domElement);
 
+// FIXED updateChunks function for game.js
 function updateChunks(playerWorldX, playerWorldZ) {
     const chunkSize = CONFIG.TERRAIN.chunkSize;
     const radius = CONFIG.TERRAIN.renderDistance;
     
-    // 1. Calculate the current chunk the player is in
+    // Calculate grid coordinates consistently
     const newChunkX = Math.floor(playerWorldX / chunkSize);
     const newChunkZ = Math.floor(playerWorldZ / chunkSize);
 
@@ -61,38 +62,101 @@ function updateChunks(playerWorldX, playerWorldZ) {
         return; 
     }
 
-    // 2. Determine which chunks to keep (within radius)
+    // Determine which chunks to keep (within radius)
     const chunksToKeep = new Set();
     for (let x = -radius; x <= radius; x++) {
         for (let z = -radius; z <= radius; z++) {
-            const chunkX = newChunkX + x;
-            const chunkZ = newChunkZ + z;
-            const key = `${chunkX},${chunkZ}`;
+            const gridX = newChunkX + x;
+            const gridZ = newChunkZ + z;
+            const key = `${gridX},${gridZ}`;
             
             chunksToKeep.add(key);
 
             // If the chunk is not currently loaded, add it
             if (!terrainRenderer.terrainChunks.has(key)) {
-                // terrainRenderer is from SimpleTerrainRenderer.js [cite: 133]
-                terrainRenderer.addTerrainChunk({ chunkX, chunkZ, seed: terrainSeed });
+                // FIXED: Pass world coordinates properly
+                const worldX = gridX * chunkSize;
+                const worldZ = gridZ * chunkSize;
+                terrainRenderer.addTerrainChunk({ 
+                    chunkX: worldX, 
+                    chunkZ: worldZ, 
+                    seed: terrainSeed 
+                });
             }
         }
     }
 
-    // 3. Remove chunks that are outside the radius
-    // Iterate over current loaded chunks (using a copy of keys to avoid modification issues)
+    // Remove chunks that are outside the radius
     Array.from(terrainRenderer.terrainChunks.keys()).forEach(key => {
         if (!chunksToKeep.has(key)) {
-            const [chunkX, chunkZ] = key.split(',').map(Number);
-            terrainRenderer.removeTerrainChunk({ chunkX, chunkZ });
+            const [gridX, gridZ] = key.split(',').map(Number);
+            const worldX = gridX * chunkSize;
+            const worldZ = gridZ * chunkSize;
+            terrainRenderer.removeTerrainChunk({ 
+                chunkX: worldX, 
+                chunkZ: worldZ 
+            });
         }
     });
 
-    // 4. Update the last known chunk position
+    // Update the last known chunk position
     lastChunkX = newChunkX;
     lastChunkZ = newChunkZ;
     currentPlayerChunkX = newChunkX;
-    currentPlayerChunkZ = newChunkZ; // Update global state
+    currentPlayerChunkZ = newChunkZ;
+}
+
+// ALSO FIX the updateChunksAroundPlayer function
+function updateChunksAroundPlayer(chunkX, chunkZ) {
+    const chunkSize = CONFIG.TERRAIN.chunkSize;
+    const shouldLoad = new Set();
+    
+    for (let x = chunkX - loadRadius; x <= chunkX + loadRadius; x++) {
+        for (let z = chunkZ - loadRadius; z <= chunkZ + loadRadius; z++) {
+            shouldLoad.add(`${x},${z}`);
+        }
+    }
+
+    const currentChunks = new Set(terrainRenderer.terrainChunks.keys());
+    
+    // Remove chunks outside the load radius
+    for (const chunkKey of currentChunks) {
+        if (!shouldLoad.has(chunkKey)) {
+            const [gridX, gridZ] = chunkKey.split(',').map(Number);
+            const worldX = gridX * chunkSize;
+            const worldZ = gridZ * chunkSize;
+            terrainRenderer.removeTerrainChunk({ chunkX: worldX, chunkZ: worldZ });
+            ui.updateStatus(`Unloaded terrain and water chunk (${gridX}, ${gridZ})`);
+        }
+    }
+
+    // Add new chunks within the load radius
+    for (const chunkKey of shouldLoad) {
+        if (!currentChunks.has(chunkKey)) {
+            const [gridX, gridZ] = chunkKey.split(',').map(Number);
+            const worldX = gridX * chunkSize;
+            const worldZ = gridZ * chunkSize;
+            chunkLoadQueue.push({
+                chunkX: worldX,
+                chunkZ: worldZ,
+                seed: terrainSeed
+            });
+            ui.updateStatus(`Queued load for terrain and water chunk (${gridX}, ${gridZ})`);
+        }
+    }
+
+    // Handle server chunk updates
+    if (isInChunk && (chunkX !== lastChunkX || chunkZ !== lastChunkZ)) {
+        const newChunkId = `chunk_${chunkX}_${chunkZ}`;
+        const lastChunkId = lastChunkX !== null ? `chunk_${lastChunkX}_${lastChunkZ}` : null;
+        sendServerMessage('chunk_update', {
+            clientId,
+            newChunkId,
+            lastChunkId
+        });
+        lastChunkX = chunkX;
+        lastChunkZ = chunkZ;
+    }
 }
 
 // Lighting
