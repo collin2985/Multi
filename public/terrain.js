@@ -13,8 +13,8 @@ export const CONFIG = Object.freeze({
         maxCacheSize: 20000
     },
     GRAPHICS: {
-        textureSize: 256,
-        textureRepeat: 3
+        textureSize: 128,
+        textureRepeat: 1
     },
     CAMERA: {
         offset: { x: 0, y: 35, z: -20 }
