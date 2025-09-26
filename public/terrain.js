@@ -14,7 +14,7 @@ export const CONFIG = Object.freeze({
     },
     GRAPHICS: {
         textureSize: 128,
-        textureRepeat: 1
+        textureRepeat: 0.1
     },
     CAMERA: {
         offset: { x: 0, y: 35, z: -20 }
@@ -252,13 +252,15 @@ export class TerrainMaterialFactory {
                 vec3 snow = texture2D(uSnow, worldUv).rgb;
                 vec3 sand = texture2D(uSand, worldUv).rgb;
                 
-                // Smooth blending between textures using smoothstep
-                float wSand = smoothstep(-1.0, 0.5, vHeight) * smoothstep(1.5, -0.5, vHeight);
-                float wDirt = smoothstep(-25.0, -1.0, vHeight) * smoothstep(2.0, 0.0, vHeight);
-                float wGrass = smoothstep(-0.5, 2.0, vHeight) * smoothstep(8.0, 3.0, vHeight);
-                float wRock1 = smoothstep(2.0, 3.0, vHeight) * smoothstep(15.0, 8.0, vHeight); 
-                float wRock2 = smoothstep(2.0, 5.0, vHeight) * smoothstep(15.0, 8.0, vHeight); 
-                float wSnow = smoothstep(8.0, 12.0, vHeight);
+
+
+
+                float wSand = smoothstep(0.5, 1.3, vHeight) * (1.0 - smoothstep(0.5, 1.3, vHeight));
+                float wDirt = smoothstep(-25.0, 0.6, vHeight) * (1.0 - smoothstep(0.0, 1.0, vHeight));
+                float wGrass = smoothstep(0.9, 3.5, vHeight) * (1.0 - smoothstep(0.9, 3.5, vHeight));
+                float wRock1 = smoothstep(2.0, 3.0, vHeight) * (1.0 - smoothstep(2.0, 3.5, vHeight));
+                float wRock2 = smoothstep(3.0, 9.0, vHeight) * (1.0 - smoothstep(3.0, 9.0, vHeight)); 
+                float wSnow = smoothstep(7.5, 12.0, vHeight);
                 
                 float totalWeight = wSand + wDirt + wGrass + wRock1 + wRock2 + wSnow;
                 if (totalWeight > 0.0) {
