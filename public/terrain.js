@@ -246,7 +246,7 @@ export class TerrainMaterialFactory {
                 float wDirt = smoothstep(-25.0, 0.6, vHeight) * (1.0 - smoothstep(0.0, 1.0, vHeight));
                 float wGrass = smoothstep(0.9, 3.5, vHeight) * (1.0 - smoothstep(0.9, 3.5, vHeight));
                 float wRock2 = smoothstep(3.0, 9.0, vHeight) * (1.0 - smoothstep(3.0, 9.0, vHeight)); 
-                float wSnow = smoothstep(7.5, 12.0, vHeight);
+                float wSnow = smoothstep(7.5, 12.0, vHeight) * (1.0 - smoothstep(7.5, 9.0, vHeight)); 
                 
                 float totalWeight = wSand + wDirt + wGrass + wRock2 + wSnow;
                 if (totalWeight > 0.0) {
