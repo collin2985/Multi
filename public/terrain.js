@@ -677,8 +677,8 @@ export class SimpleTerrainRenderer {
             this.chunkMap.delete(key);
             if (this.waterRenderer && typeof this.waterRenderer.removeWaterChunk === 'function') {
                 const [chunkX, chunkZ] = key.split(',').map(Number);
-                const worldX = chunkX * chunkSize;
-                const worldZ = chunkZ * chunkSize;
+                const worldX = chunkX * CONFIG.TERRAIN.chunkSize;
+                const worldZ = chunkZ * CONFIG.TERRAIN.chunkSize;
                 this.waterRenderer.removeWaterChunk(worldX, worldZ);
             }
         }
