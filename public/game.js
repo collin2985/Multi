@@ -1,9 +1,8 @@
 // game.js
 
 import * as THREE from 'three';
-import { SimpleTerrainRenderer } from './terrain/SimpleTerrainRenderer.js';
+import { SimpleTerrainRenderer, CONFIG } from './terrain.js';
 import { ui } from './ui.js';
-import { CONFIG } from './terrain/config.js';
 import { WaterRenderer } from './WaterRenderer.js';
 
 
