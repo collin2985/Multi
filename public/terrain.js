@@ -1,4 +1,5 @@
 // terrain.js - Consolidated terrain-related modules
+import * as THREE from 'three';
 
 // --- CONFIG ---
 export const CONFIG = Object.freeze({
