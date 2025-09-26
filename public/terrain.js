@@ -1,4 +1,3 @@
-// terrain.js - Consolidated terrain-related modules
 import * as THREE from 'three';
 
 // --- CONFIG ---
@@ -6,11 +5,12 @@ export const CONFIG = Object.freeze({
     TERRAIN: {
         chunkSize: 50,
         segments: 100,
-        renderDistance: 2
+        renderDistance: 2,
+        seed: 12345 // Centralized seed
     },
     PERFORMANCE: {
         updateThrottle: 100,
-        maxCacheSize: 20000 // Increased for water queries
+        maxCacheSize: 20000
     },
     GRAPHICS: {
         textureSize: 128,
@@ -34,7 +34,6 @@ export const Utilities = {
 
     limitCacheSize(cache, maxSize) {
         if (cache.size > maxSize) {
-            // Remove oldest 25% of entries when limit exceeded
             const entriesToRemove = Math.floor(cache.size * 0.25);
             const keysToDelete = Array.from(cache.keys()).slice(0, entriesToRemove);
             keysToDelete.forEach(key => cache.delete(key));
@@ -54,7 +53,7 @@ export const Utilities = {
 
 // --- OPTIMIZED PERLIN ---
 export class OptimizedPerlin {
-    constructor(seed = 12345) {
+    constructor(seed = CONFIG.TERRAIN.seed) {
         this.p = new Array(512);
         const perm = [];
         const rng = Utilities.mulberry32(seed);
@@ -122,7 +121,7 @@ const FLOAT_PRECISION = 10000.0;
 const roundCoord = (coord) => Math.round(coord * FLOAT_PRECISION) / FLOAT_PRECISION;
 
 export class HeightCalculator {
-    constructor(seed = 12345) {
+    constructor(seed = CONFIG.TERRAIN.seed) {
         this.perlin = new OptimizedPerlin(seed);
         this.heightCache = new Map();
         this.MAX_CACHE_SIZE = CONFIG.PERFORMANCE.maxCacheSize;
@@ -187,19 +186,23 @@ export class HeightCalculator {
         const nx = hL - hR;
         const ny = 2 * eps;
         const nz = hD - hU;
-        const len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
-
+        const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+        if (len === 0) {
+            return { x: 0, y: 1, z: 0 }; // Default upward normal
+        }
         return { x: nx / len, y: ny / len, z: nz / len };
     }
 
     clearCache() {
+        // Only clear cache when explicitly needed
+        console.warn('Clearing height cache');
         this.heightCache.clear();
     }
 }
 
 // --- TERRAIN MATERIAL FACTORY ---
 export class TerrainMaterialFactory {
-    static createTerrainMaterial() {
+    static createTerrainMaterial(textures) {
         const vertexShader = `
             varying float vHeight;
             varying float vSlope;
@@ -223,6 +226,7 @@ export class TerrainMaterialFactory {
             uniform sampler2D uRock2;
             uniform sampler2D uSnow;
             uniform sampler2D uSand;
+            uniform float uTextureRepeat;
             
             varying float vHeight;
             varying float vSlope;
@@ -230,7 +234,7 @@ export class TerrainMaterialFactory {
             varying vec2 vUv;
             
             void main() {
-                float repeat = 12.0;
+                float repeat = uTextureRepeat;
                 vec3 dirt = texture2D(uDirt, vUv * repeat).rgb;
                 vec3 grass = texture2D(uGrass, vUv * repeat).rgb;
                 vec3 rock = texture2D(uRock, vUv * repeat).rgb;
@@ -251,6 +255,8 @@ export class TerrainMaterialFactory {
                     wGrass /= totalWeight;
                     wRock2 /= totalWeight;
                     wSnow /= totalWeight;
+                } else {
+                    wDirt = 1.0; // Fallback to dirt
                 }
                 
                 float slopeFactor = smoothstep(0.05, 0.2, vSlope);
@@ -270,13 +276,14 @@ export class TerrainMaterialFactory {
             vertexShader,
             fragmentShader,
             uniforms: {
-                uDirt: { value: null },
-                uGrass: { value: null },
-                uRock: { value: null },
-                uRock2: { value: null },
-                uSnow: { value: null },
-                uSand: { value: null },
-                uLightDir: { value: new THREE.Vector3(1, 1, 1).normalize() }
+                uDirt: { value: textures.dirt },
+                uGrass: { value: textures.grass },
+                uRock: { value: textures.rock },
+                uRock2: { value: textures.rock2 },
+                uSnow: { value: textures.snow },
+                uSand: { value: textures.sand },
+                uLightDir: { value: new THREE.Vector3(1, 1, 1).normalize() },
+                uTextureRepeat: { value: CONFIG.GRAPHICS.textureRepeat }
             },
             side: THREE.FrontSide
         });
@@ -286,6 +293,7 @@ export class TerrainMaterialFactory {
 
     static createProceduralTextures() {
         const size = CONFIG.GRAPHICS.textureSize;
+        const rng = Utilities.mulberry32(CONFIG.TERRAIN.seed);
         
         const createTexture = (color1, color2) => {
             const canvas = document.createElement('canvas');
@@ -295,7 +303,7 @@ export class TerrainMaterialFactory {
             const data = imgData.data;
             
             for (let i = 0; i < data.length; i += 4) {
-                const noise = Math.random();
+                const noise = rng();
                 const color = noise > 0.5 ? color1 : color2;
                 data[i] = color.r;
                 data[i + 1] = color.g;
@@ -326,17 +334,22 @@ export class TerrainMaterialFactory {
 export class TerrainWorkerManager {
     constructor() {
         this.worker = null;
+        this.workerUrl = null;
         this.pendingBatches = new Map();
         this.messageHandlers = new Map();
-        this.fallbackCalculator = new HeightCalculator(12345);
+        this.fallbackCalculator = new HeightCalculator(CONFIG.TERRAIN.seed);
         this.initialize();
     }
 
     initialize() {
+        if (this.worker) {
+            return; // Prevent reinitialization
+        }
         try {
             const workerCode = this.generateWorkerCode();
             const blob = new Blob([workerCode], { type: 'application/javascript' });
-            this.worker = new Worker(URL.createObjectURL(blob));
+            this.workerUrl = URL.createObjectURL(blob);
+            this.worker = new Worker(this.workerUrl);
             this.worker.onmessage = this.handleMessage.bind(this);
             this.worker.onerror = (error) => console.error('Worker error:', error);
         } catch (err) {
@@ -355,14 +368,16 @@ export class TerrainWorkerManager {
             const roundCoord = (coord) => Math.round(coord * FLOAT_PRECISION) / FLOAT_PRECISION;
             
             const limitCacheSize = (cache, maxSize) => {
-                if (cache.size > maxSize * 1.25) {
-                    cache.clear();
+                if (cache.size > maxSize) {
+                    const entriesToRemove = Math.floor(cache.size * 0.25);
+                    const keysToDelete = Array.from(cache.keys()).slice(0, entriesToRemove);
+                    keysToDelete.forEach(key => cache.delete(key));
                 }
             };
 
             const mulberry32 = (seed) => {
                 return function() {
-                    let t = seed += 0x6D2B79F4;
+                    let t = seed += 0x6D2B79F5;
                     t = Math.imul(t ^ (t >>> 15), t | 1);
                     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
                     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
@@ -370,7 +385,7 @@ export class TerrainWorkerManager {
             };
 
             class OptimizedPerlin {
-                constructor(seed = 12345) {
+                constructor(seed = ${CONFIG.TERRAIN.seed}) {
                     this.p = new Array(512);
                     const perm = [];
                     const rng = mulberry32(seed);
@@ -433,7 +448,7 @@ export class TerrainWorkerManager {
             }
             
             const workerHeightCache = new Map();
-            const perlin = new OptimizedPerlin(12345);
+            const perlin = new OptimizedPerlin(${CONFIG.TERRAIN.seed});
             
             function clamp(v, a, b) {
                 return Math.max(a, Math.min(b, v));
@@ -471,22 +486,8 @@ export class TerrainWorkerManager {
                 }
                 mountain *= 40 * mask;
                 
-                let seaMaskRaw = perlin.noise(rx * 0.0008, rz * 0.0008, 600);
-                let normalizedSea = (seaMaskRaw + 1) * 0.5;
-                let seaMask = normalizedSea > 0.75 ? 1 : 0;
-                
-                let seaBasin = 0;
-                amplitude = 2;
-                frequency = 0.01;
-                
-                for (let octave = 0; octave < 3; octave++) {
-                    seaBasin += Math.abs(perlin.noise(rx * frequency, rz * frequency, 700 + octave * 13)) * amplitude;
-                    amplitude *= 0.5;
-                    frequency *= 2;
-                }
-                let seaDepth = seaMask * seaBasin * 100;
-                let heightBeforeJagged = base + mountain - seaDepth - (seaMask * 3);
-                
+                let heightBeforeJagged = base + mountain;
+
                 const elevNorm = clamp((heightBeforeJagged + 2) / 25, 0, 1);
                 let jagged = perlin.noise(rx * 0.8, rz * 0.8, 900) * 1.2 * elevNorm + 
                              perlin.noise(rx * 1.6, rz * 1.6, 901) * 0.6 * elevNorm;
@@ -517,11 +518,12 @@ export class TerrainWorkerManager {
                         const nx = hL - hR;
                         const ny = 2 * eps;
                         const nz = hD - hU;
-                        const len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+                        const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+                        const normal = len === 0 ? { x: 0, y: 1, z: 0 } : { x: nx / len, y: ny / len, z: nz / len };
                         
                         results.push({
                             x, z, height: h,
-                            normal: { x: nx / len, y: ny / len, z: nz / len },
+                            normal,
                             index
                         });
                     }
@@ -556,10 +558,18 @@ export class TerrainWorkerManager {
             return;
         }
 
-        this.messageHandlers.set(batchId, callback);
+        this.messageHandlers.set(batchId, { callback, timestamp: Date.now() });
         this.worker.postMessage({
             type: 'calculateHeightBatch',
             data: { points, batchId }
+        });
+
+        // Cleanup handlers older than 30 seconds
+        const now = Date.now();
+        this.messageHandlers.forEach((value, key) => {
+            if (now - value.timestamp > 30000) {
+                this.messageHandlers.delete(key);
+            }
         });
     }
 
@@ -567,9 +577,9 @@ export class TerrainWorkerManager {
         const { type, data } = e.data;
         if (type === 'heightBatchResult') {
             const { batchId } = data;
-            const callback = this.messageHandlers.get(batchId);
-            if (callback) {
-                callback(data);
+            const handler = this.messageHandlers.get(batchId);
+            if (handler) {
+                handler.callback(data);
                 this.messageHandlers.delete(batchId);
             }
         }
@@ -578,7 +588,11 @@ export class TerrainWorkerManager {
     terminate() {
         if (this.worker) {
             this.worker.terminate();
+            if (this.workerUrl) {
+                URL.revokeObjectURL(this.workerUrl);
+            }
             this.worker = null;
+            this.workerUrl = null;
         }
     }
 }
@@ -588,7 +602,7 @@ export class SimpleTerrainRenderer {
     constructor(scene) {
         this.scene = scene;
         this.chunkMap = new Map();
-        this.heightCalculator = new HeightCalculator(12345);
+        this.heightCalculator = new HeightCalculator(CONFIG.TERRAIN.seed);
         this.workerManager = new TerrainWorkerManager();
         this.material = null;
         this.textures = null;
@@ -597,14 +611,8 @@ export class SimpleTerrainRenderer {
     }
 
     init() {
-        this.material = TerrainMaterialFactory.createTerrainMaterial();
         this.textures = TerrainMaterialFactory.createProceduralTextures();
-        this.material.uniforms.uDirt.value = this.textures.dirt;
-        this.material.uniforms.uGrass.value = this.textures.grass;
-        this.material.uniforms.uRock.value = this.textures.rock;
-        this.material.uniforms.uRock2.value = this.textures.rock2;
-        this.material.uniforms.uSnow.value = this.textures.snow;
-        this.material.uniforms.uSand.value = this.textures.sand;
+        this.material = TerrainMaterialFactory.createTerrainMaterial(this.textures);
     }
 
     setWaterRenderer(waterRenderer) {
@@ -614,7 +622,9 @@ export class SimpleTerrainRenderer {
     createChunk(chunkX, chunkZ) {
         const chunkSize = CONFIG.TERRAIN.chunkSize;
         const segments = CONFIG.TERRAIN.segments;
-        const key = `${Math.floor(chunkX / chunkSize)},${Math.floor(chunkZ / chunkSize)}`;
+        chunkX = Math.floor(chunkX / chunkSize) * chunkSize;
+        chunkZ = Math.floor(chunkZ / chunkSize) * chunkSize;
+        const key = `${chunkX / chunkSize},${chunkZ / chunkSize}`;
 
         if (this.chunkMap.has(key)) {
             return;
@@ -645,7 +655,6 @@ export class SimpleTerrainRenderer {
                 normal.array[index * 3 + 2] = n.z;
             });
 
-            geometry.computeVertexNormals();
             position.needsUpdate = true;
             normal.needsUpdate = true;
 
@@ -654,7 +663,7 @@ export class SimpleTerrainRenderer {
             this.scene.add(mesh);
 
             this.chunkMap.set(key, { mesh, geometry });
-            if (this.waterRenderer) {
+            if (this.waterRenderer && typeof this.waterRenderer.addWaterChunk === 'function') {
                 this.waterRenderer.addWaterChunk(chunkX, chunkZ);
             }
         });
@@ -666,10 +675,10 @@ export class SimpleTerrainRenderer {
             this.scene.remove(chunk.mesh);
             chunk.geometry.dispose();
             this.chunkMap.delete(key);
-            if (this.waterRenderer) {
+            if (this.waterRenderer && typeof this.waterRenderer.removeWaterChunk === 'function') {
                 const [chunkX, chunkZ] = key.split(',').map(Number);
-                const worldX = chunkX * CONFIG.TERRAIN.chunkSize;
-                const worldZ = chunkZ * CONFIG.TERRAIN.chunkSize;
+                const worldX = chunkX * chunkSize;
+                const worldZ = chunkZ * chunkSize;
                 this.waterRenderer.removeWaterChunk(worldX, worldZ);
             }
         }
@@ -688,7 +697,7 @@ export class SimpleTerrainRenderer {
         this.material.dispose();
         Object.values(this.textures).forEach(texture => texture.dispose());
         this.workerManager.terminate();
-        if (this.waterRenderer) {
+        if (this.waterRenderer && typeof this.waterRenderer.dispose === 'function') {
             this.waterRenderer.dispose();
         }
     }
