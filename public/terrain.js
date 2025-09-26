@@ -13,7 +13,7 @@ export const CONFIG = Object.freeze({
         maxCacheSize: 20000
     },
     GRAPHICS: {
-        textureSize: 256,
+        textureSize: 128,
         textureRepeat: 2
     },
     CAMERA: {
@@ -246,7 +246,7 @@ export class TerrainMaterialFactory {
                 float wDirt = smoothstep(-25.0, 0.6, vHeight) * (1.0 - smoothstep(0.0, 1.0, vHeight));
                 float wGrass = smoothstep(0.9, 3.5, vHeight) * (1.0 - smoothstep(0.9, 3.5, vHeight));
                 float wRock2 = smoothstep(3.0, 9.0, vHeight) * (1.0 - smoothstep(3.0, 9.0, vHeight)); 
-                float wSnow = smoothstep(7.5, 12.0, vHeight) * (1.0 - smoothstep(7.5, 9.0, vHeight)); 
+                float wSnow = smoothstep(7.5, 12.0, vHeight);
                 
                 float totalWeight = wSand + wDirt + wGrass + wRock2 + wSnow;
                 if (totalWeight > 0.0) {
@@ -319,9 +319,14 @@ export class TerrainMaterialFactory {
             return texture;
         };
 
+        const grassTexture = new THREE.TextureLoader().load('./terrain/grass.png');
+        grassTexture.wrapS = grassTexture.wrapT = THREE.RepeatWrapping;
+        grassTexture.minFilter = THREE.NearestFilter;
+        grassTexture.magFilter = THREE.NearestFilter;
+
         return {
             dirt: createTexture({ r: 101, g: 67, b: 33 }, { r: 139, g: 90, b: 43 }),
-            grass: createTexture({ r: 34, g: 139, b: 34 }, { r: 0, g: 100, b: 0 }),
+            grass: grassTexture,
             rock: createTexture({ r: 105, g: 105, b: 105 }, { r: 128, g: 128, b: 128 }),
             rock2: createTexture({ r: 120, g: 120, b: 120 }, { r: 150, g: 150, b: 150 }),
             snow: createTexture({ r: 255, g: 250, b: 250 }, { r: 240, g: 248, b: 255 }),
