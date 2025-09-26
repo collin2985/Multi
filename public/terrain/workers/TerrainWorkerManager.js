@@ -26,8 +26,8 @@ export class TerrainWorkerManager {
 
     generateWorkerCode() {
         // Hardcoding constants from CONFIG and HeightCalculator to ensure worker consistency
-        const MAX_CACHE_SIZE = 20000; [cite_start]// From CONFIG.PERFORMANCE.maxCacheSize [cite: 609]
-        const FLOAT_PRECISION = 10000.0; [cite_start]// Matches the precision used for caching/rounding in SimpleTerrainRenderer [cite: 635]
+        const MAX_CACHE_SIZE = 20000; // From CONFIG.PERFORMANCE.maxCacheSize [cite: 609]
+        const FLOAT_PRECISION = 10000.0; // Matches the precision used for caching/rounding in SimpleTerrainRenderer [cite: 635]
         
         // --- START OF WORKER CODE STRING ---
         return `

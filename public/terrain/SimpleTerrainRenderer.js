@@ -3,7 +3,8 @@ import * as THREE from 'three';
 import { TerrainWorkerManager } from './workers/TerrainWorkerManager.js';
 import { CONFIG } from './config.js';
 
-const { CHUNK_SIZE, TERRAIN_RESOLUTION } = CONFIG.TERRAIN;
+const CHUNK_SIZE = CONFIG.TERRAIN.chunkSize;
+const TERRAIN_RESOLUTION = CONFIG.TERRAIN.segments;
 const VERTICES_PER_SIDE = TERRAIN_RESOLUTION + 1;
 const TOTAL_VERTICES = VERTICES_PER_SIDE * VERTICES_PER_SIDE;
 
@@ -17,14 +18,18 @@ export class SimpleTerrainRenderer {
         this.scene = scene;
         this.seed = seed;
         this.workerManager = new TerrainWorkerManager();
+        this.waterRenderer = null; // Initialize waterRenderer property
         this.chunkMap = new Map();
         this.material = new THREE.MeshStandardMaterial({
             vertexColors: true,
             wireframe: false,
         });
         this.batchIdCounter = 0;
+        
     }
-
+setWaterRenderer(waterRenderer) {
+        this.waterRenderer = waterRenderer; // Store the waterRenderer reference
+    }
     // ✅ Fix chunk grid math: when creating chunks, always use integer grid indices (gridX, gridZ).
     createChunk(worldX, worldZ) {
         // Use Math.floor to ensure deterministic integer grid coordinates for the chunk
