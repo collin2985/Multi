@@ -1,10 +1,14 @@
 // terrain/heightGeneration/HeightCalculator.js
 import { OptimizedPerlin } from '../noise/OptimizedPerlin.js';
+import { Utilities } from '../utilities.js'; 
+import { CONFIG } from '../config.js';     
 
 export class HeightCalculator {
     constructor(seed = 12345) {
         this.perlin = new OptimizedPerlin(seed);
         this.heightCache = new Map();
+        // Define cache size based on config for memory safety
+        this.MAX_CACHE_SIZE = CONFIG.PERFORMANCE.maxCacheSize; 
     }
 
     clamp(v, a, b) {
@@ -44,10 +48,13 @@ export class HeightCalculator {
         }
         mountain *= 40 * mask;
 
-        // Sea mask generation - FIXED TO MATCH WORKER
+        // Sea mask generation (MATCHES WORKER)
         let seaMaskRaw = this.perlin.noise(x * 0.0008, z * 0.0008, 600);
         let normalizedSea = (seaMaskRaw + 1) * 0.5;
-        let seaMask = normalizedSea > 0.6 ? Math.pow((normalizedSea - 0.6) / (1 - 0.6), 2) : 0; // Gradient mask        // Sea basin generation
+        // Binary sea mask
+        let seaMask = normalizedSea > 0.75 ? 1 : 0; 
+        
+        // Sea basin generation
         let seaBasin = 0;
         amplitude = 2;
         frequency = 0.01;
@@ -59,7 +66,7 @@ export class HeightCalculator {
         }
         // Increase sea depth to reach -20 or deeper
         let seaDepth = seaMask * seaBasin * 100;
-        let heightBeforeJagged = base + mountain - seaDepth - (seaMask * 3); // Increased offset
+        let heightBeforeJagged = base + mountain - seaDepth - (seaMask * 3); 
 
         // Elevation-based details
         const elevNorm = this.clamp((heightBeforeJagged + 2) / 25, 0, 1);
@@ -68,6 +75,10 @@ export class HeightCalculator {
 
         const height = heightBeforeJagged + jagged;
         this.heightCache.set(key, height);
+        
+        // Implement cache limiting to prevent memory leak
+        Utilities.limitCacheSize(this.heightCache, this.MAX_CACHE_SIZE);
+        
         return height;
     }
 
@@ -87,10 +98,5 @@ export class HeightCalculator {
 
     clearCache() {
         this.heightCache.clear();
-    }
-
-    // New method to expose height access for water renderer
-    getTerrainHeight(x, z) {
-        return this.calculateHeight(x, z); // Uses cache internally
     }
 }

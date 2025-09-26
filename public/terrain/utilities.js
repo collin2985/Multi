@@ -1,3 +1,9 @@
+
+
+
+
+
+
 // terrain/utilities.js
 export const Utilities = {
     mulberry32(seed) {
@@ -29,3 +35,12 @@ limitCacheSize(cache, maxSize) {
         console.error(`${message}:`, error);
     }
 };
+
+
+
+
+
+
+
+
+
