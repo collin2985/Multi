@@ -52,14 +52,14 @@ document.body.appendChild(renderer.domElement);
 function updateChunks(playerWorldX, playerWorldZ) {
     const chunkSize = CONFIG.TERRAIN.chunkSize;
     const radius = CONFIG.TERRAIN.renderDistance;
-    
+
     // Calculate grid coordinates consistently
     const newChunkX = Math.floor(playerWorldX / chunkSize);
     const newChunkZ = Math.floor(playerWorldZ / chunkSize);
 
     // Only update if the player has moved into a new chunk or it's the first time
     if (newChunkX === lastChunkX && newChunkZ === lastChunkZ && lastChunkX !== null) {
-        return; 
+        return;
     }
 
     // Determine which chunks to keep (within radius)
@@ -69,18 +69,18 @@ function updateChunks(playerWorldX, playerWorldZ) {
             const gridX = newChunkX + x;
             const gridZ = newChunkZ + z;
             const key = `${gridX},${gridZ}`;
-            
+
             chunksToKeep.add(key);
 
             // If the chunk is not currently loaded, add it
             if (!terrainRenderer.terrainChunks.has(key)) {
-                // FIXED: Pass world coordinates properly
+                // Keep existing callers happy: they pass world coords, renderer normalizes.
                 const worldX = gridX * chunkSize;
                 const worldZ = gridZ * chunkSize;
-                terrainRenderer.addTerrainChunk({ 
-                    chunkX: worldX, 
-                    chunkZ: worldZ, 
-                    seed: terrainSeed 
+                terrainRenderer.addTerrainChunk({
+                    chunkX: worldX,
+                    chunkZ: worldZ,
+                    seed: terrainSeed
                 });
             }
         }
@@ -92,9 +92,9 @@ function updateChunks(playerWorldX, playerWorldZ) {
             const [gridX, gridZ] = key.split(',').map(Number);
             const worldX = gridX * chunkSize;
             const worldZ = gridZ * chunkSize;
-            terrainRenderer.removeTerrainChunk({ 
-                chunkX: worldX, 
-                chunkZ: worldZ 
+            terrainRenderer.removeTerrainChunk({
+                chunkX: worldX,
+                chunkZ: worldZ
             });
         }
     });
@@ -110,7 +110,7 @@ function updateChunks(playerWorldX, playerWorldZ) {
 function updateChunksAroundPlayer(chunkX, chunkZ) {
     const chunkSize = CONFIG.TERRAIN.chunkSize;
     const shouldLoad = new Set();
-    
+
     for (let x = chunkX - loadRadius; x <= chunkX + loadRadius; x++) {
         for (let z = chunkZ - loadRadius; z <= chunkZ + loadRadius; z++) {
             shouldLoad.add(`${x},${z}`);
@@ -118,7 +118,7 @@ function updateChunksAroundPlayer(chunkX, chunkZ) {
     }
 
     const currentChunks = new Set(terrainRenderer.terrainChunks.keys());
-    
+
     // Remove chunks outside the load radius
     for (const chunkKey of currentChunks) {
         if (!shouldLoad.has(chunkKey)) {
@@ -252,9 +252,10 @@ function connectToServer() {
         ui.updateButtonStates(isInChunk, boxInScene);
         wsRetryAttempts = 0;
         // Send join_chunk with initial chunk
-        const chunkSize = 50;
-        const initialChunkX = Math.floor((playerObject.position.x + chunkSize/2) / chunkSize);
-        const initialChunkZ = Math.floor((playerObject.position.z + chunkSize/2) / chunkSize);
+        const chunkSize = CONFIG.TERRAIN.chunkSize;
+        // CONSISTENT: do not use half-chunk offset
+        const initialChunkX = Math.floor(playerObject.position.x / chunkSize);
+        const initialChunkZ = Math.floor(playerObject.position.z / chunkSize);
         const chunkId = `chunk_${initialChunkX}_${initialChunkZ}`;
         const success = sendServerMessage('join_chunk', { chunkId, clientId });
         if (success) {
@@ -546,8 +547,10 @@ function handleChunkStateChange(payload) {
     const chunkState = payload.state;
     ui.updateStatus(`🏠 Chunk update: ${chunkState.players.length} players, box: ${chunkState.boxPresent}`);
     const parts = payload.chunkId.split('_');
-    const chunkX = parseInt(parts[1]) * 50;
-    const chunkZ = parseInt(parts[2]) * 50;
+    // parts are ["chunk", X, Z]
+    const chunkX = parseInt(parts[1]) * CONFIG.TERRAIN.chunkSize;
+    const chunkZ = parseInt(parts[2]) * CONFIG.TERRAIN.chunkSize;
+    // Keep existing call style (world coords). Renderer will normalize.
     terrainRenderer.addTerrainChunk({ chunkX, chunkZ, seed: terrainSeed });
     boxInScene = chunkState.boxPresent; // Update boxInScene
     ui.updateButtonStates(isInChunk, boxInScene);
@@ -596,15 +599,13 @@ function staggerP2PInitiations(newPlayers) {
     });
 }
 
-
-
 function processChunkQueue() {
     if (chunkLoadQueue.length > 0 && !isProcessingChunks) {
         isProcessingChunks = true;
         const chunk = chunkLoadQueue.shift();
 
         terrainRenderer.addTerrainChunk(chunk);
-        ui.updateStatus(`Loaded terrain and water chunk at (${chunk.chunkX/50}, ${chunk.chunkZ/50})`); // NEW: Log water load
+        ui.updateStatus(`Loaded terrain and water chunk at (${(chunk.chunkX || chunk.gridX) / CONFIG.TERRAIN.chunkSize}, ${(chunk.chunkZ || chunk.gridZ) / CONFIG.TERRAIN.chunkSize})`); // NEW: Log water load
 
         setTimeout(() => {
             isProcessingChunks = false;
@@ -623,15 +624,15 @@ function animate() {
     const deltaTime = now - lastFrameTime;
     waterRenderer.update(now); // NEW: Update water time
 
-if (now - lastChunkUpdateTime > chunkUpdateInterval) {
-    lastChunkUpdateTime = now;
-    
-    // Assuming your player object's position is available, e.g., camera or avatar
-    const playerX = camera.position.x; // Replace camera with your player object if needed
-    const playerZ = camera.position.z;
+    if (now - lastChunkUpdateTime > chunkUpdateInterval) {
+        lastChunkUpdateTime = now;
 
-    updateChunks(playerX, playerZ);
-}
+        // Use the player object consistently for chunk updates
+        const playerX = playerObject.position.x;
+        const playerZ = playerObject.position.z;
+
+        updateChunks(playerX, playerZ);
+    }
 
     if (isMoving) {
         const distance = playerObject.position.distanceTo(playerTargetPosition);
@@ -666,8 +667,9 @@ if (now - lastChunkUpdateTime > chunkUpdateInterval) {
 
     if (now - lastChunkUpdateTime > chunkUpdateInterval) {
         const chunkSize = CONFIG.TERRAIN.chunkSize; // NEW: Use CONFIG
-        const newChunkX = Math.floor((playerObject.position.x + chunkSize/2) / chunkSize);
-        const newChunkZ = Math.floor((playerObject.position.z + chunkSize/2) / chunkSize);
+        // CONSISTENT: no half-chunk offset
+        const newChunkX = Math.floor(playerObject.position.x / chunkSize);
+        const newChunkZ = Math.floor(playerObject.position.z / chunkSize);
 
         if (newChunkX !== currentPlayerChunkX || newChunkZ !== currentPlayerChunkZ) {
             currentPlayerChunkX = newChunkX;
@@ -681,8 +683,7 @@ if (now - lastChunkUpdateTime > chunkUpdateInterval) {
     checkAndReconnectPeers();
     processChunkQueue();
 
-    const cameraOffset = new THREE.Vector3(0, 15, 5);  //0, 15, 5 sets a good height
-cameraTargetPosition.copy(playerObject.position).add(cameraOffset);
+    cameraTargetPosition.copy(playerObject.position).add(cameraOffset);
     const smoothedCameraPosition = camera.position.lerp(cameraTargetPosition, 0.5);
     camera.position.copy(smoothedCameraPosition);
     camera.lookAt(playerObject.position);

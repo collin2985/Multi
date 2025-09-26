@@ -27,18 +27,31 @@ export class SimpleTerrainRenderer {
         this.waterRenderer = waterRenderer;
     }
 
-    addTerrainChunk({ chunkX, chunkZ, seed }) {
+    /**
+     * addTerrainChunk accepts either:
+     *  - { gridX, gridZ, seed }  // preferred: integer chunk indices
+     *  - { chunkX, chunkZ, seed } // legacy: world coords — will be converted
+     */
+    addTerrainChunk({ chunkX = undefined, chunkZ = undefined, gridX = undefined, gridZ = undefined, seed }) {
         const chunkSize = CONFIG.TERRAIN.chunkSize;
         const segments = CONFIG.TERRAIN.segments;
-        
-        // FIXED: Ensure chunkX/chunkZ are grid coordinates (0, 1, 2, etc.)
-        const gridX = Math.floor(chunkX / chunkSize);
-        const gridZ = Math.floor(chunkZ / chunkSize);
+
+        // Normalize to grid coordinates.
+        if (typeof gridX !== 'number' || typeof gridZ !== 'number') {
+            if (typeof chunkX === 'number' && typeof chunkZ === 'number') {
+                // chunkX/chunkZ are world coordinates -> compute grid index
+                gridX = Math.floor(chunkX / chunkSize);
+                gridZ = Math.floor(chunkZ / chunkSize);
+            } else {
+                console.warn('addTerrainChunk: expected gridX/gridZ or chunkX/chunkZ', { gridX, gridZ, chunkX, chunkZ });
+                return;
+            }
+        }
+
         const key = `${gridX},${gridZ}`;
-        
         if (this.terrainChunks.has(key)) return;
 
-        // World position for the chunk
+        // World position for the chunk (center)
         const worldX = gridX * chunkSize;
         const worldZ = gridZ * chunkSize;
 
@@ -49,14 +62,14 @@ export class SimpleTerrainRenderer {
             segments
         );
         geometry.rotateX(-Math.PI / 2);
-        
+
         const chunk = new THREE.Mesh(geometry, this.terrainMaterial);
         chunk.position.set(worldX, 0, worldZ);
         chunk.name = `terrain_${key}`;
         this.scene.add(chunk);
         this.terrainChunks.set(key, chunk);
 
-        // FIXED: Generate points with proper world coordinates for seamless boundaries
+        // Generate points using world coordinates for seamless boundaries
         const points = this.generateChunkPoints(worldX, worldZ, segments);
 
         const batchId = `${key}_${Date.now()}`;
@@ -69,60 +82,60 @@ export class SimpleTerrainRenderer {
         }
     }
 
-    // NEW: Proper point generation for seamless boundaries
+    // Proper point generation for seamless boundaries
     generateChunkPoints(worldX, worldZ, segments) {
         const points = [];
-const chunkSize = CONFIG.TERRAIN.chunkSize;
+        const chunkSize = CONFIG.TERRAIN.chunkSize;
 
-// Generate points using integer grid coordinates for exact boundary matching
-for (let i = 0; i <= segments; i++) {
-    for (let j = 0; j <= segments; j++) {
-        // Calculate exact world coordinates using integer grid positions
-        const gridStepX = chunkSize / segments;
-        const gridStepZ = chunkSize / segments;
-        const worldPointX = worldX - chunkSize/2 + (i * gridStepX);
-        const worldPointZ = worldZ - chunkSize/2 + (j * gridStepZ);
-        
-        points.push({
-            x: worldPointX,
-            z: worldPointZ,
-            index: i * (segments + 1) + j
-        });
-    }
-}
-return points;
+        // Generate points using integer grid coordinates for exact boundary matching
+        for (let i = 0; i <= segments; i++) {
+            for (let j = 0; j <= segments; j++) {
+                // Calculate exact world coordinates using integer grid positions
+                const gridStepX = chunkSize / segments;
+                const gridStepZ = chunkSize / segments;
+                const worldPointX = worldX - chunkSize / 2 + (i * gridStepX);
+                const worldPointZ = worldZ - chunkSize / 2 + (j * gridStepZ);
+
+                points.push({
+                    x: worldPointX,
+                    z: worldPointZ,
+                    index: i * (segments + 1) + j
+                });
+            }
+        }
+        return points;
     }
 
     handleHeightBatchResult(result, chunk, key, seed) {
         if (!this.terrainChunks.has(key)) return;
 
         const vertices = chunk.geometry.attributes.position.array;
-        
-        // FIXED: Proper vertex indexing for correct height assignment
+
+        // Proper vertex indexing for correct height assignment
         for (let i = 0; i < result.results.length; i++) {
             const resultData = result.results[i];
             const vertexIndex = resultData.index;
             const arrayIndex = vertexIndex * 3;
-            
+
             // Ensure we don't go out of bounds
             if (arrayIndex + 1 < vertices.length) {
                 vertices[arrayIndex + 1] = resultData.height;
-                
+
                 // Cache with higher precision for boundary consistency
-                const cacheKey = `${Math.round(resultData.x * 10000)},${Math.round(resultData.z * 10000)}`;
+                const cacheKey = `${Math.round(resultData.x * 10000)},${Math.round(resultData.z * 10000)}`;
 
                 this.heightCache.set(cacheKey, resultData.height);
-                
+
                 if (resultData.normal) {
                     this.normalCache.set(cacheKey, new THREE.Vector3(
-                        resultData.normal.x, 
-                        resultData.normal.y, 
+                        resultData.normal.x,
+                        resultData.normal.y,
                         resultData.normal.z
                     ));
                 }
             }
         }
-        
+
         chunk.geometry.attributes.position.needsUpdate = true;
         chunk.geometry.computeVertexNormals();
 
@@ -130,12 +143,26 @@ return points;
         Utilities.limitCacheSize(this.normalCache, CONFIG.PERFORMANCE.maxCacheSize);
     }
 
-    removeTerrainChunk({ chunkX, chunkZ }) {
+    /**
+     * removeTerrainChunk accepts either:
+     *  - { gridX, gridZ } or
+     *  - { chunkX, chunkZ } world coords
+     */
+    removeTerrainChunk({ chunkX = undefined, chunkZ = undefined, gridX = undefined, gridZ = undefined }) {
         const chunkSize = CONFIG.TERRAIN.chunkSize;
-        const gridX = Math.floor(chunkX / chunkSize);
-        const gridZ = Math.floor(chunkZ / chunkSize);
+
+        if (typeof gridX !== 'number' || typeof gridZ !== 'number') {
+            if (typeof chunkX === 'number' && typeof chunkZ === 'number') {
+                gridX = Math.floor(chunkX / chunkSize);
+                gridZ = Math.floor(chunkZ / chunkSize);
+            } else {
+                console.warn('removeTerrainChunk: expected gridX/gridZ or chunkX/chunkZ', { gridX, gridZ, chunkX, chunkZ });
+                return;
+            }
+        }
+
         const key = `${gridX},${gridZ}`;
-        
+
         const chunk = this.terrainChunks.get(key);
         if (chunk) {
             this.scene.remove(chunk);
@@ -151,14 +178,16 @@ return points;
             for (let i = 0; i < vertices.length; i += 3) {
                 const x = vertices[i] + chunk.position.x;
                 const z = vertices[i + 2] + chunk.position.z;
-const cacheKey = `${Math.round(x * 10000)},${Math.round(z * 10000)}`;                this.heightCache.delete(cacheKey);
+                const cacheKey = `${Math.round(x * 10000)},${Math.round(z * 10000)}`;
+                this.heightCache.delete(cacheKey);
                 this.normalCache.delete(cacheKey);
             }
         }
     }
 
     getTerrainHeightAt(x, z) {
-const cacheKey = `${Math.round(x * 10000)},${Math.round(z * 10000)}`;        if (this.heightCache.has(cacheKey)) {
+        const cacheKey = `${Math.round(x * 10000)},${Math.round(z * 10000)}`;
+        if (this.heightCache.has(cacheKey)) {
             return this.heightCache.get(cacheKey);
         }
 
@@ -167,7 +196,7 @@ const cacheKey = `${Math.round(x * 10000)},${Math.round(z * 10000)}`;        if 
         const gridZ = Math.floor(z / chunkSize);
         const key = `${gridX},${gridZ}`;
         const chunk = this.terrainChunks.get(key);
-        
+
         if (chunk) {
             const raycaster = new THREE.Raycaster();
             const rayOrigin = new THREE.Vector3(x, 1000, z);
@@ -190,7 +219,7 @@ const cacheKey = `${Math.round(x * 10000)},${Math.round(z * 10000)}`;        if 
     }
 
     getTerrainNormalAt(x, z) {
-const cacheKey = `${Math.round(x * 10000)},${Math.round(z * 10000)}`;
+        const cacheKey = `${Math.round(x * 10000)},${Math.round(z * 10000)}`;
         if (this.normalCache.has(cacheKey)) {
             return this.normalCache.get(cacheKey);
         }
@@ -200,7 +229,7 @@ const cacheKey = `${Math.round(x * 10000)},${Math.round(z * 10000)}`;
         const gridZ = Math.floor(z / chunkSize);
         const key = `${gridX},${gridZ}`;
         const chunk = this.terrainChunks.get(key);
-        
+
         if (chunk) {
             const raycaster = new THREE.Raycaster();
             const rayOrigin = new THREE.Vector3(x, 1000, z);
@@ -231,10 +260,10 @@ const cacheKey = `${Math.round(x * 10000)},${Math.round(z * 10000)}`;
             }
         });
         this.terrainChunks.clear();
-        
+
         this.heightCache.clear();
         this.normalCache.clear();
-        
+
         if (this.terrainMaterial) {
             Object.values(this.terrainMaterial.uniforms).forEach(uniform => {
                 if (uniform.value && uniform.value.dispose) {
@@ -243,7 +272,7 @@ const cacheKey = `${Math.round(x * 10000)},${Math.round(z * 10000)}`;
             });
             this.terrainMaterial.dispose();
         }
-        
+
         if (this.workerManager) {
             this.workerManager.terminate();
         }
