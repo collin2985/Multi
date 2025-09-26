@@ -596,48 +596,7 @@ function staggerP2PInitiations(newPlayers) {
     });
 }
 
-function updateChunksAroundPlayer(chunkX, chunkZ) {
-    const chunkSize = CONFIG.TERRAIN.chunkSize; // NEW: Use CONFIG for consistency
-    const shouldLoad = new Set();
-    for (let x = chunkX - loadRadius; x <= chunkX + loadRadius; x++) {
-        for (let z = chunkZ - loadRadius; z <= chunkZ + loadRadius; z++) {
-            shouldLoad.add(`${x},${z}`);
-        }
-    }
 
-    const currentChunks = new Set(terrainRenderer.terrainChunks.keys());
-    for (const chunkKey of currentChunks) {
-        if (!shouldLoad.has(chunkKey)) {
-            const [cx, cz] = chunkKey.split(',').map(Number);
-            terrainRenderer.removeTerrainChunk({ chunkX: cx * chunkSize, chunkZ: cz * chunkSize });
-            ui.updateStatus(`Unloaded terrain and water chunk (${cx}, ${cz})`); // NEW: Log water unload
-        }
-    }
-
-    for (const chunkKey of shouldLoad) {
-        if (!currentChunks.has(chunkKey)) {
-            const [cx, cz] = chunkKey.split(',').map(Number);
-            chunkLoadQueue.push({
-                chunkX: cx * chunkSize,
-                chunkZ: cz * chunkSize,
-                seed: terrainSeed
-            });
-            ui.updateStatus(`Queued load for terrain and water chunk (${cx}, ${cz})`); // NEW: Log water load
-        }
-    }
-
-    if (isInChunk && (chunkX !== lastChunkX || chunkZ !== lastChunkZ)) {
-        const newChunkId = `chunk_${chunkX}_${chunkZ}`;
-        const lastChunkId = lastChunkX !== null ? `chunk_${lastChunkX}_${lastChunkZ}` : null;
-        sendServerMessage('chunk_update', {
-            clientId,
-            newChunkId,
-            lastChunkId
-        });
-        lastChunkX = chunkX;
-        lastChunkZ = chunkZ;
-    }
-}
 
 function processChunkQueue() {
     if (chunkLoadQueue.length > 0 && !isProcessingChunks) {
