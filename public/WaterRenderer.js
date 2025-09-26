@@ -240,17 +240,17 @@ export class WaterRenderer {
 
     // NEW: Add a water chunk at the specified coordinates
     addWaterChunk(chunkX, chunkZ) {
-        const key = `${chunkX},${chunkZ}`;
-        if (this.waterChunks.has(key)) return;
-
-        const geometry = new THREE.PlaneGeometry(50, 50, 100, 100); // Match terrain chunk size and segments
-        geometry.rotateX(-Math.PI / 2);
-        const material = this.sharedMaterial; // Use shared material
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.position.set(chunkX, this.waterLevel, chunkZ);
-        this.scene.add(mesh);
-        this.waterChunks.set(key, mesh);
-    }
+    const key = `${chunkX},${chunkZ}`;
+    if (this.waterChunks.has(key)) return;
+    console.log(`Adding water chunk at (${chunkX}, ${chunkZ})`);
+    const geometry = new THREE.PlaneGeometry(50, 50, 100, 100);
+    geometry.rotateX(-Math.PI / 2);
+    const material = this.sharedMaterial;
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(chunkX, this.waterLevel, chunkZ);
+    this.scene.add(mesh);
+    this.waterChunks.set(key, mesh);
+}
 
     // NEW: Remove a water chunk
     removeWaterChunk(chunkX, chunkZ) {

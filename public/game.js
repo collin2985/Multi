@@ -1,10 +1,13 @@
 // game.js
+chunkLoadQueue = []; // Reset queue on initialization
 
 import * as THREE from 'three';
 import { SimpleTerrainRenderer } from './terrain/SimpleTerrainRenderer.js';
 import { ui } from './ui.js';
 import { CONFIG } from './terrain/config.js';
 import { WaterRenderer } from './WaterRenderer.js';
+
+
 
 // --- GLOBAL STATE ---
 const clientId = 'client_' + Math.random().toString(36).substr(2, 12);
@@ -99,42 +102,33 @@ function updateChunks(playerWorldX, playerWorldZ) {
     currentPlayerChunkZ = newChunkZ;
 }
 
-// ALSO FIX the updateChunksAroundPlayer function (used for initial load/server updates)
 function updateChunksAroundPlayer(chunkX, chunkZ) {
     const chunkSize = CONFIG.TERRAIN.chunkSize;
     const shouldLoad = new Set();
     
-    // chunkX and chunkZ here are the central *grid* indices (e.g., 0, 0)
     for (let x = chunkX - loadRadius; x <= chunkX + loadRadius; x++) {
         for (let z = chunkZ - loadRadius; z <= chunkZ + loadRadius; z++) {
             shouldLoad.add(`${x},${z}`);
         }
     }
 
-    // NOTE: Assuming terrainRenderer.chunkMap is the source of truth for loaded chunks
     const currentChunks = new Set(terrainRenderer.chunkMap.keys());
     
-    // Remove chunks outside the load radius
     for (const chunkKey of currentChunks) {
         if (!shouldLoad.has(chunkKey)) {
             const [gridX, gridZ] = chunkKey.split(',').map(Number);
-            // Removal should be done by key for consistency, and the renderer handles disposal.
             terrainRenderer.disposeChunk(chunkKey);
             ui.updateStatus(`Unloaded terrain and water chunk (${gridX}, ${gridZ})`);
         }
     }
 
-    // Add new chunks within the load radius
     for (const chunkKey of shouldLoad) {
         if (!currentChunks.has(chunkKey)) {
             const [gridX, gridZ] = chunkKey.split(',').map(Number);
-            
-            // ✅ Ensure that chunks are spawned using world coordinates derived from gridX/Z × chunkSize.
             const worldX = gridX * chunkSize;
             const worldZ = gridZ * chunkSize;
-            
+            console.log(`Queuing chunk: (${worldX}, ${worldZ}) for grid (${gridX}, ${gridZ})`);
             chunkLoadQueue.push({
-                // Pass world coordinates for the renderer to use for alignment
                 chunkX: worldX,
                 chunkZ: worldZ,
                 seed: terrainSeed
@@ -143,7 +137,6 @@ function updateChunksAroundPlayer(chunkX, chunkZ) {
         }
     }
 
-    // Handle server chunk updates (This logic remains fine, as it uses the grid indices passed in)
     if (isInChunk && (chunkX !== lastChunkX || chunkZ !== lastChunkZ)) {
         const newChunkId = `chunk_${chunkX}_${chunkZ}`;
         const lastChunkId = lastChunkX !== null ? `chunk_${lastChunkX}_${lastChunkZ}` : null;
@@ -181,6 +174,8 @@ box.name = 'serverBox';
 terrainRenderer = new SimpleTerrainRenderer(scene);
 waterRenderer = new WaterRenderer(scene, 0.9, terrainRenderer); // Pass terrainRenderer
 terrainRenderer.setWaterRenderer(waterRenderer); // NEW: Set reference for integration
+console.log('WaterRenderer initialized, checking chunk sync...');
+
 
 // --- CLICK-TO-MOVE HANDLER ---
 window.addEventListener('pointerdown', onPointerDown);
@@ -245,27 +240,26 @@ function connectToServer() {
     ws = new WebSocket('wss://multiplayer-game-dcwy.onrender.com');
 
     ws.onopen = () => {
-        ui.updateStatus("✅ Connected to server");
-        ui.updateConnectionStatus('connected', '✅ Server Connected');
+    ui.updateStatus("✅ Connected to server");
+    ui.updateConnectionStatus('connected', '✅ Server Connected');
+    ui.updateButtonStates(isInChunk, boxInScene);
+    wsRetryAttempts = 0;
+    const chunkSize = CONFIG.TERRAIN.chunkSize;
+    const initialChunkX = Math.floor(playerObject.position.x / chunkSize);
+    const initialChunkZ = Math.floor(playerObject.position.z / chunkSize);
+    console.log(`Initial chunk: (${initialChunkX}, ${initialChunkZ})`);
+    const chunkId = `chunk_${initialChunkX}_${initialChunkZ}`;
+    const success = sendServerMessage('join_chunk', { chunkId, clientId });
+    if (success) {
+        isInChunk = true;
+        currentPlayerChunkX = initialChunkX;
+        currentPlayerChunkZ = initialChunkZ;
+        lastChunkX = initialChunkX;
+        lastChunkZ = initialChunkZ;
         ui.updateButtonStates(isInChunk, boxInScene);
-        wsRetryAttempts = 0;
-        // Send join_chunk with initial chunk
-        const chunkSize = CONFIG.TERRAIN.chunkSize;
-        // Calculation should use Math.floor to match SimpleTerrainRenderer/updateChunks
-        const initialChunkX = Math.floor(playerObject.position.x / chunkSize);
-        const initialChunkZ = Math.floor(playerObject.position.z / chunkSize);
-        const chunkId = `chunk_${initialChunkX}_${initialChunkZ}`;
-        const success = sendServerMessage('join_chunk', { chunkId, clientId });
-        if (success) {
-            isInChunk = true;
-            currentPlayerChunkX = initialChunkX;
-            currentPlayerChunkZ = initialChunkZ;
-            lastChunkX = initialChunkX;
-            lastChunkZ = initialChunkZ;
-            ui.updateButtonStates(isInChunk, boxInScene);
-        }
-        updateChunksAroundPlayer(initialChunkX, initialChunkZ);
-    };
+    }
+    updateChunksAroundPlayer(initialChunkX, initialChunkZ);
+};
 
     ws.onclose = (event) => {
         ui.updateStatus(`❌ Server disconnected (${event.code})`);
@@ -607,16 +601,17 @@ function processChunkQueue() {
     if (chunkLoadQueue.length > 0 && !isProcessingChunks) {
         isProcessingChunks = true;
         const chunk = chunkLoadQueue.shift();
-
-        // The chunk object in the queue now correctly contains world coordinates (chunkX, chunkZ)
-        terrainRenderer.createChunk(chunk.chunkX, chunk.chunkZ); 
-        ui.updateStatus(`Loaded terrain and water chunk at (${chunk.chunkX/CONFIG.TERRAIN.chunkSize}, ${chunk.chunkZ/CONFIG.TERRAIN.chunkSize})`); // Log water load
-
+        if (!chunk || typeof chunk.chunkX === 'undefined' || typeof chunk.chunkZ === 'undefined') {
+            console.warn('Invalid chunk in queue:', chunk);
+            isProcessingChunks = false;
+            return;
+        }
+        terrainRenderer.createChunk(chunk.chunkX, chunk.chunkZ);
+        ui.updateStatus(`Loaded terrain and water chunk at (${chunk.chunkX/CONFIG.TERRAIN.chunkSize}, ${chunk.chunkZ/CONFIG.TERRAIN.chunkSize})`);
         setTimeout(() => {
             isProcessingChunks = false;
         }, 100);
     }
-    console.log(`Processing chunk from queue: (${chunk.chunkX}, ${chunk.chunkZ})`);
 }
 
 // --- ANIMATION LOOP ---
