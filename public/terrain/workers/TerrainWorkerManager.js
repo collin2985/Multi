@@ -107,9 +107,8 @@ export class TerrainWorkerManager {
             }
             
             const calculateHeight = (x, z) => {
-                if (workerHeightCache.has(\`\${x},\${z}\`)) {
-                    return workerHeightCache.get(\`\${x},\${z}\`);
-                }
+if (workerHeightCache.has(\`\${Math.round(x * 10000)},\${Math.round(z * 10000)}\`)) {                    
+return workerHeightCache.get(\`\${Math.round(x * 10000)},\${Math.round(z * 10000)}\`);                }
                 
                 // Base terrain
                 let base = 0, amp = 1, freq = 0.02;
@@ -157,8 +156,7 @@ export class TerrainWorkerManager {
                            perlin.noise(x * 1.6, z * 1.6, 901) * 0.6 * elevNorm;
                 
                 const height = heightBeforeJagged + jagged;
-                workerHeightCache.set(\`\${x},\${z}\`, height);
-                return height;
+workerHeightCache.set(\`\${Math.round(x * 10000)},\${Math.round(z * 10000)}\`, height);                return height;
             };
             
             self.onmessage = function(e) {

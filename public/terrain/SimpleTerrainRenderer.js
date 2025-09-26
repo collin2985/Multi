@@ -72,25 +72,25 @@ export class SimpleTerrainRenderer {
     // NEW: Proper point generation for seamless boundaries
     generateChunkPoints(worldX, worldZ, segments) {
         const points = [];
-        const chunkSize = CONFIG.TERRAIN.chunkSize;
-        const stepSize = chunkSize / segments;
+const chunkSize = CONFIG.TERRAIN.chunkSize;
+
+// Generate points using integer grid coordinates for exact boundary matching
+for (let i = 0; i <= segments; i++) {
+    for (let j = 0; j <= segments; j++) {
+        // Calculate exact world coordinates using integer grid positions
+        const gridStepX = chunkSize / segments;
+        const gridStepZ = chunkSize / segments;
+        const worldPointX = worldX - chunkSize/2 + (i * gridStepX);
+        const worldPointZ = worldZ - chunkSize/2 + (j * gridStepZ);
         
-        // Generate points including edges for proper boundary matching
-        for (let i = 0; i <= segments; i++) {
-            for (let j = 0; j <= segments; j++) {
-                const localX = (i / segments - 0.5) * chunkSize; // -25 to +25 for 50-unit chunk
-                const localZ = (j / segments - 0.5) * chunkSize;
-                const worldPointX = worldX + localX;
-                const worldPointZ = worldZ + localZ;
-                
-                points.push({
-                    x: worldPointX,
-                    z: worldPointZ,
-                    index: i * (segments + 1) + j
-                });
-            }
-        }
-        return points;
+        points.push({
+            x: worldPointX,
+            z: worldPointZ,
+            index: i * (segments + 1) + j
+        });
+    }
+}
+return points;
     }
 
     handleHeightBatchResult(result, chunk, key, seed) {
@@ -109,7 +109,8 @@ export class SimpleTerrainRenderer {
                 vertices[arrayIndex + 1] = resultData.height;
                 
                 // Cache with higher precision for boundary consistency
-                const cacheKey = `${resultData.x.toFixed(4)},${resultData.z.toFixed(4)}`;
+                const cacheKey = `${Math.round(resultData.x * 10000)},${Math.round(resultData.z * 10000)}`;
+
                 this.heightCache.set(cacheKey, resultData.height);
                 
                 if (resultData.normal) {
@@ -150,16 +151,14 @@ export class SimpleTerrainRenderer {
             for (let i = 0; i < vertices.length; i += 3) {
                 const x = vertices[i] + chunk.position.x;
                 const z = vertices[i + 2] + chunk.position.z;
-                const cacheKey = `${x.toFixed(4)},${z.toFixed(4)}`;
-                this.heightCache.delete(cacheKey);
+const cacheKey = `${Math.round(x * 10000)},${Math.round(z * 10000)}`;                this.heightCache.delete(cacheKey);
                 this.normalCache.delete(cacheKey);
             }
         }
     }
 
     getTerrainHeightAt(x, z) {
-        const cacheKey = `${x.toFixed(4)},${z.toFixed(4)}`;
-        if (this.heightCache.has(cacheKey)) {
+const cacheKey = `${Math.round(x * 10000)},${Math.round(z * 10000)}`;        if (this.heightCache.has(cacheKey)) {
             return this.heightCache.get(cacheKey);
         }
 
@@ -191,7 +190,7 @@ export class SimpleTerrainRenderer {
     }
 
     getTerrainNormalAt(x, z) {
-        const cacheKey = `${x.toFixed(4)},${z.toFixed(4)}`;
+const cacheKey = `${Math.round(x * 10000)},${Math.round(z * 10000)}`;
         if (this.normalCache.has(cacheKey)) {
             return this.normalCache.get(cacheKey);
         }
