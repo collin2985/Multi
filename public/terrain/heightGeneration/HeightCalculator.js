@@ -64,27 +64,10 @@ export class HeightCalculator {
         }
         mountain *= 40 * mask;
         
-        // Sea mask generation (MATCHES WORKER)
-        let seaMaskRaw = this.perlin.noise(rx * 0.0008, rz * 0.0008, 600);
-        let normalizedSea = (seaMaskRaw + 1) * 0.5;
-        // Binary sea mask
-        let seaMask = normalizedSea > 0.75 ?
-        1 : 0; 
         
-        // Sea basin generation
-        let seaBasin = 0;
-        amplitude = 2;
-        frequency = 0.01;
-        
-        for (let octave = 0; octave < 3; octave++) {
-            seaBasin += Math.abs(this.perlin.noise(rx * frequency, rz * frequency, 700 + octave * 13)) * amplitude;
-            amplitude *= 0.5;
-            frequency *= 2;
-        }
-        // Increase sea depth to reach -20 or deeper
-        let seaDepth = seaMask * seaBasin * 100;
-        let heightBeforeJagged = base + mountain - seaDepth - (seaMask * 3);
-        
+        // New height calculation: Base + Mountain only, removing sea-related subtraction.
+let heightBeforeJagged = base + mountain;        
+
         // Elevation-based details
         const elevNorm = this.clamp((heightBeforeJagged + 2) / 25, 0, 1);
         let jagged = this.perlin.noise(rx * 0.8, rz * 0.8, 900) * 1.2 * elevNorm + 
