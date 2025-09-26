@@ -79,6 +79,7 @@ function updateChunks(playerWorldX, playerWorldZ) {
                 const worldX = gridX * chunkSize;
                 const worldZ = gridZ * chunkSize;
                 terrainRenderer.createChunk(worldX, worldZ); // Use the fixed renderer method
+            console.log(`Creating chunk at worldX: ${worldX}, worldZ: ${worldZ}, gridX: ${gridX}, gridZ: ${gridZ}`);
             }
         }
     }
@@ -615,6 +616,7 @@ function processChunkQueue() {
             isProcessingChunks = false;
         }, 100);
     }
+    console.log(`Processing chunk from queue: (${chunk.chunkX}, ${chunk.chunkZ})`);
 }
 
 // --- ANIMATION LOOP ---
