@@ -1,7 +1,7 @@
 // terrain/rendering/SimpleTerrainRenderer.js
 import * as THREE from 'three';
-import { TerrainWorkerManager } from '../workers/TerrainWorkerManager.js';
-import { CONFIG } from '../config.js';
+import { TerrainWorkerManager } from './workers/TerrainWorkerManager.js';
+import { CONFIG } from './config.js';
 
 const { CHUNK_SIZE, TERRAIN_RESOLUTION } = CONFIG.TERRAIN;
 const VERTICES_PER_SIDE = TERRAIN_RESOLUTION + 1;
