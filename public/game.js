@@ -1,5 +1,4 @@
 // game.js
-chunkLoadQueue = []; // Reset queue on initialization
 
 import * as THREE from 'three';
 import { SimpleTerrainRenderer } from './terrain/SimpleTerrainRenderer.js';
@@ -28,6 +27,8 @@ let isProcessingChunks = false;
 const terrainSeed = 12345; // Fixed, client-side terrain seed
 let initialChunksLoaded = false;
 let waterRenderer = null;
+
+
 
 // Click-to-move state
 const raycaster = new THREE.Raycaster();
