@@ -1,258 +1,207 @@
-
-// terrain/SimpleTerrainRenderer.js - FIXED VERSION
+// terrain/rendering/SimpleTerrainRenderer.js
 import * as THREE from 'three';
-import { CONFIG } from './config.js';
-import { TerrainWorkerManager } from './workers/TerrainWorkerManager.js';
-import { TerrainMaterialFactory } from './materials/TerrainMaterialFactory.js';
-import { Utilities } from './utilities.js';
+import { TerrainWorkerManager } from '../workers/TerrainWorkerManager.js';
+import { CONFIG } from '../config.js';
+
+const { CHUNK_SIZE, TERRAIN_RESOLUTION } = CONFIG.TERRAIN;
+const VERTICES_PER_SIDE = TERRAIN_RESOLUTION + 1;
+const TOTAL_VERTICES = VERTICES_PER_SIDE * VERTICES_PER_SIDE;
+
+// --- START FIX: Deterministic Precision Helper (Matches HeightCalculator.js) ---
+const FLOAT_PRECISION = 10000.0;
+const roundCoord = (coord) => Math.round(coord * FLOAT_PRECISION) / FLOAT_PRECISION;
+// --- END FIX ---
 
 export class SimpleTerrainRenderer {
-    constructor(scene, workerManager = null, terrainMaterial = null) {
+    constructor(scene, seed = 12345) {
         this.scene = scene;
-        this.terrainChunks = new Map();
-        this.heightCache = new Map();
-        this.normalCache = new Map();
-        this.workerManager = workerManager || new TerrainWorkerManager();
-        this.terrainMaterial = terrainMaterial || TerrainMaterialFactory.createTerrainMaterial();
-        this.waterRenderer = null;
-        const textures = TerrainMaterialFactory.createProceduralTextures();
-        this.terrainMaterial.uniforms.uDirt.value = textures.dirt;
-        this.terrainMaterial.uniforms.uGrass.value = textures.grass;
-        this.terrainMaterial.uniforms.uRock.value = textures.rock;
-        this.terrainMaterial.uniforms.uRock2.value = textures.rock2;
-        this.terrainMaterial.uniforms.uSnow.value = textures.snow;
-        this.terrainMaterial.uniforms.uSand.value = textures.sand;
-    }
-
-    setWaterRenderer(waterRenderer) {
-        this.waterRenderer = waterRenderer;
-    }
-
-    addTerrainChunk({ chunkX, chunkZ, seed }) {
-        const chunkSize = CONFIG.TERRAIN.chunkSize;
-        const segments = CONFIG.TERRAIN.segments;
-        
-        // FIXED: Ensure chunkX/chunkZ are grid coordinates (0, 1, 2, etc.)
-        const gridX = Math.floor(chunkX / chunkSize);
-        const gridZ = Math.floor(chunkZ / chunkSize);
-        const key = `${gridX},${gridZ}`;
-        
-        if (this.terrainChunks.has(key)) return;
-
-        // World position for the chunk
-        const worldX = gridX * chunkSize;
-        const worldZ = gridZ * chunkSize;
-
-        const geometry = new THREE.PlaneGeometry(
-            chunkSize,
-            chunkSize,
-            segments,
-            segments
-        );
-        geometry.rotateX(-Math.PI / 2);
-        
-        const chunk = new THREE.Mesh(geometry, this.terrainMaterial);
-        chunk.position.set(worldX, 0, worldZ);
-        chunk.name = `terrain_${key}`;
-        this.scene.add(chunk);
-        this.terrainChunks.set(key, chunk);
-
-        // FIXED: Generate points with proper world coordinates for seamless boundaries
-        const points = this.generateChunkPoints(worldX, worldZ, segments);
-
-        const batchId = `${key}_${Date.now()}`;
-        this.workerManager.calculateHeightBatch(points, batchId, (result) => {
-            this.handleHeightBatchResult(result, chunk, key, seed);
+        this.seed = seed;
+        this.workerManager = new TerrainWorkerManager();
+        this.chunkMap = new Map();
+        this.material = new THREE.MeshStandardMaterial({
+            vertexColors: true,
+            wireframe: false,
         });
-
-        if (this.waterRenderer) {
-            this.waterRenderer.addWaterChunk(worldX, worldZ);
-        }
+        this.batchIdCounter = 0;
     }
 
-    // NEW: Proper point generation for seamless boundaries
-    generateChunkPoints(worldX, worldZ, segments) {
+    // ✅ Fix chunk grid math: when creating chunks, always use integer grid indices (gridX, gridZ).
+    createChunk(worldX, worldZ) {
+        // Use Math.floor to ensure deterministic integer grid coordinates for the chunk
+        const gridX = Math.floor(worldX / CHUNK_SIZE);
+        const gridZ = Math.floor(worldZ / CHUNK_SIZE);
+        const chunkId = `${gridX},${gridZ}`;
+
+        if (this.chunkMap.has(chunkId)) {
+            return this.chunkMap.get(chunkId);
+        }
+
+        // Calculate the exact world origin (bottom-left corner) based on the integer grid index
+        const chunkWorldX = gridX * CHUNK_SIZE;
+        const chunkWorldZ = gridZ * CHUNK_SIZE;
+
+        const geometry = new THREE.BufferGeometry();
+        // Position buffer: X, Y, Z for each vertex (initialized with Y=0)
+        const positions = new Float32Array(TOTAL_VERTICES * 3);
+        // Normal buffer: Nx, Ny, Nz for each vertex (initialized with straight up)
+        const normals = new Float32Array(TOTAL_VERTICES * 3).fill(0).map((val, i) => i % 3 === 1 ? 1.0 : 0.0);
+        // Color buffer: R, G, B for each vertex
+        const colors = new Float32Array(TOTAL_VERTICES * 3);
+        // Index buffer: Indices for triangles
+        const indices = this.generateChunkIndices();
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+
+        const mesh = new THREE.Mesh(geometry, this.material);
+        mesh.userData = { gridX, gridZ, isHeightProcessed: false };
+        mesh.position.set(chunkWorldX, 0, chunkWorldZ); // Mesh position is the chunk's world origin
+
+        const chunkData = {
+            id: chunkId,
+            mesh: mesh,
+            worldX: chunkWorldX,
+            worldZ: chunkWorldZ,
+            gridX: gridX,
+            gridZ: gridZ,
+        };
+
+        this.chunkMap.set(chunkId, chunkData);
+        this.scene.add(mesh);
+        
+        this.requestChunkHeights(chunkData);
+
+        return chunkData;
+    }
+
+    generateChunkIndices() {
+        const indices = [];
+        for (let j = 0; j < TERRAIN_RESOLUTION; j++) {
+            for (let i = 0; i < TERRAIN_RESOLUTION; i++) {
+                const a = i + j * VERTICES_PER_SIDE;
+                const b = i + (j + 1) * VERTICES_PER_SIDE;
+                const c = (i + 1) + (j + 1) * VERTICES_PER_SIDE;
+                const d = (i + 1) + j * VERTICES_PER_SIDE;
+
+                // First triangle: a, b, d
+                indices.push(a, b, d);
+                // Second triangle: b, c, d
+                indices.push(b, c, d);
+            }
+        }
+        return new Uint32Array(indices);
+    }
+
+    generateChunkPoints(chunkData) {
         const points = [];
-const chunkSize = CONFIG.TERRAIN.chunkSize;
+        const step = CHUNK_SIZE / TERRAIN_RESOLUTION;
+        const { worldX, worldZ } = chunkData;
 
-// Generate points using integer grid coordinates for exact boundary matching
-for (let i = 0; i <= segments; i++) {
-    for (let j = 0; j <= segments; j++) {
-        // Calculate exact world coordinates using integer grid positions
-        const gridStepX = chunkSize / segments;
-        const gridStepZ = chunkSize / segments;
-        const worldPointX = worldX - chunkSize/2 + (i * gridStepX);
-        const worldPointZ = worldZ - chunkSize/2 + (j * gridStepZ);
-        
-        points.push({
-            x: worldPointX,
-            z: worldPointZ,
-            index: i * (segments + 1) + j
+        for (let j = 0; j < VERTICES_PER_SIDE; j++) {
+            for (let i = 0; i < VERTICES_PER_SIDE; i++) {
+                const vertexIndex = i + j * VERTICES_PER_SIDE;
+                
+                // ✅ In generateChunkPoints, ensure vertex world coordinates line up exactly at chunk edges (shared borders).
+                // Coordinates are calculated from the fixed world origin (worldX, worldZ) of the chunk.
+                // The floating point step is used, but the overall structure starts from the fixed origin.
+                let x = worldX + i * step;
+                let z = worldZ + j * step;
+                
+                // ✅ Maintain consistent rounding precision when caching heights (Math.round(x*10000)).
+                // Round the coordinates *before* sending them to the worker to ensure the worker's cache lookup is deterministic and matches the main thread.
+                x = roundCoord(x);
+                z = roundCoord(z);
+
+                points.push({ x, z, index: vertexIndex });
+            }
+        }
+        return points;
+    }
+
+    requestChunkHeights(chunkData) {
+        const batchId = this.batchIdCounter++;
+        const points = this.generateChunkPoints(chunkData);
+
+        // Store chunkData keyed by batchId until results return
+        this.workerManager.calculateHeightBatch(points, batchId, (result) => {
+            this.handleHeightBatchResult(chunkData.id, result);
         });
     }
-}
-return points;
+
+    handleHeightBatchResult(chunkId, result) {
+        const chunkData = this.chunkMap.get(chunkId);
+        if (!chunkData || chunkData.mesh.userData.isHeightProcessed) {
+            return;
+        }
+
+        const geometry = chunkData.mesh.geometry;
+        const positions = geometry.attributes.position.array;
+        const normals = geometry.attributes.normal.array;
+        const colors = geometry.attributes.color.array;
+
+        result.results.forEach(pointResult => {
+            const i = pointResult.index;
+            const { height, normal } = pointResult;
+
+            // ✅ In handleHeightBatchResult, confirm vertex indexing matches geometry layout.
+            // i is the vertex index (0 to TOTAL_VERTICES-1). Position/Normal/Color buffers are 3x the vertex count.
+            const baseIndex = i * 3; 
+
+            // Update Y position
+            positions[baseIndex + 1] = height;
+
+            // Update Normal
+            normals[baseIndex + 0] = normal.x;
+            normals[baseIndex + 1] = normal.y;
+            normals[baseIndex + 2] = normal.z;
+
+            // Simple coloring based on height
+            if (height < 0) { // Sea/Water
+                colors[baseIndex + 0] = 0.1;
+                colors[baseIndex + 1] = 0.1;
+                colors[baseIndex + 2] = 0.8;
+            } else if (height < 2) { // Beach/Shallow
+                colors[baseIndex + 0] = 0.8;
+                colors[baseIndex + 1] = 0.7;
+                colors[baseIndex + 2] = 0.5;
+            } else if (height < 15) { // Grass
+                colors[baseIndex + 0] = 0.2;
+                colors[baseIndex + 1] = 0.6;
+                colors[baseIndex + 2] = 0.1;
+            } else if (height < 30) { // Rock/Mountain
+                colors[baseIndex + 0] = 0.5;
+                colors[baseIndex + 1] = 0.5;
+                colors[baseIndex + 2] = 0.5;
+            } else { // Snow
+                colors[baseIndex + 0] = 1.0;
+                colors[baseIndex + 1] = 1.0;
+                colors[baseIndex + 2] = 1.0;
+            }
+        });
+
+        geometry.attributes.position.needsUpdate = true;
+        geometry.attributes.normal.needsUpdate = true;
+        geometry.attributes.color.needsUpdate = true;
+        geometry.computeBoundingBox();
+        geometry.computeBoundingSphere();
+
+        // The chunk is now visually complete
+        chunkData.mesh.userData.isHeightProcessed = true;
     }
 
-    handleHeightBatchResult(result, chunk, key, seed) {
-        if (!this.terrainChunks.has(key)) return;
-
-        const vertices = chunk.geometry.attributes.position.array;
-        
-        // FIXED: Proper vertex indexing for correct height assignment
-        for (let i = 0; i < result.results.length; i++) {
-            const resultData = result.results[i];
-            const vertexIndex = resultData.index;
-            const arrayIndex = vertexIndex * 3;
-            
-            // Ensure we don't go out of bounds
-            if (arrayIndex + 1 < vertices.length) {
-                vertices[arrayIndex + 1] = resultData.height;
-                
-                // Cache with higher precision for boundary consistency
-                const cacheKey = `${Math.round(resultData.x * 10000)},${Math.round(resultData.z * 10000)}`;
-
-                this.heightCache.set(cacheKey, resultData.height);
-                
-                if (resultData.normal) {
-                    this.normalCache.set(cacheKey, new THREE.Vector3(
-                        resultData.normal.x, 
-                        resultData.normal.y, 
-                        resultData.normal.z
-                    ));
-                }
-            }
+    disposeChunk(chunkId) {
+        const chunkData = this.chunkMap.get(chunkId);
+        if (chunkData) {
+            this.scene.remove(chunkData.mesh);
+            chunkData.mesh.geometry.dispose();
+            this.chunkMap.delete(chunkId);
         }
-        
-        chunk.geometry.attributes.position.needsUpdate = true;
-        chunk.geometry.computeVertexNormals();
-
-        Utilities.limitCacheSize(this.heightCache, CONFIG.PERFORMANCE.maxCacheSize);
-        Utilities.limitCacheSize(this.normalCache, CONFIG.PERFORMANCE.maxCacheSize);
-    }
-
-    removeTerrainChunk({ chunkX, chunkZ }) {
-        const chunkSize = CONFIG.TERRAIN.chunkSize;
-        const gridX = Math.floor(chunkX / chunkSize);
-        const gridZ = Math.floor(chunkZ / chunkSize);
-        const key = `${gridX},${gridZ}`;
-        
-        const chunk = this.terrainChunks.get(key);
-        if (chunk) {
-            this.scene.remove(chunk);
-            chunk.geometry.dispose();
-            this.terrainChunks.delete(key);
-
-            if (this.waterRenderer) {
-                this.waterRenderer.removeWaterChunk(gridX * chunkSize, gridZ * chunkSize);
-            }
-
-            // Clean up cache with proper precision
-            const vertices = chunk.geometry.attributes.position.array;
-            for (let i = 0; i < vertices.length; i += 3) {
-                const x = vertices[i] + chunk.position.x;
-                const z = vertices[i + 2] + chunk.position.z;
-const cacheKey = `${Math.round(x * 10000)},${Math.round(z * 10000)}`;                this.heightCache.delete(cacheKey);
-                this.normalCache.delete(cacheKey);
-            }
-        }
-    }
-
-    getTerrainHeightAt(x, z) {
-const cacheKey = `${Math.round(x * 10000)},${Math.round(z * 10000)}`;        if (this.heightCache.has(cacheKey)) {
-            return this.heightCache.get(cacheKey);
-        }
-
-        const chunkSize = CONFIG.TERRAIN.chunkSize;
-        const gridX = Math.floor(x / chunkSize);
-        const gridZ = Math.floor(z / chunkSize);
-        const key = `${gridX},${gridZ}`;
-        const chunk = this.terrainChunks.get(key);
-        
-        if (chunk) {
-            const raycaster = new THREE.Raycaster();
-            const rayOrigin = new THREE.Vector3(x, 1000, z);
-            const rayDirection = new THREE.Vector3(0, -1, 0);
-            raycaster.set(rayOrigin, rayDirection);
-            const intersects = raycaster.intersectObject(chunk, false);
-            if (intersects.length > 0) {
-                const height = intersects[0].point.y;
-                this.heightCache.set(cacheKey, height);
-                Utilities.limitCacheSize(this.heightCache, CONFIG.PERFORMANCE.maxCacheSize);
-                return height;
-            }
-        }
-
-        // Fallback to height calculator
-        const height = this.workerManager.fallbackCalculator.calculateHeight(x, z);
-        this.heightCache.set(cacheKey, height);
-        Utilities.limitCacheSize(this.heightCache, CONFIG.PERFORMANCE.maxCacheSize);
-        return height;
-    }
-
-    getTerrainNormalAt(x, z) {
-const cacheKey = `${Math.round(x * 10000)},${Math.round(z * 10000)}`;
-        if (this.normalCache.has(cacheKey)) {
-            return this.normalCache.get(cacheKey);
-        }
-
-        const chunkSize = CONFIG.TERRAIN.chunkSize;
-        const gridX = Math.floor(x / chunkSize);
-        const gridZ = Math.floor(z / chunkSize);
-        const key = `${gridX},${gridZ}`;
-        const chunk = this.terrainChunks.get(key);
-        
-        if (chunk) {
-            const raycaster = new THREE.Raycaster();
-            const rayOrigin = new THREE.Vector3(x, 1000, z);
-            const rayDirection = new THREE.Vector3(0, -1, 0);
-            raycaster.set(rayOrigin, rayDirection);
-            const intersects = raycaster.intersectObject(chunk, false);
-            if (intersects.length > 0) {
-                const normal = intersects[0].face.normal.clone();
-                chunk.localToWorld(normal);
-                this.normalCache.set(cacheKey, normal);
-                Utilities.limitCacheSize(this.normalCache, CONFIG.PERFORMANCE.maxCacheSize);
-                return normal;
-            }
-        }
-
-        const normal = this.workerManager.fallbackCalculator.calculateNormal(x, z);
-        this.normalCache.set(cacheKey, normal);
-        Utilities.limitCacheSize(this.normalCache, CONFIG.PERFORMANCE.maxCacheSize);
-        return normal;
     }
 
     dispose() {
-        this.terrainChunks.forEach((chunk, key) => {
-            this.scene.remove(chunk);
-            chunk.geometry.dispose();
-            if (chunk.material && chunk.material !== this.terrainMaterial) {
-                chunk.material.dispose();
-            }
-        });
-        this.terrainChunks.clear();
-        
-        this.heightCache.clear();
-        this.normalCache.clear();
-        
-        if (this.terrainMaterial) {
-            Object.values(this.terrainMaterial.uniforms).forEach(uniform => {
-                if (uniform.value && uniform.value.dispose) {
-                    uniform.value.dispose();
-                }
-            });
-            this.terrainMaterial.dispose();
-        }
-        
-        if (this.workerManager) {
-            this.workerManager.terminate();
-        }
-
-        if (this.waterRenderer) {
-            this.waterRenderer.dispose();
-        }
+        this.workerManager.terminate();
+        this.chunkMap.forEach(chunk => this.disposeChunk(chunk.id));
     }
 }
-
-

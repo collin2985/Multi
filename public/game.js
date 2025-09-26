@@ -1,5 +1,3 @@
-
-
 // game.js
 
 import * as THREE from 'three';
@@ -55,7 +53,8 @@ function updateChunks(playerWorldX, playerWorldZ) {
     const chunkSize = CONFIG.TERRAIN.chunkSize;
     const radius = CONFIG.TERRAIN.renderDistance;
     
-    // Calculate grid coordinates consistently
+    // ✅ Keep lastChunkX/Z updates consistent with SimpleTerrainRenderer.
+    // Calculate grid coordinates consistently (Math.floor is the correct way)
     const newChunkX = Math.floor(playerWorldX / chunkSize);
     const newChunkZ = Math.floor(playerWorldZ / chunkSize);
 
@@ -75,29 +74,20 @@ function updateChunks(playerWorldX, playerWorldZ) {
             chunksToKeep.add(key);
 
             // If the chunk is not currently loaded, add it
-            if (!terrainRenderer.terrainChunks.has(key)) {
-                // FIXED: Pass world coordinates properly
+            if (!terrainRenderer.chunkMap.has(key)) { // NOTE: Changed from .terrainChunks to .chunkMap based on SimpleTerrainRenderer.js
+                // ✅ Ensure that chunks are spawned using world coordinates derived from gridX/Z × chunkSize.
                 const worldX = gridX * chunkSize;
                 const worldZ = gridZ * chunkSize;
-                terrainRenderer.addTerrainChunk({ 
-                    chunkX: worldX, 
-                    chunkZ: worldZ, 
-                    seed: terrainSeed 
-                });
+                terrainRenderer.createChunk(worldX, worldZ); // Use the fixed renderer method
             }
         }
     }
 
     // Remove chunks that are outside the radius
-    Array.from(terrainRenderer.terrainChunks.keys()).forEach(key => {
+    Array.from(terrainRenderer.chunkMap.keys()).forEach(key => {
         if (!chunksToKeep.has(key)) {
-            const [gridX, gridZ] = key.split(',').map(Number);
-            const worldX = gridX * chunkSize;
-            const worldZ = gridZ * chunkSize;
-            terrainRenderer.removeTerrainChunk({ 
-                chunkX: worldX, 
-                chunkZ: worldZ 
-            });
+            // ✅ Ensure removal uses the same grid/world math to avoid offset errors.
+            terrainRenderer.disposeChunk(key); // Remove by key is simplest and safest
         }
     });
 
@@ -108,26 +98,27 @@ function updateChunks(playerWorldX, playerWorldZ) {
     currentPlayerChunkZ = newChunkZ;
 }
 
-// ALSO FIX the updateChunksAroundPlayer function
+// ALSO FIX the updateChunksAroundPlayer function (used for initial load/server updates)
 function updateChunksAroundPlayer(chunkX, chunkZ) {
     const chunkSize = CONFIG.TERRAIN.chunkSize;
     const shouldLoad = new Set();
     
+    // chunkX and chunkZ here are the central *grid* indices (e.g., 0, 0)
     for (let x = chunkX - loadRadius; x <= chunkX + loadRadius; x++) {
         for (let z = chunkZ - loadRadius; z <= chunkZ + loadRadius; z++) {
             shouldLoad.add(`${x},${z}`);
         }
     }
 
-    const currentChunks = new Set(terrainRenderer.terrainChunks.keys());
+    // NOTE: Assuming terrainRenderer.chunkMap is the source of truth for loaded chunks
+    const currentChunks = new Set(terrainRenderer.chunkMap.keys());
     
     // Remove chunks outside the load radius
     for (const chunkKey of currentChunks) {
         if (!shouldLoad.has(chunkKey)) {
             const [gridX, gridZ] = chunkKey.split(',').map(Number);
-            const worldX = gridX * chunkSize;
-            const worldZ = gridZ * chunkSize;
-            terrainRenderer.removeTerrainChunk({ chunkX: worldX, chunkZ: worldZ });
+            // Removal should be done by key for consistency, and the renderer handles disposal.
+            terrainRenderer.disposeChunk(chunkKey);
             ui.updateStatus(`Unloaded terrain and water chunk (${gridX}, ${gridZ})`);
         }
     }
@@ -136,9 +127,13 @@ function updateChunksAroundPlayer(chunkX, chunkZ) {
     for (const chunkKey of shouldLoad) {
         if (!currentChunks.has(chunkKey)) {
             const [gridX, gridZ] = chunkKey.split(',').map(Number);
+            
+            // ✅ Ensure that chunks are spawned using world coordinates derived from gridX/Z × chunkSize.
             const worldX = gridX * chunkSize;
             const worldZ = gridZ * chunkSize;
+            
             chunkLoadQueue.push({
+                // Pass world coordinates for the renderer to use for alignment
                 chunkX: worldX,
                 chunkZ: worldZ,
                 seed: terrainSeed
@@ -147,7 +142,7 @@ function updateChunksAroundPlayer(chunkX, chunkZ) {
         }
     }
 
-    // Handle server chunk updates
+    // Handle server chunk updates (This logic remains fine, as it uses the grid indices passed in)
     if (isInChunk && (chunkX !== lastChunkX || chunkZ !== lastChunkZ)) {
         const newChunkId = `chunk_${chunkX}_${chunkZ}`;
         const lastChunkId = lastChunkX !== null ? `chunk_${lastChunkX}_${lastChunkZ}` : null;
@@ -198,7 +193,7 @@ function onPointerDown(event) {
     raycaster.setFromCamera(pointer, camera);
 
     // NEW: Include water chunks in raycasting
-    const terrainObjects = Array.from(terrainRenderer.terrainChunks.values());
+    const terrainObjects = Array.from(terrainRenderer.chunkMap.values()).map(c => c.mesh); // Use chunkMap to get mesh
     const waterObjects = waterRenderer.getWaterChunks();
     const allObjects = [...terrainObjects, ...waterObjects];
     const intersects = raycaster.intersectObjects(allObjects, true);
@@ -254,9 +249,10 @@ function connectToServer() {
         ui.updateButtonStates(isInChunk, boxInScene);
         wsRetryAttempts = 0;
         // Send join_chunk with initial chunk
-        const chunkSize = 50;
-        const initialChunkX = Math.floor((playerObject.position.x + chunkSize/2) / chunkSize);
-        const initialChunkZ = Math.floor((playerObject.position.z + chunkSize/2) / chunkSize);
+        const chunkSize = CONFIG.TERRAIN.chunkSize;
+        // Calculation should use Math.floor to match SimpleTerrainRenderer/updateChunks
+        const initialChunkX = Math.floor(playerObject.position.x / chunkSize);
+        const initialChunkZ = Math.floor(playerObject.position.z / chunkSize);
         const chunkId = `chunk_${initialChunkX}_${initialChunkZ}`;
         const success = sendServerMessage('join_chunk', { chunkId, clientId });
         if (success) {
@@ -548,9 +544,15 @@ function handleChunkStateChange(payload) {
     const chunkState = payload.state;
     ui.updateStatus(`🏠 Chunk update: ${chunkState.players.length} players, box: ${chunkState.boxPresent}`);
     const parts = payload.chunkId.split('_');
-    const chunkX = parseInt(parts[1]) * 50;
-    const chunkZ = parseInt(parts[2]) * 50;
-    terrainRenderer.addTerrainChunk({ chunkX, chunkZ, seed: terrainSeed });
+    const chunkX = parseInt(parts[1]); // This is the GRID index
+    const chunkZ = parseInt(parts[2]); // This is the GRID index
+    
+    // ✅ Ensure spawning uses world coordinates derived from gridX/Z × chunkSize.
+    const chunkSize = CONFIG.TERRAIN.chunkSize;
+    const worldX = chunkX * chunkSize;
+    const worldZ = chunkZ * chunkSize;
+    terrainRenderer.createChunk(worldX, worldZ); 
+    
     boxInScene = chunkState.boxPresent; // Update boxInScene
     ui.updateButtonStates(isInChunk, boxInScene);
     ui.updatePeerInfo(peers, avatars);
@@ -605,8 +607,9 @@ function processChunkQueue() {
         isProcessingChunks = true;
         const chunk = chunkLoadQueue.shift();
 
-        terrainRenderer.addTerrainChunk(chunk);
-        ui.updateStatus(`Loaded terrain and water chunk at (${chunk.chunkX/50}, ${chunk.chunkZ/50})`); // NEW: Log water load
+        // The chunk object in the queue now correctly contains world coordinates (chunkX, chunkZ)
+        terrainRenderer.createChunk(chunk.chunkX, chunk.chunkZ); 
+        ui.updateStatus(`Loaded terrain and water chunk at (${chunk.chunkX/CONFIG.TERRAIN.chunkSize}, ${chunk.chunkZ/CONFIG.TERRAIN.chunkSize})`); // Log water load
 
         setTimeout(() => {
             isProcessingChunks = false;
@@ -615,7 +618,7 @@ function processChunkQueue() {
 }
 
 // --- ANIMATION LOOP ---
-const playerSpeed = 0.1;  //player speed should be 0.005 max to prevent unloaded chunks
+const playerSpeed = 0.1;  //player speed should be 0.005 max to prevent unloaded chunks
 const stopThreshold = 0.01;
 let lastFrameTime = performance.now();
 
@@ -625,6 +628,8 @@ function animate() {
     const deltaTime = now - lastFrameTime;
     waterRenderer.update(now); // NEW: Update water time
 
+// NOTE: This check block is redundant and should be removed or merged with the main chunk update logic below.
+/*
 if (now - lastChunkUpdateTime > chunkUpdateInterval) {
     lastChunkUpdateTime = now;
     
@@ -634,6 +639,7 @@ if (now - lastChunkUpdateTime > chunkUpdateInterval) {
 
     updateChunks(playerX, playerZ);
 }
+*/
 
     if (isMoving) {
         const distance = playerObject.position.distanceTo(playerTargetPosition);
@@ -668,13 +674,24 @@ if (now - lastChunkUpdateTime > chunkUpdateInterval) {
 
     if (now - lastChunkUpdateTime > chunkUpdateInterval) {
         const chunkSize = CONFIG.TERRAIN.chunkSize; // NEW: Use CONFIG
-        const newChunkX = Math.floor((playerObject.position.x + chunkSize/2) / chunkSize);
-        const newChunkZ = Math.floor((playerObject.position.z + chunkSize/2) / chunkSize);
+        // FIX: The calculation must use Math.floor (like SimpleTerrainRenderer and updateChunks)
+        // The original code used (playerObject.position.x + chunkSize/2) / chunkSize, which is a rounding technique,
+        // but Math.floor(worldX / chunkSize) is the canonical way to determine the origin chunk index.
+        const newChunkX = Math.floor(playerObject.position.x / chunkSize);
+        const newChunkZ = Math.floor(playerObject.position.z / chunkSize);
 
         if (newChunkX !== currentPlayerChunkX || newChunkZ !== currentPlayerChunkZ) {
             currentPlayerChunkX = newChunkX;
             currentPlayerChunkZ = newChunkZ;
-            updateChunksAroundPlayer(newChunkX, newChunkZ);
+            
+            // FIX: Call the correct update function with the player's world coordinates
+            // This function is now responsible for the main chunk spawning/despawning
+            updateChunks(playerObject.position.x, playerObject.position.z);
+
+            // The original logic also called updateChunksAroundPlayer here, but
+            // the new updateChunks handles that responsibility for the local player's movement.
+            // updateChunksAroundPlayer is primarily for initial load and server proximity.
+            
             ui.updateStatus(`Player moved to chunk (${newChunkX}, ${newChunkZ})`);
         }
         lastChunkUpdateTime = now;
@@ -683,7 +700,7 @@ if (now - lastChunkUpdateTime > chunkUpdateInterval) {
     checkAndReconnectPeers();
     processChunkQueue();
 
-    const cameraOffset = new THREE.Vector3(0, 15, 5);  //0, 15, 5 sets a good height
+    const cameraOffset = new THREE.Vector3(0, 15, 5);  //0, 15, 5 sets a good height
 cameraTargetPosition.copy(playerObject.position).add(cameraOffset);
     const smoothedCameraPosition = camera.position.lerp(cameraTargetPosition, 0.5);
     camera.position.copy(smoothedCameraPosition);
@@ -739,5 +756,3 @@ ui.initializeUI({
 });
 connectToServer();
 animate();
-
-

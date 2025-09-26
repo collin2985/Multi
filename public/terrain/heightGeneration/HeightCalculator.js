@@ -1,14 +1,20 @@
 // terrain/heightGeneration/HeightCalculator.js
 import { OptimizedPerlin } from '../noise/OptimizedPerlin.js';
 import { Utilities } from '../utilities.js'; 
-import { CONFIG } from '../config.js';     
+import { CONFIG } from '../config.js';
+
+// --- START FIX: Ensure deterministic precision across threads/lookups ---
+// This factor matches the precision used in SimpleTerrainRenderer.js for consistency.
+const FLOAT_PRECISION = 10000.0;
+const roundCoord = (coord) => Math.round(coord * FLOAT_PRECISION) / FLOAT_PRECISION;
+// --- END FIX ---
 
 export class HeightCalculator {
     constructor(seed = 12345) {
         this.perlin = new OptimizedPerlin(seed);
         this.heightCache = new Map();
         // Define cache size based on config for memory safety
-        this.MAX_CACHE_SIZE = CONFIG.PERFORMANCE.maxCacheSize; 
+        this.MAX_CACHE_SIZE = CONFIG.PERFORMANCE.maxCacheSize;
     }
 
     clamp(v, a, b) {
@@ -16,10 +22,20 @@ export class HeightCalculator {
     }
 
     calculateHeight(x, z) {
-        const key = `${x},${z}`;
+        // ✅ Verify that input coordinates are treated as world coordinates, not relative to chunk.
+        // The inputs x, z are world coordinates. We standardize their precision.
+        const rx = roundCoord(x);
+        const rz = roundCoord(z);
+        
+        // ✅ Keep cache precision consistent (rounding). The key uses the standardized world coordinates.
+        const key = `${rx},${rz}`;
+
         if (this.heightCache.has(key)) {
             return this.heightCache.get(key);
         }
+
+        // ✅ Ensure that the calculateHeight function is deterministic and matches exactly between main thread and worker.
+        // Using the standardized coordinates (rx, rz) guarantees deterministic lookups.
 
         // Base terrain with multiple octaves
         let base = 0;
@@ -27,13 +43,13 @@ export class HeightCalculator {
         let frequency = 0.02;
         
         for (let octave = 0; octave < 3; octave++) {
-            base += this.perlin.noise(x * frequency, z * frequency, 10 + octave * 7) * amplitude;
+            base += this.perlin.noise(rx * frequency, rz * frequency, 10 + octave * 7) * amplitude;
             amplitude *= 0.5;
             frequency *= 2;
         }
 
         // Mountain mask
-        let maskRaw = this.perlin.noise(x * 0.006, z * 0.006, 400);
+        let maskRaw = this.perlin.noise(rx * 0.006, rz * 0.006, 400);
         let mask = Math.pow((maskRaw + 1) * 0.5, 3);
 
         // Mountain generation
@@ -42,17 +58,18 @@ export class HeightCalculator {
         frequency = 0.04;
         
         for (let octave = 0; octave < 4; octave++) {
-            mountain += Math.abs(this.perlin.noise(x * frequency, z * frequency, 500 + octave * 11)) * amplitude;
+            mountain += Math.abs(this.perlin.noise(rx * frequency, rz * frequency, 500 + octave * 11)) * amplitude;
             amplitude *= 0.5;
             frequency *= 2;
         }
         mountain *= 40 * mask;
-
+        
         // Sea mask generation (MATCHES WORKER)
-        let seaMaskRaw = this.perlin.noise(x * 0.0008, z * 0.0008, 600);
+        let seaMaskRaw = this.perlin.noise(rx * 0.0008, rz * 0.0008, 600);
         let normalizedSea = (seaMaskRaw + 1) * 0.5;
         // Binary sea mask
-        let seaMask = normalizedSea > 0.75 ? 1 : 0; 
+        let seaMask = normalizedSea > 0.75 ?
+        1 : 0; 
         
         // Sea basin generation
         let seaBasin = 0;
@@ -60,29 +77,30 @@ export class HeightCalculator {
         frequency = 0.01;
         
         for (let octave = 0; octave < 3; octave++) {
-            seaBasin += Math.abs(this.perlin.noise(x * frequency, z * frequency, 700 + octave * 13)) * amplitude;
+            seaBasin += Math.abs(this.perlin.noise(rx * frequency, rz * frequency, 700 + octave * 13)) * amplitude;
             amplitude *= 0.5;
             frequency *= 2;
         }
         // Increase sea depth to reach -20 or deeper
         let seaDepth = seaMask * seaBasin * 100;
-        let heightBeforeJagged = base + mountain - seaDepth - (seaMask * 3); 
-
+        let heightBeforeJagged = base + mountain - seaDepth - (seaMask * 3);
+        
         // Elevation-based details
         const elevNorm = this.clamp((heightBeforeJagged + 2) / 25, 0, 1);
-        let jagged = this.perlin.noise(x * 0.8, z * 0.8, 900) * 1.2 * elevNorm + 
-                     this.perlin.noise(x * 1.6, z * 1.6, 901) * 0.6 * elevNorm;
-
+        let jagged = this.perlin.noise(rx * 0.8, rz * 0.8, 900) * 1.2 * elevNorm + 
+                     this.perlin.noise(rx * 1.6, rz * 1.6, 901) * 0.6 * elevNorm;
+        
         const height = heightBeforeJagged + jagged;
         this.heightCache.set(key, height);
         
         // Implement cache limiting to prevent memory leak
         Utilities.limitCacheSize(this.heightCache, this.MAX_CACHE_SIZE);
-        
         return height;
     }
 
     calculateNormal(x, z, eps = 0.1) {
+        // The finite difference calculation relies on calculateHeight, which now handles 
+        // coordinate rounding internally for consistent results.
         const hL = this.calculateHeight(x - eps, z);
         const hR = this.calculateHeight(x + eps, z);
         const hD = this.calculateHeight(x, z - eps);
@@ -91,7 +109,8 @@ export class HeightCalculator {
         const nx = hL - hR;
         const ny = 2 * eps;
         const nz = hD - hU;
-        const len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+        const len = Math.sqrt(nx * nx + ny * ny + nz * nz) ||
+        1;
 
         return { x: nx / len, y: ny / len, z: nz / len };
     }
