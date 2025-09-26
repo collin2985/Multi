@@ -117,7 +117,8 @@ export class OptimizedPerlin {
 }
 
 // --- HEIGHT CALCULATOR ---
-const FLOAT_PRECISION = 10000.0;
+// Increased precision for better edge matching
+const FLOAT_PRECISION = 100000.0;
 const roundCoord = (coord) => Math.round(coord * FLOAT_PRECISION) / FLOAT_PRECISION;
 
 export class HeightCalculator {
@@ -208,8 +209,11 @@ export class TerrainMaterialFactory {
             varying float vSlope;
             varying vec3 vNormal;
             varying vec2 vUv;
+            varying vec3 vWorldPosition;
             
             void main() {
+                vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+                vWorldPosition = worldPosition.xyz;
                 vUv = uv;
                 vHeight = position.y;
                 vNormal = normal;
@@ -223,6 +227,7 @@ export class TerrainMaterialFactory {
             uniform sampler2D uDirt;
             uniform sampler2D uGrass;
             uniform sampler2D uRock;
+            uniform sampler2D uRock1;
             uniform sampler2D uRock2;
             uniform sampler2D uSnow;
             uniform sampler2D uSand;
@@ -232,37 +237,45 @@ export class TerrainMaterialFactory {
             varying float vSlope;
             varying vec3 vNormal;
             varying vec2 vUv;
+            varying vec3 vWorldPosition;
             
             void main() {
+                // Use world position for texture coordinates to eliminate seams
                 float repeat = uTextureRepeat;
-                vec3 dirt = texture2D(uDirt, vUv * repeat).rgb;
-                vec3 grass = texture2D(uGrass, vUv * repeat).rgb;
-                vec3 rock = texture2D(uRock, vUv * repeat).rgb;
-                vec3 rock2 = texture2D(uRock2, vUv * repeat).rgb;
-                vec3 snow = texture2D(uSnow, vUv * repeat).rgb;
-                vec3 sand = texture2D(uSand, vUv * repeat).rgb;
+                vec2 worldUv = vWorldPosition.xz * repeat;
                 
-                float wSand = smoothstep(0.5, 1.3, vHeight) * (1.0 - smoothstep(0.5, 1.3, vHeight));
-                float wDirt = smoothstep(-25.0, 0.6, vHeight) * (1.0 - smoothstep(0.0, 1.0, vHeight));
-                float wGrass = smoothstep(0.9, 3.5, vHeight) * (1.0 - smoothstep(0.9, 3.5, vHeight));
-                float wRock2 = smoothstep(3.0, 9.0, vHeight) * (1.0 - smoothstep(3.0, 9.0, vHeight)); 
-                float wSnow = smoothstep(7.5, 12.0, vHeight);
+                vec3 dirt = texture2D(uDirt, worldUv).rgb;
+                vec3 grass = texture2D(uGrass, worldUv).rgb;
+                vec3 rock = texture2D(uRock, worldUv).rgb;
+                vec3 rock1 = texture2D(uRock1, worldUv).rgb;
+                vec3 rock2 = texture2D(uRock2, worldUv).rgb;
+                vec3 snow = texture2D(uSnow, worldUv).rgb;
+                vec3 sand = texture2D(uSand, worldUv).rgb;
                 
-                float totalWeight = wSand + wDirt + wGrass + wRock2 + wSnow;
+                // Smooth blending between textures using smoothstep
+                float wSand = smoothstep(-1.0, 0.5, vHeight) * smoothstep(1.5, -0.5, vHeight);
+                float wDirt = smoothstep(-25.0, -1.0, vHeight) * smoothstep(2.0, 0.0, vHeight);
+                float wGrass = smoothstep(-0.5, 2.0, vHeight) * smoothstep(8.0, 3.0, vHeight);
+                float wRock1 = smoothstep(2.0, 3.0, vHeight) * smoothstep(15.0, 8.0, vHeight); 
+                float wRock2 = smoothstep(2.0, 5.0, vHeight) * smoothstep(15.0, 8.0, vHeight); 
+                float wSnow = smoothstep(8.0, 12.0, vHeight);
+                
+                float totalWeight = wSand + wDirt + wGrass + wRock1 + wRock2 + wSnow;
                 if (totalWeight > 0.0) {
                     wSand /= totalWeight;
                     wDirt /= totalWeight;
                     wGrass /= totalWeight;
+                    wRock1 /= totalWeight;
                     wRock2 /= totalWeight;
                     wSnow /= totalWeight;
                 } else {
                     wDirt = 1.0; // Fallback to dirt
                 }
                 
-                float slopeFactor = smoothstep(0.05, 0.2, vSlope);
+                float slopeFactor = smoothstep(0.05, 0.3, vSlope);
                 
-                vec3 baseColor = sand * wSand + dirt * wDirt + grass * wGrass + rock2 * wRock2 + snow * wSnow;
-                baseColor = mix(baseColor, rock, slopeFactor);
+                vec3 baseColor = sand * wSand + dirt * wDirt + grass * wGrass + rock1 * wRock1 + rock2 * wRock2 + snow * wSnow;
+                baseColor = mix(baseColor, rock, slopeFactor * 0.8); // Reduced rock blending for smoother transitions
                 
                 float dp = max(0.0, dot(normalize(vNormal), normalize(uLightDir)));
                 float lightFactor = vHeight < -2.0 ? 0.3 + dp * 0.3 : 0.5 + dp * 0.5;
@@ -279,6 +292,7 @@ export class TerrainMaterialFactory {
                 uDirt: { value: textures.dirt },
                 uGrass: { value: textures.grass },
                 uRock: { value: textures.rock },
+                uRock: { value: textures.rock1 },
                 uRock2: { value: textures.rock2 },
                 uSnow: { value: textures.snow },
                 uSand: { value: textures.sand },
@@ -314,41 +328,43 @@ export class TerrainMaterialFactory {
             ctx.putImageData(imgData, 0, 0);
             const texture = new THREE.CanvasTexture(canvas);
             texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-            texture.minFilter = THREE.NearestFilter;
-            texture.magFilter = THREE.NearestFilter;
+            texture.minFilter = THREE.LinearFilter;
+            texture.magFilter = THREE.LinearFilter;
             return texture;
         };
 
         const grassTexture = new THREE.TextureLoader().load('./terrain/grass.png', (texture) => {
             console.log('Grass texture loaded successfully');
-            if (texture.image && (texture.image.width & (texture.image.width - 1)) !== 0 ||
-                (texture.image.height & (texture.image.height - 1)) !== 0) {
-                console.warn('Grass texture dimensions are not power-of-two, which may cause tiling issues');
-            }
+            texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+            texture.minFilter = THREE.LinearFilter;
+            texture.magFilter = THREE.LinearFilter;
         }, undefined, (err) => {
             console.error('Failed to load grass texture:', err);
         });
-        grassTexture.wrapS = grassTexture.wrapT = THREE.RepeatWrapping;
-        grassTexture.minFilter = THREE.LinearFilter;
-        grassTexture.magFilter = THREE.LinearFilter;
 
         const rockTexture = new THREE.TextureLoader().load('./terrain/rock.png', (texture) => {
             console.log('Rock texture loaded successfully');
-            if (texture.image && (texture.image.width & (texture.image.width - 1)) !== 0 ||
-                (texture.image.height & (texture.image.height - 1)) !== 0) {
-                console.warn('Rock texture dimensions are not power-of-two, which may cause tiling issues');
-            }
+            texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+            texture.minFilter = THREE.LinearFilter;
+            texture.magFilter = THREE.LinearFilter;
         }, undefined, (err) => {
             console.error('Failed to load rock texture:', err);
         });
-        rockTexture.wrapS = rockTexture.wrapT = THREE.RepeatWrapping;
-        rockTexture.minFilter = THREE.LinearFilter;
-        rockTexture.magFilter = THREE.LinearFilter;
+
+                const rock1Texture = new THREE.TextureLoader().load('./terrain/rock1.png', (texture) => {
+            console.log('Rock1 texture loaded successfully');
+            texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+            texture.minFilter = THREE.LinearFilter;
+            texture.magFilter = THREE.LinearFilter;
+        }, undefined, (err) => {
+            console.error('Failed to load rock1 texture:', err);
+        });
 
         return {
             dirt: createTexture({ r: 101, g: 67, b: 33 }, { r: 139, g: 90, b: 43 }),
             grass: grassTexture,
             rock: rockTexture,
+            rock1: rock1Texture,
             rock2: createTexture({ r: 120, g: 120, b: 120 }, { r: 150, g: 150, b: 150 }),
             snow: createTexture({ r: 255, g: 250, b: 250 }, { r: 240, g: 248, b: 255 }),
             sand: createTexture({ r: 194, g: 178, b: 128 }, { r: 160, g: 140, b: 100 })
@@ -386,7 +402,7 @@ export class TerrainWorkerManager {
 
     generateWorkerCode() {
         const MAX_CACHE_SIZE = CONFIG.PERFORMANCE.maxCacheSize;
-        const FLOAT_PRECISION = 10000.0;
+        const FLOAT_PRECISION = 100000.0; // Increased precision
         
         return `
             const FLOAT_PRECISION = ${FLOAT_PRECISION};
@@ -648,9 +664,11 @@ export class SimpleTerrainRenderer {
     createChunk(chunkX, chunkZ) {
         const chunkSize = CONFIG.TERRAIN.chunkSize;
         const segments = CONFIG.TERRAIN.segments;
-        chunkX = Math.floor(chunkX / chunkSize) * chunkSize;
-        chunkZ = Math.floor(chunkZ / chunkSize) * chunkSize;
-        const key = `${chunkX / chunkSize},${chunkZ / chunkSize}`;
+        
+        // Ensure chunk coordinates align to grid
+        const alignedChunkX = Math.floor(chunkX / chunkSize) * chunkSize;
+        const alignedChunkZ = Math.floor(chunkZ / chunkSize) * chunkSize;
+        const key = `${alignedChunkX / chunkSize},${alignedChunkZ / chunkSize}`;
 
         if (this.chunkMap.has(key)) {
             return;
@@ -659,25 +677,23 @@ export class SimpleTerrainRenderer {
         const geometry = new THREE.PlaneGeometry(chunkSize, chunkSize, segments, segments);
         geometry.rotateX(-Math.PI / 2);
 
-        // Create custom UVs in world space
-        const uvAttribute = geometry.attributes.uv;
-        const textureRepeat = CONFIG.GRAPHICS.textureRepeat;
-        const verticesPerRow = segments + 1;
         const points = [];
+        const verticesPerRow = segments + 1;
 
+        // Generate vertices with precise world coordinates
         for (let z = 0; z <= segments; z++) {
             for (let x = 0; x <= segments; x++) {
-                const worldX = chunkX + (x / segments - 0.5) * chunkSize;
-                const worldZ = chunkZ + (z / segments - 0.5) * chunkSize;
-                const uvIndex = (z * verticesPerRow + x) * 2;
-                uvAttribute.array[uvIndex] = (worldX / chunkSize) * textureRepeat;
-                uvAttribute.array[uvIndex + 1] = (worldZ / chunkSize) * textureRepeat;
-                points.push({ x: worldX, z: worldZ, index: z * verticesPerRow + x });
+                const worldX = alignedChunkX + (x / segments - 0.5) * chunkSize;
+                const worldZ = alignedChunkZ + (z / segments - 0.5) * chunkSize;
+                points.push({ 
+                    x: roundCoord(worldX), 
+                    z: roundCoord(worldZ), 
+                    index: z * verticesPerRow + x 
+                });
             }
         }
-        uvAttribute.needsUpdate = true;
 
-        const batchId = `${chunkX},${chunkZ}_${Date.now()}`;
+        const batchId = `${alignedChunkX},${alignedChunkZ}_${Date.now()}`;
         this.workerManager.calculateHeightBatch(points, batchId, ({ results }) => {
             const position = geometry.attributes.position;
             const normal = geometry.attributes.normal;
@@ -691,16 +707,113 @@ export class SimpleTerrainRenderer {
 
             position.needsUpdate = true;
             normal.needsUpdate = true;
+            geometry.computeBoundingSphere();
 
             const mesh = new THREE.Mesh(geometry, this.material);
-            mesh.position.set(chunkX, 0, chunkZ);
+            mesh.position.set(alignedChunkX, 0, alignedChunkZ);
+            
+            // Ensure chunks are rendered without gaps by adjusting material properties
+            mesh.material.side = THREE.FrontSide;
+            mesh.frustumCulled = false; // Prevent culling issues at chunk borders
+            
             this.scene.add(mesh);
 
-            this.chunkMap.set(key, { mesh, geometry });
+            this.chunkMap.set(key, { 
+                mesh, 
+                geometry, 
+                chunkX: alignedChunkX, 
+                chunkZ: alignedChunkZ 
+            });
+            
             if (this.waterRenderer && typeof this.waterRenderer.addWaterChunk === 'function') {
-                this.waterRenderer.addWaterChunk(chunkX, chunkZ);
+                this.waterRenderer.addWaterChunk(alignedChunkX, alignedChunkZ);
             }
         });
+    }
+
+    // Method to ensure vertex sharing at chunk boundaries
+    ensureVertexContinuity(chunkX, chunkZ) {
+        const chunkSize = CONFIG.TERRAIN.chunkSize;
+        const segments = CONFIG.TERRAIN.segments;
+        const key = `${chunkX / chunkSize},${chunkZ / chunkSize}`;
+        
+        const chunk = this.chunkMap.get(key);
+        if (!chunk) return;
+
+        // Check adjacent chunks and ensure edge vertices match
+        const adjacentKeys = [
+            `${(chunkX - chunkSize) / chunkSize},${chunkZ / chunkSize}`, // Left
+            `${(chunkX + chunkSize) / chunkSize},${chunkZ / chunkSize}`, // Right
+            `${chunkX / chunkSize},${(chunkZ - chunkSize) / chunkSize}`, // Front
+            `${chunkX / chunkSize},${(chunkZ + chunkSize) / chunkSize}`  // Back
+        ];
+
+        adjacentKeys.forEach(adjKey => {
+            const adjChunk = this.chunkMap.get(adjKey);
+            if (adjChunk) {
+                this.matchEdgeVertices(chunk, adjChunk);
+            }
+        });
+    }
+
+    matchEdgeVertices(chunk1, chunk2) {
+        // Ensure vertices at chunk boundaries have identical heights
+        const pos1 = chunk1.geometry.attributes.position;
+        const pos2 = chunk2.geometry.attributes.position;
+        const segments = CONFIG.TERRAIN.segments;
+        const chunkSize = CONFIG.TERRAIN.chunkSize;
+        
+        // Determine which edge to match based on chunk positions
+        const dx = chunk2.chunkX - chunk1.chunkX;
+        const dz = chunk2.chunkZ - chunk1.chunkZ;
+        
+        if (Math.abs(dx) === chunkSize && dz === 0) {
+            // Horizontal neighbors - match vertical edges
+            this.matchVerticalEdge(pos1, pos2, dx > 0, segments);
+        } else if (dx === 0 && Math.abs(dz) === chunkSize) {
+            // Vertical neighbors - match horizontal edges
+            this.matchHorizontalEdge(pos1, pos2, dz > 0, segments);
+        }
+    }
+
+    matchVerticalEdge(pos1, pos2, isRightEdge, segments) {
+        const verticesPerRow = segments + 1;
+        
+        for (let z = 0; z <= segments; z++) {
+            const edge1Index = isRightEdge ? z * verticesPerRow + segments : z * verticesPerRow;
+            const edge2Index = isRightEdge ? z * verticesPerRow : z * verticesPerRow + segments;
+            
+            // Average the heights to ensure continuity
+            const height1 = pos1.array[edge1Index * 3 + 1];
+            const height2 = pos2.array[edge2Index * 3 + 1];
+            const avgHeight = (height1 + height2) / 2;
+            
+            pos1.array[edge1Index * 3 + 1] = avgHeight;
+            pos2.array[edge2Index * 3 + 1] = avgHeight;
+        }
+        
+        pos1.needsUpdate = true;
+        pos2.needsUpdate = true;
+    }
+
+    matchHorizontalEdge(pos1, pos2, isBackEdge, segments) {
+        const verticesPerRow = segments + 1;
+        
+        for (let x = 0; x <= segments; x++) {
+            const edge1Index = isBackEdge ? segments * verticesPerRow + x : x;
+            const edge2Index = isBackEdge ? x : segments * verticesPerRow + x;
+            
+            // Average the heights to ensure continuity
+            const height1 = pos1.array[edge1Index * 3 + 1];
+            const height2 = pos2.array[edge2Index * 3 + 1];
+            const avgHeight = (height1 + height2) / 2;
+            
+            pos1.array[edge1Index * 3 + 1] = avgHeight;
+            pos2.array[edge2Index * 3 + 1] = avgHeight;
+        }
+        
+        pos1.needsUpdate = true;
+        pos2.needsUpdate = true;
     }
 
     disposeChunk(key) {
@@ -710,16 +823,54 @@ export class SimpleTerrainRenderer {
             chunk.geometry.dispose();
             this.chunkMap.delete(key);
             if (this.waterRenderer && typeof this.waterRenderer.removeWaterChunk === 'function') {
-                const [chunkX, chunkZ] = key.split(',').map(Number);
-                const worldX = chunkX * CONFIG.TERRAIN.chunkSize;
-                const worldZ = chunkZ * CONFIG.TERRAIN.chunkSize;
-                this.waterRenderer.removeWaterChunk(worldX, worldZ);
+                this.waterRenderer.removeWaterChunk(chunk.chunkX, chunk.chunkZ);
             }
         }
     }
 
     getTerrainHeightAt(x, z) {
         return this.heightCalculator.calculateHeight(x, z);
+    }
+
+    // Method to update terrain LOD and reduce seams
+    updateTerrain(playerX, playerZ) {
+        const chunkSize = CONFIG.TERRAIN.chunkSize;
+        const renderDistance = CONFIG.TERRAIN.renderDistance;
+        
+        const playerChunkX = Math.floor(playerX / chunkSize) * chunkSize;
+        const playerChunkZ = Math.floor(playerZ / chunkSize) * chunkSize;
+        
+        const chunksToKeep = new Set();
+        
+        // Generate chunks around player
+        for (let dx = -renderDistance; dx <= renderDistance; dx++) {
+            for (let dz = -renderDistance; dz <= renderDistance; dz++) {
+                const chunkX = playerChunkX + dx * chunkSize;
+                const chunkZ = playerChunkZ + dz * chunkSize;
+                const key = `${chunkX / chunkSize},${chunkZ / chunkSize}`;
+                
+                chunksToKeep.add(key);
+                
+                if (!this.chunkMap.has(key)) {
+                    this.createChunk(chunkX, chunkZ);
+                }
+            }
+        }
+        
+        // Remove distant chunks
+        this.chunkMap.forEach((chunk, key) => {
+            if (!chunksToKeep.has(key)) {
+                this.disposeChunk(key);
+            }
+        });
+        
+        // Ensure vertex continuity for visible chunks
+        chunksToKeep.forEach(key => {
+            const chunk = this.chunkMap.get(key);
+            if (chunk) {
+                this.ensureVertexContinuity(chunk.chunkX, chunk.chunkZ);
+            }
+        });
     }
 
     dispose() {
