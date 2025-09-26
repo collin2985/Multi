@@ -319,15 +319,36 @@ export class TerrainMaterialFactory {
             return texture;
         };
 
-        const grassTexture = new THREE.TextureLoader().load('./terrain/grass.png');
+        const grassTexture = new THREE.TextureLoader().load('./terrain/grass.png', (texture) => {
+            console.log('Grass texture loaded successfully');
+            if (texture.image && (texture.image.width & (texture.image.width - 1)) !== 0 ||
+                (texture.image.height & (texture.image.height - 1)) !== 0) {
+                console.warn('Grass texture dimensions are not power-of-two, which may cause tiling issues');
+            }
+        }, undefined, (err) => {
+            console.error('Failed to load grass texture:', err);
+        });
         grassTexture.wrapS = grassTexture.wrapT = THREE.RepeatWrapping;
-        grassTexture.minFilter = THREE.NearestFilter;
-        grassTexture.magFilter = THREE.NearestFilter;
+        grassTexture.minFilter = THREE.LinearFilter;
+        grassTexture.magFilter = THREE.LinearFilter;
+
+        const rockTexture = new THREE.TextureLoader().load('./terrain/rock.png', (texture) => {
+            console.log('Rock texture loaded successfully');
+            if (texture.image && (texture.image.width & (texture.image.width - 1)) !== 0 ||
+                (texture.image.height & (texture.image.height - 1)) !== 0) {
+                console.warn('Rock texture dimensions are not power-of-two, which may cause tiling issues');
+            }
+        }, undefined, (err) => {
+            console.error('Failed to load rock texture:', err);
+        });
+        rockTexture.wrapS = rockTexture.wrapT = THREE.RepeatWrapping;
+        rockTexture.minFilter = THREE.LinearFilter;
+        rockTexture.magFilter = THREE.LinearFilter;
 
         return {
             dirt: createTexture({ r: 101, g: 67, b: 33 }, { r: 139, g: 90, b: 43 }),
             grass: grassTexture,
-            rock: createTexture({ r: 105, g: 105, b: 105 }, { r: 128, g: 128, b: 128 }),
+            rock: rockTexture,
             rock2: createTexture({ r: 120, g: 120, b: 120 }, { r: 150, g: 150, b: 150 }),
             snow: createTexture({ r: 255, g: 250, b: 250 }, { r: 240, g: 248, b: 255 }),
             sand: createTexture({ r: 194, g: 178, b: 128 }, { r: 160, g: 140, b: 100 })
@@ -638,15 +659,23 @@ export class SimpleTerrainRenderer {
         const geometry = new THREE.PlaneGeometry(chunkSize, chunkSize, segments, segments);
         geometry.rotateX(-Math.PI / 2);
 
-        const points = [];
+        // Create custom UVs in world space
+        const uvAttribute = geometry.attributes.uv;
+        const textureRepeat = CONFIG.GRAPHICS.textureRepeat;
         const verticesPerRow = segments + 1;
+        const points = [];
+
         for (let z = 0; z <= segments; z++) {
             for (let x = 0; x <= segments; x++) {
                 const worldX = chunkX + (x / segments - 0.5) * chunkSize;
                 const worldZ = chunkZ + (z / segments - 0.5) * chunkSize;
+                const uvIndex = (z * verticesPerRow + x) * 2;
+                uvAttribute.array[uvIndex] = (worldX / chunkSize) * textureRepeat;
+                uvAttribute.array[uvIndex + 1] = (worldZ / chunkSize) * textureRepeat;
                 points.push({ x: worldX, z: worldZ, index: z * verticesPerRow + x });
             }
         }
+        uvAttribute.needsUpdate = true;
 
         const batchId = `${chunkX},${chunkZ}_${Date.now()}`;
         this.workerManager.calculateHeightBatch(points, batchId, ({ results }) => {
