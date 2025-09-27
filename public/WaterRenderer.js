@@ -1,3 +1,4 @@
+// WaterRenderer.js
 import * as THREE from 'three';
 
 // --- Simplified Water Vertex Shader ---

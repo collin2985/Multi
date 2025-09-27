@@ -705,7 +705,7 @@ generateHeightTexture(chunkX, chunkZ) {
     
     // Height range for normalization
     const minHeight = -10;
-    const maxHeight = 50;
+    const maxHeight = 80;
     const heightRange = maxHeight - minHeight;
     
     for (let y = 0; y < size; y++) {
