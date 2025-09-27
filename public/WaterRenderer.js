@@ -197,7 +197,7 @@ waveFoam *= (wavefoamNoise * 0.5 + 0.5);
 
 
 // Or use Option 2 for more natural, noisy foam:
- float foam = max(noisyShorelineFoam * 0.8, waveFoam * 0.6);
+ float foam = max(noisyShorelineFoam * 0.8;
 
 
         // Caustics effects
