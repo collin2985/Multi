@@ -143,19 +143,19 @@ vec2 foamUv = fract(vUv * 25.0 + vec2(u_time * 0.015, u_time * 0.009));
         vec3 perturbedNormal = normalize(mix(vWorldNormal, blendedNormal, u_normal_scale * 0.3));
         
 // Depth-based color and transparency
-float shallowFactor     = clamp(depth / 0.4, 0.0, 1.0);
-float transitionFactor  = smoothstep(0.0, 0.3, depth);
+float shallowFactor    = clamp(depth / 0.4, 0.0, 1.0);
+float transitionFactor = smoothstep(0.0, 0.3, depth);
 
 vec3 waterBaseColor = mix(u_shallow_color.rgb, u_deep_color.rgb, transitionFactor);
 
 // Transparency based on depth
 float alpha;
 if (depth <= 0.2) {
-    // Very shallow water (0–0.2)
-    alpha = mix(0.0, 0.4, shallowFactor);
+    // Very shallow (0–0.2): fade in gently
+    alpha = smoothstep(0.0, 0.2, depth) * 0.6; // up to ~60% visible
 } else if (depth <= 0.4) {
-    // Transition zone (0.2–0.4)
-    alpha = mix(0.4, 0.7, (depth - 0.2) / 0.2);
+    // Transition (0.2–0.4): ease into full opacity
+    alpha = mix(0.6, 1.0, smoothstep(0.2, 0.4, depth));
 } else {
     // Deep water fully opaque
     alpha = 1.0;
