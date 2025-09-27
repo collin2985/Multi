@@ -152,8 +152,8 @@ float transitionFactor = smoothstep(0.0, 0.3, depth);
 
 if (depth <= 0.3) {
     alpha = mix(0.0, 0.3, shallowFactor);   // 0–0.3 zone
-} else if (depth <= 5.0) {
-    alpha = mix(0.3, 1.0, (depth - 0.3) / (5.0 - 0.3)); // 0.3–5 zone
+} else if (depth <= 0.5) {
+    alpha = mix(0.3, 1.0, (depth - 0.3) / (0.5 - 0.3)); // 0.3–5 zone
 } else {
     alpha = 1.0;  // Deep water fully opaque
 }
@@ -175,7 +175,7 @@ if (depth <= 0.3) {
         
         // Foam effects
         vec3 foamTexColor = texture2D(u_foam_texture, foamUv).rgb;
-        float shorelineFoam = 1.0 - smoothstep(0.0, 0.6, depth);
+        float shorelineFoam = 1.0 - smoothstep(0.0, 0.9, depth);
         float waveFoam = smoothstep(u_foam_threshold, u_foam_threshold + 0.3, vWaveSlope);
         float foamNoise = sin(vWaveSlope * 10.0 + u_time * 3.0) * 0.5 + 0.5;
         float foam = max(shorelineFoam * 0.8, waveFoam * (foamNoise * 0.5 + 0.5) * 0.6);        // Temporary debug: show individual foam components
