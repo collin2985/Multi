@@ -1,6 +1,5 @@
 // WaterRenderer.js - Enhanced Realistic Version with GUI
 import * as THREE from 'three';
-import * as dat from 'dat.gui'; // Added for GUI
 
 // --- Enhanced Water Vertex Shader ---
 const waterVertexShader = `
