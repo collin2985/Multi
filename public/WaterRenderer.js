@@ -144,19 +144,19 @@ vec2 foamUv = fract(vUv * 25.0 + vec2(u_time * 0.015, u_time * 0.009));
         
         // Depth-based color and transparency
 float shallowFactor = clamp(depth / 0.4, 0.0, 1.0);
-float transitionFactor = smoothstep(0.3, 5.0, depth);        
+float transitionFactor = smoothstep(0.0, 0.3, depth);        
         vec3 waterBaseColor = mix(u_shallow_color.rgb, u_deep_color.rgb, transitionFactor);
         
-        //transparency
+        transparency
                 float alpha;
 
-//if (depth <= 0.3) {
-//    alpha = mix(0.0, 0.3, shallowFactor);   // 0–0.3 zone
-//} else if (depth <= 0.5) {
-//    alpha = mix(0.3, 1.0, (depth - 0.3) / (0.5 - 0.3)); // 0.3–5 zone
-//} else {
+if (depth <= 0.3) {
+    alpha = mix(0.0, 0.3, shallowFactor);   // 0–0.3 zone
+} else if (depth <= 5) {
+    alpha = mix(0.3, 1.0, (depth - 0.3) / (5 - 0.3)); // 0.3–5 zone
+} else {
     alpha = 1.0;  // Deep water fully opaque
-//}
+}
 
         
         // Fresnel effect for reflections
