@@ -153,7 +153,7 @@ float transitionFactor = smoothstep(0.0, 0.3, depth);
 if (depth <= 0.3) {
     alpha = mix(0.0, 0.3, shallowFactor);   // 0–0.3 zone
 } else if (depth <= 0.5) {
-    alpha = mix(0.3, 1.0, (depth - 0.3) / (0.5 - 0.3)); // 0.3–5 zone
+    alpha = mix(0.3, 0.5, (depth - 0.3) / (0.5 - 0.3)); // 0.3–5 zone
 } else {
     alpha = 1.0;  // Deep water fully opaque
 }
