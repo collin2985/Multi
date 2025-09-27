@@ -38,7 +38,7 @@ export const CONFIG = Object.freeze({
     },
     GRAPHICS: {
         textureSize: 256,
-        textureRepeat: 0.1
+        textureRepeat: 0.2
     },
     CAMERA: {
         offset: { x: 0, y: 35, z: -20 }
