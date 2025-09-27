@@ -102,6 +102,13 @@ const waterFragmentShader = `
         
         // Clamp to valid texture coordinates
         uv = clamp(uv, 0.001, 0.999);
+        // Debug UV coordinates by showing them as colors in a small area
+if (vWorldPosition.x > -10.0 && vWorldPosition.x < 10.0 && vWorldPosition.z > -10.0 && vWorldPosition.z < 10.0) {
+    vec2 localPos = vWorldPosition.xz - u_chunk_offset;
+    vec2 debugUv = (localPos / u_chunk_size) + 0.5;
+    gl_FragColor = vec4(debugUv, 0.0, 1.0);
+    return;
+}
         
         // Sample height from texture (stored in red channel)
         float heightNormalized = texture2D(u_height_texture, uv).r;
@@ -117,6 +124,14 @@ const waterFragmentShader = `
         // Sample terrain height at this fragment's world position
         float terrainHeight = sampleTerrainHeight(vWorldPosition.xz);
         float depth = vWorldPosition.y - terrainHeight;
+        if (gl_FragCoord.x > 500.0 && gl_FragCoord.x < 600.0 && gl_FragCoord.y > 500.0 && gl_FragCoord.y < 600.0) {
+    // Log every 100th fragment to avoid spam
+    if (mod(gl_FragCoord.x + gl_FragCoord.y, 100.0) < 1.0) {
+        // Note: WebGL doesn't have console.log, so we'll use color output for debugging
+        gl_FragColor = vec4(depth / 5.0, terrainHeight / 50.0, vWorldPosition.y / 5.0, 1.0);
+        return;
+    }
+}
         
         // Discard fragments below terrain
         if (depth < 0.0) discard;
@@ -175,6 +190,13 @@ const waterFragmentShader = `
         float waveFoam = smoothstep(u_foam_threshold, u_foam_threshold + 0.3, vWaveSlope);
         float foamNoise = sin(vWaveSlope * 10.0 + u_time * 3.0) * 0.5 + 0.5;
         float foam = shorelineFoam * waveFoam * (foamNoise * 0.5 + 0.5);
+        // Temporary debug: show individual foam components
+float debugShorelineFoam = smoothstep(0.0, 1.0, depth);
+float debugWaveFoam = smoothstep(u_foam_threshold, u_foam_threshold + 0.3, vWaveSlope);
+if (vWorldPosition.x > -5.0 && vWorldPosition.x < 5.0) {
+    gl_FragColor = vec4(debugShorelineFoam, debugWaveFoam, depth / 2.0, 1.0);
+    return;
+}
         
         // Caustics effects
         vec2 causticsUv1 = vUv * 6.0 + vec2(u_time * 0.002, u_time * 0.0015);
@@ -414,6 +436,7 @@ export class WaterRenderer {
         
         // Set chunk-specific uniforms
         material.uniforms.u_chunk_offset.value.set(chunkX, chunkZ);
+        console.log(`Water chunk created at world position (${chunkX}, ${this.waterLevel}, ${chunkZ}), chunk offset uniform set to (${chunkX}, ${chunkZ})`);
         material.uniforms.u_chunk_size.value = 50.0;
         
         // Create mesh
