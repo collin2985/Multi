@@ -142,20 +142,20 @@ vec2 foamUv = fract(vUv * 25.0 + vec2(u_time * 0.015, u_time * 0.009));
         vec3 blendedNormal = normalize(normalA + normalB * 0.5 + normalC * 0.3);
         vec3 perturbedNormal = normalize(mix(vWorldNormal, blendedNormal, u_normal_scale * 0.3));
         
-       // Depth-based color and transparency
-float shallowFactor = clamp(depth / 0.3, 0.0, 1.0);
-float transitionFactor = smoothstep(0.3, 2.0, depth);        
-vec3 waterBaseColor = mix(u_shallow_color.rgb, u_deep_color.rgb, transitionFactor);
-float alpha;
+        // Depth-based color and transparency
+float shallowFactor = clamp(depth / 0.4, 0.0, 1.0);
+float transitionFactor = smoothstep(0.3, 5.0, depth);        
+        vec3 waterBaseColor = mix(u_shallow_color.rgb, u_deep_color.rgb, transitionFactor);
+        
+        //transparency
 if (depth <= 0.3) {
-            alpha = mix(0.3, 0.3, shallowFactor);
-        
-} else if (depth <= 2.0) {
-            alpha = mix(0.3, 1.0, (depth - 0.3) / 1.7);
-
+    alpha = mix(0.0, 0.3, shallowFactor);   // 0–0.3 zone
+} else if (depth <= 5.0) {
+    alpha = mix(0.3, 1.0, (depth - 0.3) / (5.0 - 0.3)); // 0.3–5 zone
 } else {
-            alpha = 1.0;
-        }
+    alpha = 1.0;  // Deep water fully opaque
+}
+
         
         // Fresnel effect for reflections
         vec3 viewDir = normalize(vViewPosition);
