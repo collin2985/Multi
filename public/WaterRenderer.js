@@ -171,7 +171,7 @@ const waterFragmentShader = `
         
         // Foam effects
         vec3 foamTexColor = texture2D(u_foam_texture, foamUv).rgb;
-        float shorelineFoam = smoothstep(0.0, 2.0, depth);
+        float shorelineFoam = smoothstep(0.0, 0.1, depth);
         float waveFoam = smoothstep(u_foam_threshold, u_foam_threshold + 0.3, vWaveSlope);
         float foamNoise = sin(vWaveSlope * 10.0 + u_time * 3.0) * 0.5 + 0.5;
         float foam = shorelineFoam * waveFoam * (foamNoise * 0.5 + 0.5);
