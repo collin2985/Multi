@@ -5,12 +5,29 @@ import * as THREE from 'three';
 export const roundCoord = (coord) => Math.round(coord * FLOAT_PRECISION) / FLOAT_PRECISION;
 
 // --- CONFIG ---
-export const CONFIG = Object.freeze({
+export export const CONFIG = Object.freeze({
     TERRAIN: {
         chunkSize: 50,
         segments: 100,
         renderDistance: 2,
-        seed: 12345 // Centralized seed
+        seed: 12345, // Centralized seed
+        // NEW: Terrain generation parameters
+        noise: {
+            baseOctaves: 3,
+            baseAmplitude: 1,
+            baseFrequency: 0.02,
+            mountainOctaves: 4,
+            mountainAmplitude: 1,
+            mountainFrequency: 0.04,
+            mountainScale: 40,
+            maskFrequency: 0.006,
+            jaggedFrequency1: 0.8,
+            jaggedAmplitude1: 1.2,
+            jaggedFrequency2: 1.6,
+            jaggedAmplitude2: 0.6,
+            jaggedNoiseOffset1: 900,
+            jaggedNoiseOffset2: 901
+        }
     },
     PERFORMANCE: {
         updateThrottle: 100,
@@ -136,50 +153,53 @@ export class HeightCalculator {
     }
 
     calculateHeight(x, z) {
-        const rx = roundCoord(x);
-        const rz = roundCoord(z);
-        
-        const key = `${rx},${rz}`;
-        if (this.heightCache.has(key)) {
-            return this.heightCache.get(key);
-        }
-
-        let base = 0;
-        let amplitude = 1;
-        let frequency = 0.02;
-        
-        for (let octave = 0; octave < 3; octave++) {
-            base += this.perlin.noise(rx * frequency, rz * frequency, 10 + octave * 7) * amplitude;
-            amplitude *= 0.5;
-            frequency *= 2;
-        }
-
-        let maskRaw = this.perlin.noise(rx * 0.006, rz * 0.006, 400);
-        let mask = Math.pow((maskRaw + 1) * 0.5, 3);
-
-        let mountain = 0;
-        amplitude = 1;
-        frequency = 0.04;
-        
-        for (let octave = 0; octave < 4; octave++) {
-            mountain += Math.abs(this.perlin.noise(rx * frequency, rz * frequency, 500 + octave * 11)) * amplitude;
-            amplitude *= 0.5;
-            frequency *= 2;
-        }
-        mountain *= 40 * mask;
-        
-        let heightBeforeJagged = base + mountain;
-
-        const elevNorm = this.clamp((heightBeforeJagged + 2) / 25, 0, 1);
-        let jagged = this.perlin.noise(rx * 0.8, rz * 0.8, 900) * 1.2 * elevNorm + 
-                     this.perlin.noise(rx * 1.6, rz * 1.6, 901) * 0.6 * elevNorm;
-        
-        const height = heightBeforeJagged + jagged;
-        this.heightCache.set(key, height);
-        
-        Utilities.limitCacheSize(this.heightCache, this.MAX_CACHE_SIZE);
-        return height;
+    const rx = roundCoord(x);
+    const rz = roundCoord(z);
+    
+    const key = `${rx},${rz}`;
+    if (this.heightCache.has(key)) {
+        return this.heightCache.get(key);
     }
+
+    // Use CONFIG parameters
+    const noiseConfig = CONFIG.TERRAIN.noise;
+    
+    let base = 0;
+    let amplitude = noiseConfig.baseAmplitude;
+    let frequency = noiseConfig.baseFrequency;
+    
+    for (let octave = 0; octave < noiseConfig.baseOctaves; octave++) {
+        base += this.perlin.noise(rx * frequency, rz * frequency, 10 + octave * 7) * amplitude;
+        amplitude *= 0.5;
+        frequency *= 2;
+    }
+
+    let maskRaw = this.perlin.noise(rx * noiseConfig.maskFrequency, rz * noiseConfig.maskFrequency, 400);
+    let mask = Math.pow((maskRaw + 1) * 0.5, 3);
+
+    let mountain = 0;
+    amplitude = noiseConfig.mountainAmplitude;
+    frequency = noiseConfig.mountainFrequency;
+    
+    for (let octave = 0; octave < noiseConfig.mountainOctaves; octave++) {
+        mountain += Math.abs(this.perlin.noise(rx * frequency, rz * frequency, 500 + octave * 11)) * amplitude;
+        amplitude *= 0.5;
+        frequency *= 2;
+    }
+    mountain *= noiseConfig.mountainScale * mask;
+    
+    let heightBeforeJagged = base + mountain;
+
+    const elevNorm = this.clamp((heightBeforeJagged + 2) / 25, 0, 1);
+    let jagged = this.perlin.noise(rx * noiseConfig.jaggedFrequency1, rz * noiseConfig.jaggedFrequency1, noiseConfig.jaggedNoiseOffset1) * noiseConfig.jaggedAmplitude1 * elevNorm + 
+                 this.perlin.noise(rx * noiseConfig.jaggedFrequency2, rz * noiseConfig.jaggedFrequency2, noiseConfig.jaggedNoiseOffset2) * noiseConfig.jaggedAmplitude2 * elevNorm;
+    
+    const height = heightBeforeJagged + jagged;
+    this.heightCache.set(key, height);
+    
+    Utilities.limitCacheSize(this.heightCache, this.MAX_CACHE_SIZE);
+    return height;
+}
 
     calculateNormal(x, z, eps = 0.1) {
         const hL = this.calculateHeight(x - eps, z);
@@ -414,6 +434,7 @@ export class TerrainWorkerManager {
         
         return `
             const FLOAT_PRECISION = ${FLOAT_PRECISION};
+            const terrainConfig = ${JSON.stringify(CONFIG.TERRAIN.noise)};
             const MAX_CACHE_SIZE = ${MAX_CACHE_SIZE};
             const roundCoord = (coord) => Math.round(coord * FLOAT_PRECISION) / FLOAT_PRECISION;
             
@@ -505,49 +526,49 @@ export class TerrainWorkerManager {
             }
             
             const calculateHeight = (x, z) => {
-                const rx = roundCoord(x);
-                const rz = roundCoord(z);
-                const key = \`\${rx},\${rz}\`;
-                if (workerHeightCache.has(key)) {
-                    return workerHeightCache.get(key);
-                }
+    const rx = roundCoord(x);
+    const rz = roundCoord(z);
+    const key = \`\${rx},\${rz}\`;
+    if (workerHeightCache.has(key)) {
+        return workerHeightCache.get(key);
+    }
 
-                let base = 0;
-                let amplitude = 1;
-                let frequency = 0.02;
-                
-                for (let octave = 0; octave < 3; octave++) {
-                    base += perlin.noise(rx * frequency, rz * frequency, 10 + octave * 7) * amplitude;
-                    amplitude *= 0.5;
-                    frequency *= 2;
-                }
+    let base = 0;
+    let amplitude = terrainConfig.baseAmplitude;
+    let frequency = terrainConfig.baseFrequency;
+    
+    for (let octave = 0; octave < terrainConfig.baseOctaves; octave++) {
+        base += perlin.noise(rx * frequency, rz * frequency, 10 + octave * 7) * amplitude;
+        amplitude *= 0.5;
+        frequency *= 2;
+    }
 
-                let maskRaw = perlin.noise(rx * 0.006, rz * 0.006, 400);
-                let mask = Math.pow((maskRaw + 1) * 0.5, 3);
+    let maskRaw = perlin.noise(rx * terrainConfig.maskFrequency, rz * terrainConfig.maskFrequency, 400);
+    let mask = Math.pow((maskRaw + 1) * 0.5, 3);
 
-                let mountain = 0;
-                amplitude = 1;
-                frequency = 0.04;
-                
-                for (let octave = 0; octave < 4; octave++) {
-                    mountain += Math.abs(perlin.noise(rx * frequency, rz * frequency, 500 + octave * 11)) * amplitude;
-                    amplitude *= 0.5;
-                    frequency *= 2;
-                }
-                mountain *= 40 * mask;
-                
-                let heightBeforeJagged = base + mountain;
+    let mountain = 0;
+    amplitude = terrainConfig.mountainAmplitude;
+    frequency = terrainConfig.mountainFrequency;
+    
+    for (let octave = 0; octave < terrainConfig.mountainOctaves; octave++) {
+        mountain += Math.abs(perlin.noise(rx * frequency, rz * frequency, 500 + octave * 11)) * amplitude;
+        amplitude *= 0.5;
+        frequency *= 2;
+    }
+    mountain *= terrainConfig.mountainScale * mask;
+    
+    let heightBeforeJagged = base + mountain;
 
-                const elevNorm = clamp((heightBeforeJagged + 2) / 25, 0, 1);
-                let jagged = perlin.noise(rx * 0.8, rz * 0.8, 900) * 1.2 * elevNorm + 
-                             perlin.noise(rx * 1.6, rz * 1.6, 901) * 0.6 * elevNorm;
-                
-                const height = heightBeforeJagged + jagged;
-                workerHeightCache.set(key, height);
-                
-                limitCacheSize(workerHeightCache, MAX_CACHE_SIZE);
-                return height;
-            };
+    const elevNorm = clamp((heightBeforeJagged + 2) / 25, 0, 1);
+    let jagged = perlin.noise(rx * terrainConfig.jaggedFrequency1, rz * terrainConfig.jaggedFrequency1, terrainConfig.jaggedNoiseOffset1) * terrainConfig.jaggedAmplitude1 * elevNorm + 
+                 perlin.noise(rx * terrainConfig.jaggedFrequency2, rz * terrainConfig.jaggedFrequency2, terrainConfig.jaggedNoiseOffset2) * terrainConfig.jaggedAmplitude2 * elevNorm;
+    
+    const height = heightBeforeJagged + jagged;
+    workerHeightCache.set(key, height);
+    
+    limitCacheSize(workerHeightCache, MAX_CACHE_SIZE);
+    return height;
+};
             
             self.onmessage = function(e) {
                 const { type, data } = e.data;
