@@ -243,6 +243,13 @@ export class WaterRenderer {
         this.lastUpdateTime = 0;
         this.updateInterval = 16; // ~60fps cap
         
+        // Create fallback textures immediately
+        this.createFallbackTextures();
+        
+        // Create material with fallback textures first
+        this.createSharedMaterial();
+        
+        // Then load better textures asynchronously
         this.init();
     }
 
@@ -262,7 +269,8 @@ export class WaterRenderer {
 
     async init() {
         await this.loadTextures();
-        this.createSharedMaterial();
+        // Update the existing material with the loaded textures
+        this.updateMaterialTextures();
     }
 
     async loadTextures() {
@@ -272,21 +280,24 @@ export class WaterRenderer {
             console.log('Loading water textures...');
             
             // Load normal map
-            this.normalTexture = await this.loadTexture(loader, './terrain/water_normal.png');
-            this.setupTextureProperties(this.normalTexture, true);
+            const newNormalTexture = await this.loadTexture(loader, './terrain/water_normal.png');
+            this.setupTextureProperties(newNormalTexture, true);
+            this.normalTexture = newNormalTexture;
             
             // Load caustics
-            this.causticsTexture = await this.loadTexture(loader, './terrain/caustics.png');
-            this.setupTextureProperties(this.causticsTexture, true);
+            const newCausticsTexture = await this.loadTexture(loader, './terrain/caustics.png');
+            this.setupTextureProperties(newCausticsTexture, true);
+            this.causticsTexture = newCausticsTexture;
             
             // Load sky reflection
-            this.skyReflectionTexture = await this.loadTexture(loader, './terrain/sky_reflection.png');
-            this.setupTextureProperties(this.skyReflectionTexture, false);
+            const newSkyReflectionTexture = await this.loadTexture(loader, './terrain/sky_reflection.png');
+            this.setupTextureProperties(newSkyReflectionTexture, false);
+            this.skyReflectionTexture = newSkyReflectionTexture;
             
             console.log('All water textures loaded successfully');
         } catch (error) {
             console.warn('Failed to load some water textures, using fallbacks:', error);
-            this.createFallbackTextures();
+            // Fallbacks are already created, so we continue
         }
     }
 
@@ -327,6 +338,24 @@ export class WaterRenderer {
         if (!this.skyReflectionTexture) {
             this.skyReflectionTexture = this.createFallbackSkyTexture();
         }
+    }
+
+    updateMaterialTextures() {
+        // Update the shared material's textures with the newly loaded ones
+        if (this.uniforms && this.uniforms.u_normal_texture) {
+            this.uniforms.u_normal_texture.value = this.normalTexture;
+            this.uniforms.u_caustics_texture.value = this.causticsTexture;
+            this.uniforms.u_sky_reflection_texture.value = this.skyReflectionTexture;
+        }
+        
+        // Update all existing water chunks with new textures
+        this.waterChunks.forEach((mesh) => {
+            if (mesh.material && mesh.material.uniforms) {
+                mesh.material.uniforms.u_normal_texture.value = this.normalTexture;
+                mesh.material.uniforms.u_caustics_texture.value = this.causticsTexture;
+                mesh.material.uniforms.u_sky_reflection_texture.value = this.skyReflectionTexture;
+            }
+        });
     }
 
     createFallbackNormalTexture() {
