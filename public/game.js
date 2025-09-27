@@ -174,7 +174,6 @@ box.name = 'serverBox';
 terrainRenderer = new SimpleTerrainRenderer(scene);
 waterRenderer = new WaterRenderer(scene, 0.9, terrainRenderer); // Pass terrainRenderer
 terrainRenderer.setWaterRenderer(waterRenderer); // NEW: Set reference for integration
-console.log('WaterRenderer initialized, checking chunk sync...');
 
 
 // --- CLICK-TO-MOVE HANDLER ---
@@ -189,8 +188,7 @@ function onPointerDown(event) {
     raycaster.setFromCamera(pointer, camera);
 
     // NEW: Include water chunks in raycasting
-    const terrainObjects = Array.from(terrainRenderer.chunkMap.values()).map(c => c.mesh); // Use chunkMap to get mesh
-    const waterObjects = waterRenderer.getWaterChunks();
+const terrainObjects = Array.from(terrainRenderer.chunkMap.values()).map(c => c.mesh); // Use chunkMap to get mesh    const waterObjects = waterRenderer.getWaterChunks();
     const allObjects = [...terrainObjects, ...waterObjects];
     const intersects = raycaster.intersectObjects(allObjects, true);
 
@@ -198,11 +196,7 @@ function onPointerDown(event) {
         const intersect = intersects[0];
         let targetY = intersect.point.y;
 
-        // NEW: If intersected water, adjust y to water surface height
-        if (waterObjects.includes(intersect.object)) {
-            const time = performance.now();
-            targetY = waterRenderer.getWaterHeightAt(intersect.point.x, intersect.point.z, time);
-        }
+
 
         playerTargetPosition.set(intersect.point.x, targetY + 1, intersect.point.z); // +1 for player height
         isMoving = true;
@@ -623,7 +617,6 @@ function animate() {
     requestAnimationFrame(animate);
     const now = performance.now();
     const deltaTime = now - lastFrameTime;
-    waterRenderer.update(now); // NEW: Update water time
 
 // NOTE: This check block is redundant and should be removed or merged with the main chunk update logic below.
 /*
@@ -696,6 +689,7 @@ if (now - lastChunkUpdateTime > chunkUpdateInterval) {
 
     checkAndReconnectPeers();
     processChunkQueue();
+    waterRenderer.update(now);
 
     const cameraOffset = new THREE.Vector3(0, 15, 5);  //0, 15, 5 sets a good height
 cameraTargetPosition.copy(playerObject.position).add(cameraOffset);

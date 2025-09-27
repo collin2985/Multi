@@ -1,3 +1,6 @@
+// terrain.js
+
+
 import * as THREE from 'three';
 
 
@@ -569,8 +572,8 @@ export class TerrainWorkerManager {
     limitCacheSize(workerHeightCache, MAX_CACHE_SIZE);
     return height;
 };
-            
-            self.onmessage = function(e) {
+
+            self.onmessage = (e) => {
                 const { type, data } = e.data;
                 if (type === 'calculateHeightBatch') {
                     const { points, batchId } = data;
@@ -690,6 +693,49 @@ export class SimpleTerrainRenderer {
         this.waterRenderer = waterRenderer;
     }
 
+
+generateHeightTexture(chunkX, chunkZ) {
+    const size = 128;
+    const chunkSize = CONFIG.TERRAIN.chunkSize;
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const imgData = ctx.createImageData(size, size);
+    const data = imgData.data;
+    
+    // Height range for normalization
+    const minHeight = -10;
+    const maxHeight = 50;
+    const heightRange = maxHeight - minHeight;
+    
+    for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+            const worldX = chunkX - chunkSize/2 + (x / size) * chunkSize;
+            const worldZ = chunkZ - chunkSize/2 + (y / size) * chunkSize;
+            
+            const height = this.heightCalculator.calculateHeight(worldX, worldZ);
+            const normalizedHeight = Math.max(0, Math.min(1, (height - minHeight) / heightRange));
+            const heightValue = Math.floor(normalizedHeight * 255);
+            
+            const index = (y * size + x) * 4;
+            data[index] = heightValue;
+            data[index + 1] = heightValue;
+            data[index + 2] = heightValue;
+            data[index + 3] = 255;
+        }
+    }
+    
+    ctx.putImageData(imgData, 0, 0);
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.flipY = false;
+    
+    return texture;
+}
+
     createChunk(chunkX, chunkZ) {
         const chunkSize = CONFIG.TERRAIN.chunkSize;
         const segments = CONFIG.TERRAIN.segments;
@@ -747,18 +793,22 @@ export class SimpleTerrainRenderer {
             
             this.scene.add(mesh);
 
+            const heightTexture = this.generateHeightTexture(alignedChunkX, alignedChunkZ);
+
             this.chunkMap.set(key, { 
                 mesh, 
                 geometry, 
                 chunkX: alignedChunkX, 
-                chunkZ: alignedChunkZ 
+                chunkZ: alignedChunkZ,
+                heightTexture
             });
             
             if (this.waterRenderer && typeof this.waterRenderer.addWaterChunk === 'function') {
-                this.waterRenderer.addWaterChunk(alignedChunkX, alignedChunkZ);
+                this.waterRenderer.addWaterChunk(alignedChunkX, alignedChunkZ, heightTexture);
             }
         });
     }
+    
 
     // Method to ensure vertex sharing at chunk boundaries
     ensureVertexContinuity(chunkX, chunkZ) {
@@ -848,6 +898,9 @@ export class SimpleTerrainRenderer {
     disposeChunk(key) {
         const chunk = this.chunkMap.get(key);
         if (chunk) {
+            if (chunk.heightTexture) {
+                chunk.heightTexture.dispose();
+            }
             this.scene.remove(chunk.mesh);
             chunk.geometry.dispose();
             this.chunkMap.delete(key);
