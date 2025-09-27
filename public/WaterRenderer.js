@@ -175,7 +175,7 @@ if (depth <= 0.3) {
         
         // Foam effects
         vec3 foamTexColor = texture2D(u_foam_texture, foamUv).rgb;
-        float shorelineFoam = 1.0 - smoothstep(0.0, 0.4, depth);
+        float shorelineFoam = 1.0 - smoothstep(0.0, 0.3, depth);
         float waveFoam = smoothstep(u_foam_threshold, u_foam_threshold + 0.3, vWaveSlope);
         float foamNoise = sin(vWaveSlope * 10.0 + u_time * 3.0) * 0.5 + 0.5;
         float foam = max(shorelineFoam * 0.8, waveFoam * (foamNoise * 0.5 + 0.5) * 0.6);        // Temporary debug: show individual foam components
