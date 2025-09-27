@@ -175,11 +175,32 @@ if (depth <= 0.2) {
         
         // Foam effects
         vec3 foamTexColor = texture2D(u_foam_texture, foamUv).rgb;
-        float shorelineFoam = 1.0 - smoothstep(0.0, 0.1, depth);
-        float waveFoam = smoothstep(u_foam_threshold, u_foam_threshold + 0.3, vWaveSlope);
-        float foamNoise = sin(vWaveSlope * 10.0 + u_time * 3.0) * 0.5 + 0.5;
-        float foam = max(shorelineFoam * 0.8, waveFoam * (foamNoise * 0.5 + 0.5) * 0.6);      
 
+// Option 1: Softer shoreline foam with better falloff
+float shorelineFoam = 1.0 - smoothstep(0.0, 0.25, depth);
+shorelineFoam = pow(shorelineFoam, 2.0); // More gradual falloff
+
+// Option 2: Noise-based shoreline foam (more natural)
+float foamNoise1 = sin(vWorldPosition.x * 8.0 + u_time * 2.0) * 0.5 + 0.5;
+float foamNoise2 = sin(vWorldPosition.z * 6.0 + u_time * 1.5) * 0.5 + 0.5;
+float combinedNoise = foamNoise1 * foamNoise2;
+float noisyShorelineFoam = (1.0 - smoothstep(0.0, 0.3, depth)) * combinedNoise;
+noisyShorelineFoam = smoothstep(0.3, 0.8, noisyShorelineFoam);
+
+// Option 3: Distance-based foam with texture variation
+float distanceToShore = depth / 0.2; // Normalized distance
+float foamPattern = texture2D(u_foam_texture, vWorldPosition.xz * 0.05 + vec2(u_time * 0.01)).r;
+float patternedFoam = (1.0 - smoothstep(0.0, 1.0, distanceToShore)) * foamPattern;
+patternedFoam = smoothstep(0.4, 0.9, patternedFoam);
+
+// Wave-based foam (keep this as is, it's working well)
+float waveFoam = smoothstep(u_foam_threshold, u_foam_threshold + 0.3, vWaveSlope);
+float wavefoamNoise = sin(vWaveSlope * 10.0 + u_time * 3.0) * 0.5 + 0.5;
+waveFoam *= (wavefoamNoise * 0.5 + 0.5);
+
+// Choose your preferred foam method:
+// Use Option 1 for softer, simpler foam:
+float foam = max(shorelineFoam * 0.6, waveFoam * 0.6);
         
         // Caustics effects
         vec2 causticsUv1 = vUv * 6.0 + vec2(u_time * 0.002, u_time * 0.0015);
