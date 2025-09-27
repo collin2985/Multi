@@ -96,24 +96,22 @@ const waterFragmentShader = `
     varying float vWaveSlope;
 
     float sampleTerrainHeight(vec2 worldPos) {
-        // Convert world position to UV coordinates for height texture sampling
-        vec2 localPos = worldPos - u_chunk_offset;
-        vec2 uv = (localPos / u_chunk_size) + 0.5;
-        
-        // Clamp to valid texture coordinates
-        uv = clamp(uv, 0.001, 0.999);
-        
+    // Convert world position to UV coordinates for height texture sampling
+    vec2 localPos = worldPos - u_chunk_offset;
+    vec2 uv = (localPos / u_chunk_size) + 0.5;
+    
+    // Clamp to valid texture coordinates
+    uv = clamp(uv, 0.001, 0.999);
+    
+    // Sample height from texture (stored in red channel)
+    float heightNormalized = texture2D(u_height_texture, uv).r;
+    
+    // Convert normalized height back to world height
+    // Assuming height range of -10 to 50 (adjust based on your terrain)
+    float terrainHeight = mix(-10.0, 50.0, heightNormalized);
+    
+    return terrainHeight;
 }
-        
-        // Sample height from texture (stored in red channel)
-        float heightNormalized = texture2D(u_height_texture, uv).r;
-        
-        // Convert normalized height back to world height
-        // Assuming height range of -10 to 50 (adjust based on your terrain)
-        float terrainHeight = mix(-10.0, 50.0, heightNormalized);
-        
-        return terrainHeight;
-    }
 
     void main() {
         // Sample terrain height at this fragment's world position
