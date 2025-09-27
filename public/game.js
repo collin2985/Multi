@@ -188,7 +188,8 @@ function onPointerDown(event) {
     raycaster.setFromCamera(pointer, camera);
 
     // NEW: Include water chunks in raycasting
-const terrainObjects = Array.from(terrainRenderer.chunkMap.values()).map(c => c.mesh); // Use chunkMap to get mesh    const waterObjects = waterRenderer.getWaterChunks();
+const terrainObjects = Array.from(terrainRenderer.chunkMap.values()).map(c => c.mesh); // Use chunkMap to get mesh    
+   const waterObjects = waterRenderer.getWaterChunks();
     const allObjects = [...terrainObjects, ...waterObjects];
     const intersects = raycaster.intersectObjects(allObjects, true);
 
