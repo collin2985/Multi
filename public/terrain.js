@@ -24,10 +24,10 @@ export const CONFIG = Object.freeze({
             mountainFrequency: 0.04,
             mountainScale: 40,
             maskFrequency: 0.006,
-            jaggedFrequency1: 0.8,
-            jaggedAmplitude1: 1.2,
-            jaggedFrequency2: 1.6,
-            jaggedAmplitude2: 0.6,
+            jaggedFrequency1: 0.2,
+            jaggedAmplitude1: 0.3,
+            jaggedFrequency2: 0.4,
+            jaggedAmplitude2: 0.2,
             jaggedNoiseOffset1: 900,
             jaggedNoiseOffset2: 901
         }
