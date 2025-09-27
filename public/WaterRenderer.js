@@ -151,9 +151,9 @@ float transitionFactor = smoothstep(0.0, 0.3, depth);
                 float alpha;
 
 if (depth <= 0.2) {
-    alpha = mix(0.0, 0.2, shallowFactor);   // 0–0.3 zone
+    alpha = mix(0.0, 0.4, shallowFactor);   // 0–0.3 zone
 } else if (depth <= 0.4) {
-    alpha = mix(0.2, 0.4, (depth - 0.2) / (0.4 - 0.2)); // 0.3–5 zone
+    alpha = mix(0.0, 0.4, (depth - 0.0) / (0.4 - 0.0)); // 0.3–5 zone
 } else {
     alpha = 1.0;  // Deep water fully opaque
 }
@@ -175,7 +175,7 @@ if (depth <= 0.2) {
         
         // Foam effects
         vec3 foamTexColor = texture2D(u_foam_texture, foamUv).rgb;
-        float shorelineFoam = 1.0 - smoothstep(0.0, 0.2, depth);
+        float shorelineFoam = 1.0 - smoothstep(0.0, 0.1, depth);
         float waveFoam = smoothstep(u_foam_threshold, u_foam_threshold + 0.3, vWaveSlope);
         float foamNoise = sin(vWaveSlope * 10.0 + u_time * 3.0) * 0.5 + 0.5;
         float foam = max(shorelineFoam * 0.8, waveFoam * (foamNoise * 0.5 + 0.5) * 0.6);      
@@ -308,7 +308,7 @@ export class WaterRenderer {
             u_normal_scale: { value: 1.5 },
             u_water_level: { value: this.waterLevel },
             u_shininess: { value: 32.0 },
-            u_foam_threshold: { value: 0.8 },
+            u_foam_threshold: { value: 0.9 },
             u_texture_scale: { value: 1.0 },
             u_chunk_size: { value: 50.0 },
             u_chunk_offset: { value: new THREE.Vector2(0, 0) },
