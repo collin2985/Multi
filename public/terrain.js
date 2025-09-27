@@ -123,7 +123,6 @@ export class OptimizedPerlin {
 // --- HEIGHT CALCULATOR ---
 // Increased precision for better edge matching
 const FLOAT_PRECISION = 1000000.0;
-const roundCoord = (coord) => Math.round(coord * FLOAT_PRECISION) / FLOAT_PRECISION;
 
 export class HeightCalculator {
     constructor(seed = CONFIG.TERRAIN.seed) {
