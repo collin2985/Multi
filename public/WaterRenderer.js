@@ -1,5 +1,6 @@
-// WaterRenderer.js - Enhanced Realistic Version
+// WaterRenderer.js - Enhanced Realistic Version with GUI
 import * as THREE from 'three';
+import * as dat from 'dat.gui'; // Added for GUI
 
 // --- Enhanced Water Vertex Shader ---
 const waterVertexShader = `
@@ -7,6 +8,7 @@ const waterVertexShader = `
     uniform float u_time;
     uniform float u_wave_height;
     uniform float u_wave_frequency;
+    uniform float u_wave_speed; // Added for GUI
     uniform vec2 u_chunk_offset;
     
     varying vec2 vUv;
@@ -18,7 +20,7 @@ const waterVertexShader = `
 
     // Enhanced wave function with multiple octaves
     float wave(vec2 pos, float freq, float speed, float phase) {
-        return sin(pos.x * freq + u_time * speed + phase) * cos(pos.y * freq * 0.7 + u_time * speed * 0.8 + phase);
+        return sin(pos.x * freq + u_time * speed * u_wave_speed + phase) * cos(pos.y * freq * 0.7 + u_time * speed * 0.8 * u_wave_speed + phase);
     }
 
     void main() {
@@ -75,6 +77,17 @@ const waterFragmentShader = `
     uniform vec2 u_chunk_offset;
     uniform vec3 u_light_direction;
     uniform vec3 u_camera_position;
+    uniform float u_fresnel_power; // Added for GUI
+    uniform float u_specular_shininess; // Added for GUI
+    uniform float u_foam_threshold; // Added for GUI
+    uniform float u_transparency_depth_fade; // Added for GUI
+    uniform float u_caustics_intensity; // Added for GUI
+    uniform float u_reflection_strength; // Added for GUI
+    uniform float u_normal_strength; // Added for GUI
+    uniform float u_caustics_speed; // Added for GUI
+    uniform bool u_enable_caustics; // Added for GUI
+    uniform bool u_enable_foam; // Added for GUI
+    uniform bool u_enable_reflections; // Added for GUI
     
     varying vec2 vUv;
     varying vec3 vViewPosition;
@@ -111,16 +124,16 @@ const waterFragmentShader = `
         vec3 blendedNormal = normalize(normal1 * 0.6 + normal2 * 0.4);
         
         // Combine with vertex normal
-        return normalize(vNormal + blendedNormal * 0.3);
+        return normalize(vNormal + blendedNormal * u_normal_strength);
     }
 
     // Caustics calculation
     vec3 getCaustics(vec2 worldPos, float depth) {
-        if (depth > 2.0) return vec3(0.0); // No caustics in deep water
+        if (depth > 2.0 || !u_enable_caustics) return vec3(0.0); // No caustics in deep water or if disabled
         
         // Animated caustics with wave distortion
-        vec2 causticsUV1 = worldPos * 0.08 + vec2(u_time * 0.03, u_time * 0.02);
-        vec2 causticsUV2 = worldPos * 0.12 + vec2(-u_time * 0.025, u_time * 0.035);
+        vec2 causticsUV1 = worldPos * 0.08 + vec2(u_time * u_caustics_speed, u_time * u_caustics_speed * 0.66);
+        vec2 causticsUV2 = worldPos * 0.12 + vec2(-u_time * u_caustics_speed * 0.83, u_time * u_caustics_speed * 1.16);
         
         // Add wave-based distortion to caustics
         vec2 distortion = vec2(vWaveHeight * 0.1, vWaveHeight * 0.08);
@@ -134,13 +147,15 @@ const waterFragmentShader = `
         
         // Fade caustics based on depth and intensity
         float depthFade = 1.0 - smoothstep(0.0, 2.0, depth);
-        float causticIntensity = causticBlend * depthFade * 0.8;
+        float causticIntensity = causticBlend * depthFade * u_caustics_intensity;
         
         return vec3(causticIntensity * 0.9, causticIntensity, causticIntensity * 0.7);
     }
 
     // Sky reflection calculation
     vec3 getSkyReflection(vec3 viewDir, vec3 normal) {
+        if (!u_enable_reflections) return vec3(0.0); // Disable reflections if toggled off
+        
         // Calculate reflection vector
         vec3 reflectionVector = reflect(-viewDir, normal);
         
@@ -169,7 +184,7 @@ const waterFragmentShader = `
         vec3 viewDir = normalize(vViewPosition);
         
         // Calculate Fresnel for realistic reflectance
-        float fresnelFactor = fresnel(viewDir, surfaceNormal, 2.5);
+        float fresnelFactor = fresnel(viewDir, surfaceNormal, u_fresnel_power);
         
         // Base water colors based on depth
         float shallowFactor = clamp(depth / 1.5, 0.0, 1.0);
@@ -184,13 +199,13 @@ const waterFragmentShader = `
         // Specular highlights
         vec3 lightDir = normalize(u_light_direction);
         vec3 halfVector = normalize(lightDir + viewDir);
-        float specular = pow(max(dot(surfaceNormal, halfVector), 0.0), 128.0);
+        float specular = pow(max(dot(surfaceNormal, halfVector), 0.0), u_specular_shininess);
         vec3 specularColor = vec3(1.0) * specular * 0.8;
         
         // Enhanced foam calculation
         float foamFactor = 0.0;
-        if (depth < 0.3) {
-            float shorelineFoam = (1.0 - depth / 0.3);
+        if (u_enable_foam && depth < u_foam_threshold) {
+            float shorelineFoam = (1.0 - depth / u_foam_threshold);
             float waveFoam = clamp(abs(vWaveHeight) * 15.0, 0.0, 1.0);
             foamFactor = max(shorelineFoam * 0.6, waveFoam * 0.4);
         }
@@ -202,7 +217,7 @@ const waterFragmentShader = `
         finalColor += caustics;
         
         // Blend with sky reflection based on Fresnel
-        finalColor = mix(finalColor, skyReflection * 1.2, fresnelFactor * 0.7);
+        finalColor = mix(finalColor, skyReflection * 1.2, fresnelFactor * u_reflection_strength);
         
         // Add specular highlights
         finalColor += specularColor;
@@ -212,8 +227,8 @@ const waterFragmentShader = `
         
         // Enhanced transparency calculation
         float alpha = depth <= 0.05 ? smoothstep(0.0, 0.05, depth) * 0.2 : 
-                     depth <= 0.3 ? mix(0.2, 0.85, smoothstep(0.05, 0.3, depth)) :
-                     depth <= 2.0 ? mix(0.85, 0.95, smoothstep(0.3, 2.0, depth)) : 0.95;
+                     depth <= u_foam_threshold ? mix(0.2, 0.85, smoothstep(0.05, u_foam_threshold, depth)) :
+                     depth <= u_transparency_depth_fade ? mix(0.85, 0.95, smoothstep(u_foam_threshold, u_transparency_depth_fade, depth)) : 0.95;
         
         // Reduce alpha where there's strong reflection
         alpha = mix(alpha, alpha * 0.7, fresnelFactor);
@@ -248,6 +263,9 @@ export class WaterRenderer {
         
         // Create material with fallback textures first
         this.createSharedMaterial();
+        
+        // Setup GUI
+        this.setupGUI();
         
         // Then load better textures asynchronously
         this.init();
@@ -324,42 +342,21 @@ export class WaterRenderer {
     }
 
     createFallbackTextures() {
-        // Create fallback normal map
+        // Create fallback textures with default size
         if (!this.normalTexture) {
-            this.normalTexture = this.createFallbackNormalTexture();
+            this.normalTexture = this.createFallbackNormalTexture(64);
         }
         
-        // Create fallback caustics
         if (!this.causticsTexture) {
-            this.causticsTexture = this.createFallbackCausticsTexture();
+            this.causticsTexture = this.createFallbackCausticsTexture(64);
         }
         
-        // Create fallback sky reflection
         if (!this.skyReflectionTexture) {
-            this.skyReflectionTexture = this.createFallbackSkyTexture();
+            this.skyReflectionTexture = this.createFallbackSkyTexture(128);
         }
     }
 
-    updateMaterialTextures() {
-        // Update the shared material's textures with the newly loaded ones
-        if (this.uniforms && this.uniforms.u_normal_texture) {
-            this.uniforms.u_normal_texture.value = this.normalTexture;
-            this.uniforms.u_caustics_texture.value = this.causticsTexture;
-            this.uniforms.u_sky_reflection_texture.value = this.skyReflectionTexture;
-        }
-        
-        // Update all existing water chunks with new textures
-        this.waterChunks.forEach((mesh) => {
-            if (mesh.material && mesh.material.uniforms) {
-                mesh.material.uniforms.u_normal_texture.value = this.normalTexture;
-                mesh.material.uniforms.u_caustics_texture.value = this.causticsTexture;
-                mesh.material.uniforms.u_sky_reflection_texture.value = this.skyReflectionTexture;
-            }
-        });
-    }
-
-    createFallbackNormalTexture() {
-        const size = 64;
+    createFallbackNormalTexture(size = 64) {
         const canvas = document.createElement('canvas');
         canvas.width = canvas.height = size;
         const ctx = canvas.getContext('2d');
@@ -386,8 +383,7 @@ export class WaterRenderer {
         return texture;
     }
 
-    createFallbackCausticsTexture() {
-        const size = 64;
+    createFallbackCausticsTexture(size = 64) {
         const canvas = document.createElement('canvas');
         canvas.width = canvas.height = size;
         const ctx = canvas.getContext('2d');
@@ -402,9 +398,9 @@ export class WaterRenderer {
         // Draw wavy lines
         for (let i = 0; i < 8; i++) {
             ctx.beginPath();
-            ctx.moveTo(0, i * 8);
+            ctx.moveTo(0, i * (size / 8));
             for (let x = 0; x < size; x += 2) {
-                const y = i * 8 + Math.sin(x * 0.2 + i) * 3;
+                const y = i * (size / 8) + Math.sin(x * 0.2 + i) * (size / 16);
                 ctx.lineTo(x, y);
             }
             ctx.stroke();
@@ -415,8 +411,7 @@ export class WaterRenderer {
         return texture;
     }
 
-    createFallbackSkyTexture() {
-        const size = 128;
+    createFallbackSkyTexture(size = 128) {
         const canvas = document.createElement('canvas');
         canvas.width = canvas.height = size;
         const ctx = canvas.getContext('2d');
@@ -462,6 +457,7 @@ export class WaterRenderer {
         this.uniforms = {
             // Time and animation
             u_time: { value: 0.0 },
+            u_wave_speed: { value: 1.0 }, // Added for GUI
             
             // Wave parameters
             u_wave_height: { value: 0.008 },
@@ -485,7 +481,20 @@ export class WaterRenderer {
             // Material properties
             u_water_level: { value: this.waterLevel },
             u_chunk_size: { value: 50.0 },
-            u_chunk_offset: { value: new THREE.Vector2(0, 0) }
+            u_chunk_offset: { value: new THREE.Vector2(0, 0) },
+            
+            // Added for GUI
+            u_fresnel_power: { value: 2.5 },
+            u_specular_shininess: { value: 128.0 },
+            u_foam_threshold: { value: 0.3 },
+            u_transparency_depth_fade: { value: 2.0 },
+            u_caustics_intensity: { value: 0.8 },
+            u_reflection_strength: { value: 0.7 },
+            u_normal_strength: { value: 0.3 },
+            u_caustics_speed: { value: 0.03 },
+            u_enable_caustics: { value: true },
+            u_enable_foam: { value: true },
+            u_enable_reflections: { value: true }
         };
         
         this.sharedMaterial = new THREE.ShaderMaterial({
@@ -498,6 +507,110 @@ export class WaterRenderer {
             depthWrite: false,
             blending: THREE.NormalBlending
         });
+    }
+
+    setupGUI() {
+        this.gui = new dat.GUI({ name: 'Water Controls' });
+        
+        // Helper object to hold adjustable values
+        this.controls = {
+            waveHeight: this.uniforms.u_wave_height.value,
+            waveFrequency: this.uniforms.u_wave_frequency.value,
+            waveSpeed: this.uniforms.u_wave_speed.value,
+            shallowColor: '#' + new THREE.Color(this.uniforms.u_shallow_color.value.x, this.uniforms.u_shallow_color.value.y, this.uniforms.u_shallow_color.value.z).getHexString(),
+            deepColor: '#' + new THREE.Color(this.uniforms.u_deep_color.value.x, this.uniforms.u_deep_color.value.y, this.uniforms.u_deep_color.value.z).getHexString(),
+            foamColor: '#' + new THREE.Color(this.uniforms.u_foam_color.value.x, this.uniforms.u_foam_color.value.y, this.uniforms.u_foam_color.value.z).getHexString(),
+            fresnelPower: this.uniforms.u_fresnel_power.value,
+            specularShininess: this.uniforms.u_specular_shininess.value,
+            foamThreshold: this.uniforms.u_foam_threshold.value,
+            transparencyDepthFade: this.uniforms.u_transparency_depth_fade.value,
+            lightDirectionX: this.uniforms.u_light_direction.value.x,
+            lightDirectionY: this.uniforms.u_light_direction.value.y,
+            lightDirectionZ: this.uniforms.u_light_direction.value.z,
+            causticsIntensity: this.uniforms.u_caustics_intensity.value,
+            reflectionStrength: this.uniforms.u_reflection_strength.value,
+            normalMapStrength: this.uniforms.u_normal_strength.value,
+            causticsSpeed: this.uniforms.u_caustics_speed.value,
+            waterLevel: this.waterLevel,
+            enableCaustics: this.uniforms.u_enable_caustics.value,
+            enableFoam: this.uniforms.u_enable_foam.value,
+            enableReflections: this.uniforms.u_enable_reflections.value,
+            textureSize: 64
+        };
+        
+        // GUI Folders
+        const wavesFolder = this.gui.addFolder('Waves & Animation');
+        wavesFolder.add(this.controls, 'waveHeight', 0.001, 0.1).name('Wave Height').onChange((v) => { this.uniforms.u_wave_height.value = v; this.updateMaterials(); });
+        wavesFolder.add(this.controls, 'waveFrequency', 0.005, 0.05).name('Wave Frequency').onChange((v) => { this.uniforms.u_wave_frequency.value = v; this.updateMaterials(); });
+        wavesFolder.add(this.controls, 'waveSpeed', 0.5, 3.0).name('Wave Speed').onChange((v) => { this.uniforms.u_wave_speed.value = v; this.updateMaterials(); });
+        
+        const colorsFolder = this.gui.addFolder('Colors & Appearance');
+        colorsFolder.addColor(this.controls, 'shallowColor').name('Shallow Color').onChange((v) => { this.updateColor(this.uniforms.u_shallow_color, v); });
+        colorsFolder.addColor(this.controls, 'deepColor').name('Deep Color').onChange((v) => { this.updateColor(this.uniforms.u_deep_color, v); });
+        colorsFolder.addColor(this.controls, 'foamColor').name('Foam Color').onChange((v) => { this.updateColor(this.uniforms.u_foam_color, v); });
+        colorsFolder.add(this.controls, 'fresnelPower', 1.0, 5.0).name('Fresnel Power').onChange((v) => { this.uniforms.u_fresnel_power.value = v; this.updateMaterials(); });
+        colorsFolder.add(this.controls, 'specularShininess', 10, 500).name('Specular Shininess').onChange((v) => { this.uniforms.u_specular_shininess.value = v; this.updateMaterials(); });
+        colorsFolder.add(this.controls, 'foamThreshold', 0.1, 0.5).name('Foam Threshold').onChange((v) => { this.uniforms.u_foam_threshold.value = v; this.updateMaterials(); });
+        colorsFolder.add(this.controls, 'transparencyDepthFade', 1.0, 5.0).name('Transparency Fade Depth').onChange((v) => { this.uniforms.u_transparency_depth_fade.value = v; this.updateMaterials(); });
+        
+        const lightingFolder = this.gui.addFolder('Lighting & Environment');
+        lightingFolder.add(this.controls, 'lightDirectionX', -1, 1).name('Light Dir X').onChange(() => this.updateLightDirection());
+        lightingFolder.add(this.controls, 'lightDirectionY', -1, 1).name('Light Dir Y').onChange(() => this.updateLightDirection());
+        lightingFolder.add(this.controls, 'lightDirectionZ', -1, 1).name('Light Dir Z').onChange(() => this.updateLightDirection());
+        lightingFolder.add(this.controls, 'causticsIntensity', 0.0, 2.0).name('Caustics Intensity').onChange((v) => { this.uniforms.u_caustics_intensity.value = v; this.updateMaterials(); });
+        lightingFolder.add(this.controls, 'reflectionStrength', 0.0, 1.0).name('Reflection Strength').onChange((v) => { this.uniforms.u_reflection_strength.value = v; this.updateMaterials(); });
+        lightingFolder.add(this.controls, 'normalMapStrength', 0.0, 1.0).name('Normal Map Strength').onChange((v) => { this.uniforms.u_normal_strength.value = v; this.updateMaterials(); });
+        lightingFolder.add(this.controls, 'causticsSpeed', 0.01, 0.1).name('Caustics Speed').onChange((v) => { this.uniforms.u_caustics_speed.value = v; this.updateMaterials(); });
+        
+        const globalFolder = this.gui.addFolder('Global');
+        globalFolder.add(this.controls, 'waterLevel', -5, 5).name('Water Level').onChange((v) => { 
+            this.waterLevel = v; 
+            this.uniforms.u_water_level.value = v; 
+            this.waterChunks.forEach(m => m.position.y = v); 
+            this.updateMaterials(); 
+        });
+        globalFolder.add(this.controls, 'enableCaustics').name('Enable Caustics').onChange((v) => { this.uniforms.u_enable_caustics.value = v; this.updateMaterials(); });
+        globalFolder.add(this.controls, 'enableFoam').name('Enable Foam').onChange((v) => { this.uniforms.u_enable_foam.value = v; this.updateMaterials(); });
+        globalFolder.add(this.controls, 'enableReflections').name('Enable Reflections').onChange((v) => { this.uniforms.u_enable_reflections.value = v; this.updateMaterials(); });
+        globalFolder.add(this.controls, 'textureSize', { Small: 64, Medium: 128, Large: 256, ExtraLarge: 512, Max: 1024 }).name('Texture Size').onChange((v) => this.regenerateTextures(v));
+    }
+
+    updateColor(uniform, hex) {
+        const color = new THREE.Color(hex);
+        uniform.value.set(color.r, color.g, color.b, 1.0);
+        this.updateMaterials();
+    }
+
+    updateLightDirection() {
+        this.uniforms.u_light_direction.value.set(
+            this.controls.lightDirectionX,
+            this.controls.lightDirectionY,
+            this.controls.lightDirectionZ
+        ).normalize();
+        this.updateMaterials();
+    }
+
+    updateMaterials() {
+        this.waterChunks.forEach((mesh) => {
+            if (mesh.material && mesh.material.uniforms) {
+                Object.assign(mesh.material.uniforms, this.uniforms);
+                mesh.material.needsUpdate = true;
+            }
+        });
+    }
+
+    regenerateTextures(size) {
+        // Dispose old textures
+        if (this.normalTexture) this.normalTexture.dispose();
+        if (this.causticsTexture) this.causticsTexture.dispose();
+        if (this.skyReflectionTexture) this.skyReflectionTexture.dispose();
+        
+        // Regenerate with new size
+        this.normalTexture = this.createFallbackNormalTexture(size);
+        this.causticsTexture = this.createFallbackCausticsTexture(size);
+        this.skyReflectionTexture = this.createFallbackSkyTexture(size);
+        
+        this.updateMaterialTextures();
     }
 
     generateHeightTexture(chunkX, chunkZ, heightCalculator) {
@@ -642,13 +755,14 @@ export class WaterRenderer {
     getWaterHeightAt(x, z, time) {
         const freq = this.uniforms.u_wave_frequency.value;
         const height = this.uniforms.u_wave_height.value;
+        const speed = this.uniforms.u_wave_speed.value;
         
         // Enhanced wave calculation matching vertex shader
         let waveHeight = 0;
-        waveHeight += Math.sin(x * freq + time * 1.5) * Math.cos(z * freq * 0.7 + time * 1.2) * 0.4;
-        waveHeight += Math.sin(x * freq * 1.8 + time * 2.1) * Math.cos(z * freq * 1.19 + time * 1.68) * 0.3;
-        waveHeight += Math.sin(x * freq * 0.6 + time * 0.9) * Math.cos(z * freq * 0.42 + time * 0.72) * 0.2;
-        waveHeight += Math.sin(x * freq * 3.2 + time * 2.8) * Math.cos(z * freq * 2.24 + time * 2.24) * 0.1;
+        waveHeight += Math.sin(x * freq + time * 1.5 * speed) * Math.cos(z * freq * 0.7 + time * 1.2 * speed) * 0.4;
+        waveHeight += Math.sin(x * freq * 1.8 + time * 2.1 * speed) * Math.cos(z * freq * 1.19 + time * 1.68 * speed) * 0.3;
+        waveHeight += Math.sin(x * freq * 0.6 + time * 0.9 * speed) * Math.cos(z * freq * 0.42 + time * 0.72 * speed) * 0.2;
+        waveHeight += Math.sin(x * freq * 3.2 + time * 2.8 * speed) * Math.cos(z * freq * 2.24 + time * 2.24 * speed) * 0.1;
         
         return this.waterLevel + waveHeight * height;
     }
