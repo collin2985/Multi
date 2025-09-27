@@ -118,7 +118,7 @@ export class OptimizedPerlin {
 
 // --- HEIGHT CALCULATOR ---
 // Increased precision for better edge matching
-const FLOAT_PRECISION = 100000.0;
+const FLOAT_PRECISION = 1000000.0;
 const roundCoord = (coord) => Math.round(coord * FLOAT_PRECISION) / FLOAT_PRECISION;
 
 export class HeightCalculator {
@@ -256,7 +256,7 @@ export class TerrainMaterialFactory {
 
 
                 float wSand = smoothstep(0.5, 1.3, vHeight) * (1.0 - smoothstep(0.5, 1.3, vHeight));
-                float wDirt = smoothstep(-25.0, 0.6, vHeight) * (1.0 - smoothstep(-25.0, 0.6, vHeight));
+                float wDirt = smoothstep(-25.0, 0.6, vHeight) * (1.0 - smoothstep(0.0, 1.0, vHeight));
                 float wGrass = smoothstep(0.9, 3.5, vHeight) * (1.0 - smoothstep(0.9, 3.5, vHeight));
                 float wRock1 = smoothstep(2.0, 3.0, vHeight) * (1.0 - smoothstep(2.0, 3.5, vHeight));
                 float wRock2 = smoothstep(3.0, 9.0, vHeight) * (1.0 - smoothstep(3.0, 9.0, vHeight)); 
@@ -301,7 +301,10 @@ export class TerrainMaterialFactory {
                 uLightDir: { value: new THREE.Vector3(1, 1, 1).normalize() },
                 uTextureRepeat: { value: CONFIG.GRAPHICS.textureRepeat }
             },
-            side: THREE.FrontSide
+            side: THREE.FrontSide,
+            polygonOffset: true,
+            polygonOffsetFactor: 1,
+            polygonOffsetUnits: 1
         });
 
         return material;
@@ -404,7 +407,7 @@ export class TerrainWorkerManager {
 
     generateWorkerCode() {
         const MAX_CACHE_SIZE = CONFIG.PERFORMANCE.maxCacheSize;
-        const FLOAT_PRECISION = 100000.0; // Increased precision
+        const FLOAT_PRECISION = 1000000.0; // Increased precision
         
         return `
             const FLOAT_PRECISION = ${FLOAT_PRECISION};

@@ -58,8 +58,8 @@ function updateChunks(playerWorldX, playerWorldZ) {
     
     // ✅ Keep lastChunkX/Z updates consistent with SimpleTerrainRenderer.
     // Calculate grid coordinates consistently (Math.floor is the correct way)
-    const newChunkX = Math.floor(playerWorldX / chunkSize);
-    const newChunkZ = Math.floor(playerWorldZ / chunkSize);
+const newChunkX = Math.floor(roundCoord(playerWorldX) / chunkSize);
+const newChunkZ = Math.floor(roundCoord(playerWorldZ) / chunkSize);
 
     // Only update if the player has moved into a new chunk or it's the first time
     if (newChunkX === lastChunkX && newChunkZ === lastChunkZ && lastChunkX !== null) {
