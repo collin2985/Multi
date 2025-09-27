@@ -148,6 +148,8 @@ float transitionFactor = smoothstep(0.3, 5.0, depth);
         vec3 waterBaseColor = mix(u_shallow_color.rgb, u_deep_color.rgb, transitionFactor);
         
         //transparency
+                float alpha;
+
 if (depth <= 0.3) {
     alpha = mix(0.0, 0.3, shallowFactor);   // 0–0.3 zone
 } else if (depth <= 5.0) {
