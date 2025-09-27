@@ -13,28 +13,12 @@ const waterVertexShader = `
     varying vec3 vViewPosition;
     varying vec3 vWorldPosition;
     varying vec3 vNormal;
-    varying vec3 vTangent;
-    varying vec3 vBitangent;
     varying float vWaveHeight;
     varying vec2 vWorldUv;
 
     // Enhanced wave function with multiple octaves
     float wave(vec2 pos, float freq, float speed, float phase) {
         return sin(pos.x * freq + u_time * speed + phase) * cos(pos.y * freq * 0.7 + u_time * speed * 0.8 + phase);
-    }
-
-    // Calculate tangent space for normal mapping
-    vec3 calculateTangent(vec3 position, vec2 uv) {
-        vec3 dp1 = dFdx(position);
-        vec3 dp2 = dFdy(position);
-        vec2 duv1 = dFdx(uv);
-        vec2 duv2 = dFdy(uv);
-        
-        vec3 dp2perp = cross(dp2, vNormal);
-        vec3 dp1perp = cross(vNormal, dp1);
-        vec3 tangent = dp2perp * duv1.x + dp1perp * duv2.x;
-        
-        return normalize(tangent);
     }
 
     void main() {
@@ -60,14 +44,14 @@ const waterVertexShader = `
         vWorldPosition = worldPosition.xyz;
         vViewPosition = cameraPosition - worldPosition.xyz;
         
-        // Calculate normal for lighting (approximate derivative)
-        vec3 offset = vec3(0.1, 0.0, 0.1);
-        float hL = wave(worldPos - offset.xz, u_wave_frequency, 1.5, 0.0) * 0.4;
-        float hR = wave(worldPos + offset.xz, u_wave_frequency, 1.5, 0.0) * 0.4;
-        float hD = wave(worldPos - offset.zx, u_wave_frequency, 1.5, 0.0) * 0.4;
-        float hU = wave(worldPos + offset.zx, u_wave_frequency, 1.5, 0.0) * 0.4;
+        // Calculate approximate normal for lighting using finite differences
+        float epsilon = 0.1;
+        float hL = wave(worldPos - vec2(epsilon, 0.0), u_wave_frequency, 1.5, 0.0) * 0.4;
+        float hR = wave(worldPos + vec2(epsilon, 0.0), u_wave_frequency, 1.5, 0.0) * 0.4;
+        float hD = wave(worldPos - vec2(0.0, epsilon), u_wave_frequency, 1.5, 0.0) * 0.4;
+        float hU = wave(worldPos + vec2(0.0, epsilon), u_wave_frequency, 1.5, 0.0) * 0.4;
         
-        vec3 normal = normalize(vec3(hL - hR, 2.0, hD - hU));
+        vec3 normal = normalize(vec3((hL - hR) * u_wave_height, 2.0, (hD - hU) * u_wave_height));
         vNormal = normalize(normalMatrix * normal);
         
         gl_Position = projectionMatrix * viewMatrix * worldPosition;
