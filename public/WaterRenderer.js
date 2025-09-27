@@ -34,9 +34,9 @@ const waterVertexShader = `
         
         // Calculate wave displacement
         float waveDisplacement = 0.0;
-        waveDisplacement += wave(worldPos, u_wave_frequency, 1.5) * 0.5;
-        waveDisplacement += wave(worldPos * 1.8, u_wave_frequency * 1.7, 2.1) * 0.3;
-        waveDisplacement += wave(worldPos * 2.3, u_wave_frequency * 0.9, 1.8) * 0.2;
+        waveDisplacement += wave(worldPos, u_wave_frequency, 0.5) * 0.5;
+        waveDisplacement += wave(worldPos * 1.8, u_wave_frequency * 1.7, 0.7) * 0.3;
+        waveDisplacement += wave(worldPos * 2.3, u_wave_frequency * 0.9, 0.6) * 0.2;
         
         pos.y += waveDisplacement * u_wave_height;
         vWaveHeight = waveDisplacement;
@@ -284,8 +284,8 @@ export class WaterRenderer {
             u_time: { value: 0.0 },
             
             // Wave parameters
-            u_wave_height: { value: 0.02 },
-            u_wave_frequency: { value: 0.08 },
+            u_wave_height: { value: 0.01 },
+            u_wave_frequency: { value: 0.02 },
             
             // Colors
             u_shallow_color: { value: new THREE.Vector4(shallowColor.r, shallowColor.g, shallowColor.b, 1.0) },
