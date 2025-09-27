@@ -108,7 +108,7 @@ const waterFragmentShader = `
     
     // Convert normalized height back to world height
     // Assuming height range of -10 to 50 (adjust based on your terrain)
-    float terrainHeight = mix(-10.0, 50.0, heightNormalized);
+float terrainHeight = mix(-10.0, 80.0, heightNormalized);
     
     return terrainHeight;
 }
@@ -118,7 +118,7 @@ const waterFragmentShader = `
         float terrainHeight = sampleTerrainHeight(vWorldPosition.xz);
         float depth = vWorldPosition.y - terrainHeight;
 
-}
+
         
         // Discard fragments below terrain
         if (depth < 0.0) discard;
@@ -173,13 +173,10 @@ const waterFragmentShader = `
         
         // Foam effects
         vec3 foamTexColor = texture2D(u_foam_texture, foamUv).rgb;
-        float shorelineFoam = smoothstep(0.0, 1.0, depth);
+float shorelineFoam = 1.0 - smoothstep(0.0, 0.5, depth);
         float waveFoam = smoothstep(u_foam_threshold, u_foam_threshold + 0.3, vWaveSlope);
         float foamNoise = sin(vWaveSlope * 10.0 + u_time * 3.0) * 0.5 + 0.5;
-        float foam = shorelineFoam * waveFoam * (foamNoise * 0.5 + 0.5);
-        // Temporary debug: show individual foam components
-float debugShorelineFoam = smoothstep(0.0, 1.0, depth);
-float debugWaveFoam = smoothstep(u_foam_threshold, u_foam_threshold + 0.3, vWaveSlope);
+float foam = max(shorelineFoam * 0.8, waveFoam * (foamNoise * 0.5 + 0.5) * 0.6);        // Temporary debug: show individual foam components
 
         
         // Caustics effects
@@ -359,7 +356,7 @@ export class WaterRenderer {
         
         // Height range for normalization (adjust based on your terrain)
         const minHeight = -10;
-        const maxHeight = 50;
+        const maxHeight = 80;
         const heightRange = maxHeight - minHeight;
         
         for (let y = 0; y < size; y++) {
