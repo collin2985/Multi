@@ -143,8 +143,8 @@ vec2 foamUv = fract(vUv * 25.0 + vec2(u_time * 0.015, u_time * 0.009));
         vec3 perturbedNormal = normalize(mix(vWorldNormal, blendedNormal, u_normal_scale * 0.3));
         
         // Depth-based color and transparency
-float shallowFactor = clamp(depth / 1.0, 0.0, 1.0);
-float transitionFactor = smoothstep(0.3, 2.0, depth);        
+float shallowFactor = clamp(depth / 0.4, 0.0, 1.0);
+float transitionFactor = smoothstep(0.3, 5.0, depth);        
         vec3 waterBaseColor = mix(u_shallow_color.rgb, u_deep_color.rgb, transitionFactor);
         
         // Calculate transparency based on depth
