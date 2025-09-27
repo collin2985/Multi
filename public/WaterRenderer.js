@@ -128,7 +128,7 @@ float terrainHeight = mix(-10.0, 80.0, heightNormalized);
         vec2 scrolledUvA = vUv * 8.0 * u_texture_scale + vec2(u_time * 0.003, u_time * 0.0024);
         vec2 scrolledUvB = vUv * 12.0 * u_texture_scale + vec2(u_time * -0.0018, u_time * 0.0036);
         vec2 scrolledUvC = vUv * 15.0 * u_texture_scale + vec2(u_time * 0.0012, u_time * -0.0021);
-        vec2 foamUv = vUv * 25.0 + vec2(u_time * 0.015, u_time * 0.009);
+vec2 foamUv = fract(vUv * 25.0 + vec2(u_time * 0.015, u_time * 0.009));
         
         // Sample and blend normal maps for water surface detail
         vec3 normalSampleA = texture2D(u_normal_map, scrolledUvA).rgb;
@@ -174,7 +174,7 @@ float terrainHeight = mix(-10.0, 80.0, heightNormalized);
         
         // Foam effects
         vec3 foamTexColor = texture2D(u_foam_texture, foamUv).rgb;
-        float shorelineFoam = 1.0 - smoothstep(0.0, 0.7, depth);
+        float shorelineFoam = 1.0 - smoothstep(0.0, 0.6, depth);
         float waveFoam = smoothstep(u_foam_threshold, u_foam_threshold + 0.3, vWaveSlope);
         float foamNoise = sin(vWaveSlope * 10.0 + u_time * 3.0) * 0.5 + 0.5;
         float foam = max(shorelineFoam * 0.8, waveFoam * (foamNoise * 0.5 + 0.5) * 0.6);        // Temporary debug: show individual foam components

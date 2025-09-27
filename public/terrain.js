@@ -193,10 +193,13 @@ export class HeightCalculator {
     
     let heightBeforeJagged = base + mountain;
 
+
     const elevNorm = this.clamp((heightBeforeJagged + 2) / 25, 0, 1);
-    let jagged = this.perlin.noise(rx * noiseConfig.jaggedFrequency1, rz * noiseConfig.jaggedFrequency1, noiseConfig.jaggedNoiseOffset1) * noiseConfig.jaggedAmplitude1 * elevNorm + 
-                 this.perlin.noise(rx * noiseConfig.jaggedFrequency2, rz * noiseConfig.jaggedFrequency2, noiseConfig.jaggedNoiseOffset2) * noiseConfig.jaggedAmplitude2 * elevNorm;
-    
+    let jaggedScale = heightBeforeJagged < 1.5 ? Math.max(0.1, (heightBeforeJagged + 0.5) / 2.0) : 1.0;
+    let jagged = this.perlin.noise(rx * noiseConfig.jaggedFrequency1, rz * noiseConfig.jaggedFrequency1, noiseConfig.jaggedNoiseOffset1) * noiseConfig.jaggedAmplitude1 * elevNorm * jaggedScale + 
+             this.perlin.noise(rx * noiseConfig.jaggedFrequency2, rz * noiseConfig.jaggedFrequency2, noiseConfig.jaggedNoiseOffset2) * noiseConfig.jaggedAmplitude2 * elevNorm * jaggedScale;
+
+
     const height = heightBeforeJagged + jagged;
     this.heightCache.set(key, height);
     
@@ -561,10 +564,13 @@ export class TerrainWorkerManager {
     
     let heightBeforeJagged = base + mountain;
 
-    const elevNorm = clamp((heightBeforeJagged + 2) / 25, 0, 1);
-    let jagged = perlin.noise(rx * terrainConfig.jaggedFrequency1, rz * terrainConfig.jaggedFrequency1, terrainConfig.jaggedNoiseOffset1) * terrainConfig.jaggedAmplitude1 * elevNorm + 
-                 perlin.noise(rx * terrainConfig.jaggedFrequency2, rz * terrainConfig.jaggedFrequency2, terrainConfig.jaggedNoiseOffset2) * terrainConfig.jaggedAmplitude2 * elevNorm;
     
+const elevNorm = clamp((heightBeforeJagged + 2) / 25, 0, 1);
+let jaggedScale = heightBeforeJagged < 1.5 ? Math.max(0.1, (heightBeforeJagged + 0.5) / 2.0) : 1.0;
+let jagged = perlin.noise(rx * terrainConfig.jaggedFrequency1, rz * terrainConfig.jaggedFrequency1, terrainConfig.jaggedNoiseOffset1) * terrainConfig.jaggedAmplitude1 * elevNorm * jaggedScale + 
+             perlin.noise(rx * terrainConfig.jaggedFrequency2, rz * terrainConfig.jaggedFrequency2, terrainConfig.jaggedNoiseOffset2) * terrainConfig.jaggedAmplitude2 * elevNorm * jaggedScale;
+
+
     const height = heightBeforeJagged + jagged;
     workerHeightCache.set(key, height);
     
