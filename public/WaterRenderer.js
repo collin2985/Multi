@@ -199,9 +199,21 @@ float wavefoamNoise = sin(vWaveSlope * 10.0 + u_time * 3.0) * 0.5 + 0.5;
 waveFoam *= (wavefoamNoise * 0.5 + 0.5);
 
 // Choose your preferred foam method:
+// Choose your preferred foam method:
 // Use Option 1 for softer, simpler foam:
-float foam = max(shorelineFoam * 0.6, waveFoam * 0.6);
-        
+//float foam = max(shorelineFoam * 0.6, waveFoam * 0.6);
+
+// Or use Option 2 for more natural, noisy foam:
+// float foam = max(noisyShorelineFoam * 0.8, waveFoam * 0.6);
+
+// Or use Option 3 for texture-based foam patterns:
+// float foam = max(patternedFoam * 0.7, waveFoam * 0.6);
+
+// Advanced: Combine multiple approaches
+ float foam = max(
+     max(shorelineFoam * 0.4, noisyShorelineFoam * 0.5),
+     waveFoam * 0.6
+ );
         // Caustics effects
         vec2 causticsUv1 = vUv * 6.0 + vec2(u_time * 0.002, u_time * 0.0015);
         vec2 causticsUv2 = vUv * 8.5 + vec2(u_time * -0.0012, u_time * 0.0018);
