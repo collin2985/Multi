@@ -198,7 +198,6 @@ export class HeightCalculator {
                  this.perlin.noise(rx * noiseConfig.jaggedFrequency2, rz * noiseConfig.jaggedFrequency2, noiseConfig.jaggedNoiseOffset2) * noiseConfig.jaggedAmplitude2 * elevNorm;
     
     const height = heightBeforeJagged + jagged;
-    console.log(`Terrain height at (${rx}, ${rz}): ${height}`);
     this.heightCache.set(key, height);
     
     Utilities.limitCacheSize(this.heightCache, this.MAX_CACHE_SIZE);
@@ -717,7 +716,6 @@ generateHeightTexture(chunkX, chunkZ) {
             const height = this.heightCalculator.calculateHeight(worldX, worldZ);
             const normalizedHeight = Math.max(0, Math.min(1, (height - minHeight) / heightRange));
             const heightValue = Math.floor(normalizedHeight * 255);
-            console.log(`Height ${height} normalized to ${normalizedHeight}, texture value ${heightValue}`);
             
             const index = (y * size + x) * 4;
             data[index] = heightValue;

@@ -692,9 +692,7 @@ if (now - lastChunkUpdateTime > chunkUpdateInterval) {
     processChunkQueue();
     waterRenderer.update(now);
     // In your main animation loop, add this temporary debug
-if (performance.now() % 5000 < 50) { // Log every 5 seconds briefly
-    console.log(`Water level: ${waterRenderer.waterLevel}, Wave height at origin: ${waterRenderer.getWaterHeightAt(0, 0, performance.now())}`);
-}
+
 
     const cameraOffset = new THREE.Vector3(0, 15, 5);  //0, 15, 5 sets a good height
 cameraTargetPosition.copy(playerObject.position).add(cameraOffset);
