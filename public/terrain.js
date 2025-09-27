@@ -568,7 +568,7 @@ export class TerrainWorkerManager {
 
     
 const elevNorm = clamp((heightBeforeJagged + 2) / 25, 0, 1);
-let jaggedScale = heightBeforeJagged < 1.5 ? Math.max(0.1, (heightBeforeJagged + 0.5) / 2.0) : 1.0;
+let jaggedScale = heightBeforeJagged < 1.5 ? Math.max(0.1, (heightBeforeJagged + 0.5) / 10.0) : 1.0;
 let jagged = perlin.noise(rx * terrainConfig.jaggedFrequency1, rz * terrainConfig.jaggedFrequency1, terrainConfig.jaggedNoiseOffset1) * terrainConfig.jaggedAmplitude1 * elevNorm * jaggedScale + 
              perlin.noise(rx * terrainConfig.jaggedFrequency2, rz * terrainConfig.jaggedFrequency2, terrainConfig.jaggedNoiseOffset2) * terrainConfig.jaggedAmplitude2 * elevNorm * jaggedScale;
 
