@@ -186,13 +186,13 @@ float foamNoise1 = sin(vWorldPosition.x * 8.0 + u_time * 2.0) * 0.5 + 0.5;
 float foamNoise2 = sin(vWorldPosition.z * 6.0 + u_time * 1.5) * 0.5 + 0.5;
 float combinedNoise = foamNoise1 * foamNoise2;
 float noisyShorelineFoam = (1.0 - smoothstep(0.0, 0.08, depth)) * combinedNoise;
-noisyShorelineFoam = smoothstep(0.4, 0.8, noisyShorelineFoam);
+noisyShorelineFoam = smoothstep(0.2, 0.4, noisyShorelineFoam);
 
 
 // Wave-based foam (keep this as is, it's working well)
-float waveFoam = smoothstep(u_foam_threshold, u_foam_threshold + 0.3, vWaveSlope);
-float wavefoamNoise = sin(vWaveSlope * 10.0 + u_time * 3.0) * 0.5 + 0.5;
-waveFoam *= (wavefoamNoise * 0.5 + 0.5);
+//float waveFoam = smoothstep(u_foam_threshold, u_foam_threshold + 0.3, vWaveSlope);
+//float wavefoamNoise = sin(vWaveSlope * 10.0 + u_time * 3.0) * 0.5 + 0.5;
+//waveFoam *= (wavefoamNoise * 0.5 + 0.5);
 
 
 
