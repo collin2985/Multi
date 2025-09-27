@@ -3,6 +3,7 @@ import * as THREE from 'three';
 
 // --- Simplified Water Vertex Shader (Reduced calculations) ---
 const waterVertexShader = `
+    precision mediump float;
     uniform float u_time;
     uniform float u_wave_height;
     uniform float u_wave_frequency;
