@@ -38,7 +38,7 @@ export const CONFIG = Object.freeze({
     },
     GRAPHICS: {
         textureSize: 256,
-        textureRepeat: 0.2
+        textureRepeat: 0.25
     },
     CAMERA: {
         offset: { x: 0, y: 35, z: -20 }
@@ -268,8 +268,7 @@ export class TerrainMaterialFactory {
             void main() {
                 // Use world position for texture coordinates to eliminate seams
                 float repeat = uTextureRepeat;
-                vec2 worldUv = vWorldPosition.xz * repeat;
-                
+                vec2 worldUv = fract(vWorldPosition.xz * repeat);
                 vec3 dirt = texture2D(uDirt, worldUv).rgb;
                 vec3 grass = texture2D(uGrass, worldUv).rgb;
                 vec3 rock = texture2D(uRock, worldUv).rgb;
