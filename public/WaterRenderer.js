@@ -7,7 +7,7 @@ const waterVertexShader = `
     uniform float u_time;
     uniform float u_wave_height;
     uniform float u_wave_frequency;
-    uniform float u_wave_speed; // Added for GUI
+    uniform float u_wave_speed;
     uniform vec2 u_chunk_offset;
     
     varying vec2 vUv;
@@ -76,17 +76,17 @@ const waterFragmentShader = `
     uniform vec2 u_chunk_offset;
     uniform vec3 u_light_direction;
     uniform vec3 u_camera_position;
-    uniform float u_fresnel_power; // Added for GUI
-    uniform float u_specular_shininess; // Added for GUI
-    uniform float u_foam_threshold; // Added for GUI
-    uniform float u_transparency_depth_fade; // Added for GUI
-    uniform float u_caustics_intensity; // Added for GUI
-    uniform float u_reflection_strength; // Added for GUI
-    uniform float u_normal_strength; // Added for GUI
-    uniform float u_caustics_speed; // Added for GUI
-    uniform bool u_enable_caustics; // Added for GUI
-    uniform bool u_enable_foam; // Added for GUI
-    uniform bool u_enable_reflections; // Added for GUI
+    uniform float u_fresnel_power;
+    uniform float u_specular_shininess;
+    uniform float u_foam_threshold;
+    uniform float u_transparency_depth_fade;
+    uniform float u_caustics_intensity;
+    uniform float u_reflection_strength;
+    uniform float u_normal_strength;
+    uniform float u_caustics_speed;
+    uniform bool u_enable_caustics;
+    uniform bool u_enable_foam;
+    uniform bool u_enable_reflections;
     
     varying vec2 vUv;
     varying vec3 vViewPosition;
@@ -128,7 +128,7 @@ const waterFragmentShader = `
 
     // Caustics calculation
     vec3 getCaustics(vec2 worldPos, float depth) {
-        if (depth > 2.0 || !u_enable_caustics) return vec3(0.0); // No caustics in deep water or if disabled
+        if (depth > 2.0 || !u_enable_caustics) return vec3(0.0);
         
         // Animated caustics with wave distortion
         vec2 causticsUV1 = worldPos * 0.08 + vec2(u_time * u_caustics_speed, u_time * u_caustics_speed * 0.66);
@@ -153,7 +153,7 @@ const waterFragmentShader = `
 
     // Sky reflection calculation
     vec3 getSkyReflection(vec3 viewDir, vec3 normal) {
-        if (!u_enable_reflections) return vec3(0.0); // Disable reflections if toggled off
+        if (!u_enable_reflections) return vec3(0.0);
         
         // Calculate reflection vector
         vec3 reflectionVector = reflect(-viewDir, normal);
@@ -212,7 +212,7 @@ const waterFragmentShader = `
         // Combine all effects
         vec3 finalColor = waterBaseColor;
         
-        // Add caustics to base color (affects underwater areas)
+        // Add caustics to base color
         finalColor += caustics;
         
         // Blend with sky reflection based on Fresnel
@@ -456,7 +456,7 @@ export class WaterRenderer {
         this.uniforms = {
             // Time and animation
             u_time: { value: 0.0 },
-            u_wave_speed: { value: 1.0 }, // Added for GUI
+            u_wave_speed: { value: 1.0 },
             
             // Wave parameters
             u_wave_height: { value: 0.008 },
@@ -482,7 +482,7 @@ export class WaterRenderer {
             u_chunk_size: { value: 50.0 },
             u_chunk_offset: { value: new THREE.Vector2(0, 0) },
             
-            // Added for GUI
+            // GUI parameters
             u_fresnel_power: { value: 2.5 },
             u_specular_shininess: { value: 128.0 },
             u_foam_threshold: { value: 0.3 },
@@ -539,77 +539,196 @@ export class WaterRenderer {
         
         // GUI Folders
         const wavesFolder = this.gui.addFolder('Waves & Animation');
-        wavesFolder.add(this.controls, 'waveHeight', 0.001, 0.1).name('Wave Height').onChange((v) => { this.uniforms.u_wave_height.value = v; this.updateMaterials(); });
-        wavesFolder.add(this.controls, 'waveFrequency', 0.005, 0.05).name('Wave Frequency').onChange((v) => { this.uniforms.u_wave_frequency.value = v; this.updateMaterials(); });
-        wavesFolder.add(this.controls, 'waveSpeed', 0.5, 3.0).name('Wave Speed').onChange((v) => { this.uniforms.u_wave_speed.value = v; this.updateMaterials(); });
+        wavesFolder.add(this.controls, 'waveHeight', 0.001, 0.1).name('Wave Height').onChange((v) => { 
+            this.uniforms.u_wave_height.value = v; 
+            console.log(`Wave Height updated to ${v}`); 
+            this.updateMaterials(); 
+        });
+        wavesFolder.add(this.controls, 'waveFrequency', 0.005, 0.05).name('Wave Frequency').onChange((v) => { 
+            this.uniforms.u_wave_frequency.value = v; 
+            console.log(`Wave Frequency updated to ${v}`); 
+            this.updateMaterials(); 
+        });
+        wavesFolder.add(this.controls, 'waveSpeed', 0.5, 3.0).name('Wave Speed').onChange((v) => { 
+            this.uniforms.u_wave_speed.value = v; 
+            console.log(`Wave Speed updated to ${v}`); 
+            this.updateMaterials(); 
+        });
         
         const colorsFolder = this.gui.addFolder('Colors & Appearance');
-        colorsFolder.addColor(this.controls, 'shallowColor').name('Shallow Color').onChange((v) => { this.updateColor(this.uniforms.u_shallow_color, v); });
-        colorsFolder.addColor(this.controls, 'deepColor').name('Deep Color').onChange((v) => { this.updateColor(this.uniforms.u_deep_color, v); });
-        colorsFolder.addColor(this.controls, 'foamColor').name('Foam Color').onChange((v) => { this.updateColor(this.uniforms.u_foam_color, v); });
-        colorsFolder.add(this.controls, 'fresnelPower', 1.0, 5.0).name('Fresnel Power').onChange((v) => { this.uniforms.u_fresnel_power.value = v; this.updateMaterials(); });
-        colorsFolder.add(this.controls, 'specularShininess', 10, 500).name('Specular Shininess').onChange((v) => { this.uniforms.u_specular_shininess.value = v; this.updateMaterials(); });
-        colorsFolder.add(this.controls, 'foamThreshold', 0.1, 0.5).name('Foam Threshold').onChange((v) => { this.uniforms.u_foam_threshold.value = v; this.updateMaterials(); });
-        colorsFolder.add(this.controls, 'transparencyDepthFade', 1.0, 5.0).name('Transparency Fade Depth').onChange((v) => { this.uniforms.u_transparency_depth_fade.value = v; this.updateMaterials(); });
+        colorsFolder.addColor(this.controls, 'shallowColor').name('Shallow Color').onChange((v) => { 
+            console.log(`Shallow Color updated to ${v}`); 
+            this.updateColor(this.uniforms.u_shallow_color, v); 
+        });
+        colorsFolder.addColor(this.controls, 'deepColor').name('Deep Color').onChange((v) => { 
+            console.log(`Deep Color updated to ${v}`); 
+            this.updateColor(this.uniforms.u_deep_color, v); 
+        });
+        colorsFolder.addColor(this.controls, 'foamColor').name('Foam Color').onChange((v) => { 
+            console.log(`Foam Color updated to ${v}`); 
+            this.updateColor(this.uniforms.u_foam_color, v); 
+        });
+        colorsFolder.add(this.controls, 'fresnelPower', 1.0, 5.0).name('Fresnel Power').onChange((v) => { 
+            this.uniforms.u_fresnel_power.value = v; 
+            console.log(`Fresnel Power updated to ${v}`); 
+            this.updateMaterials(); 
+        });
+        colorsFolder.add(this.controls, 'specularShininess', 10, 500).name('Specular Shininess').onChange((v) => { 
+            this.uniforms.u_specular_shininess.value = v; 
+            console.log(`Specular Shininess updated to ${v}`); 
+            this.updateMaterials(); 
+        });
+        colorsFolder.add(this.controls, 'foamThreshold', 0.1, 0.5).name('Foam Threshold').onChange((v) => { 
+            this.uniforms.u_foam_threshold.value = v; 
+            console.log(`Foam Threshold updated to ${v}`); 
+            this.updateMaterials(); 
+        });
+        colorsFolder.add(this.controls, 'transparencyDepthFade', 1.0, 5.0).name('Transparency Fade Depth').onChange((v) => { 
+            this.uniforms.u_transparency_depth_fade.value = v; 
+            console.log(`Transparency Depth Fade updated to ${v}`); 
+            this.updateMaterials(); 
+        });
         
         const lightingFolder = this.gui.addFolder('Lighting & Environment');
         lightingFolder.add(this.controls, 'lightDirectionX', -1, 1).name('Light Dir X').onChange(() => this.updateLightDirection());
         lightingFolder.add(this.controls, 'lightDirectionY', -1, 1).name('Light Dir Y').onChange(() => this.updateLightDirection());
         lightingFolder.add(this.controls, 'lightDirectionZ', -1, 1).name('Light Dir Z').onChange(() => this.updateLightDirection());
-        lightingFolder.add(this.controls, 'causticsIntensity', 0.0, 2.0).name('Caustics Intensity').onChange((v) => { this.uniforms.u_caustics_intensity.value = v; this.updateMaterials(); });
-        lightingFolder.add(this.controls, 'reflectionStrength', 0.0, 1.0).name('Reflection Strength').onChange((v) => { this.uniforms.u_reflection_strength.value = v; this.updateMaterials(); });
-        lightingFolder.add(this.controls, 'normalMapStrength', 0.0, 1.0).name('Normal Map Strength').onChange((v) => { this.uniforms.u_normal_strength.value = v; this.updateMaterials(); });
-        lightingFolder.add(this.controls, 'causticsSpeed', 0.01, 0.1).name('Caustics Speed').onChange((v) => { this.uniforms.u_caustics_speed.value = v; this.updateMaterials(); });
+        lightingFolder.add(this.controls, 'causticsIntensity', 0.0, 2.0).name('Caustics Intensity').onChange((v) => { 
+            this.uniforms.u_caustics_intensity.value = v; 
+            console.log(`Caustics Intensity updated to ${v}`); 
+            this.updateMaterials(); 
+        });
+        lightingFolder.add(this.controls, 'reflectionStrength', 0.0, 1.0).name('Reflection Strength').onChange((v) => { 
+            this.uniforms.u_reflection_strength.value = v; 
+            console.log(`Reflection Strength updated to ${v}`); 
+            this.updateMaterials(); 
+        });
+        lightingFolder.add(this.controls, 'normalMapStrength', 0.0, 1.0).name('Normal Map Strength').onChange((v) => { 
+            this.uniforms.u_normal_strength.value = v; 
+            console.log(`Normal Map Strength updated to ${v}`); 
+            this.updateMaterials(); 
+        });
+        lightingFolder.add(this.controls, 'causticsSpeed', 0.01, 0.1).name('Caustics Speed').onChange((v) => { 
+            this.uniforms.u_caustics_speed.value = v; 
+            console.log(`Caustics Speed updated to ${v}`); 
+            this.updateMaterials(); 
+        });
         
         const globalFolder = this.gui.addFolder('Global');
         globalFolder.add(this.controls, 'waterLevel', -5, 5).name('Water Level').onChange((v) => { 
             this.waterLevel = v; 
             this.uniforms.u_water_level.value = v; 
             this.waterChunks.forEach(m => m.position.y = v); 
+            console.log(`Water Level updated to ${v}`); 
             this.updateMaterials(); 
         });
-        globalFolder.add(this.controls, 'enableCaustics').name('Enable Caustics').onChange((v) => { this.uniforms.u_enable_caustics.value = v; this.updateMaterials(); });
-        globalFolder.add(this.controls, 'enableFoam').name('Enable Foam').onChange((v) => { this.uniforms.u_enable_foam.value = v; this.updateMaterials(); });
-        globalFolder.add(this.controls, 'enableReflections').name('Enable Reflections').onChange((v) => { this.uniforms.u_enable_reflections.value = v; this.updateMaterials(); });
-        globalFolder.add(this.controls, 'textureSize', { Small: 64, Medium: 128, Large: 256, ExtraLarge: 512, Max: 1024 }).name('Texture Size').onChange((v) => this.regenerateTextures(v));
+        globalFolder.add(this.controls, 'enableCaustics').name('Enable Caustics').onChange((v) => { 
+            this.uniforms.u_enable_caustics.value = v; 
+            console.log(`Enable Caustics updated to ${v}`); 
+            this.updateMaterials(); 
+        });
+        globalFolder.add(this.controls, 'enableFoam').name('Enable Foam').onChange((v) => { 
+            this.uniforms.u_enable_foam.value = v; 
+            console.log(`Enable Foam updated to ${v}`); 
+            this.updateMaterials(); 
+        });
+        globalFolder.add(this.controls, 'enableReflections').name('Enable Reflections').onChange((v) => { 
+            this.uniforms.u_enable_reflections.value = v; 
+            console.log(`Enable Reflections updated to ${v}`); 
+            this.updateMaterials(); 
+        });
+        globalFolder.add(this.controls, 'textureSize', { Small: 64, Medium: 128, Large: 256, ExtraLarge: 512, Max: 1024 }).name('Texture Size').onChange((v) => { 
+            console.log(`Texture Size updated to ${v}`); 
+            this.regenerateTextures(v); 
+        });
     }
 
     updateColor(uniform, hex) {
-        const color = new THREE.Color(hex);
-        uniform.value.set(color.r, color.g, color.b, 1.0);
-        this.updateMaterials();
+        try {
+            const color = new THREE.Color(hex);
+            uniform.value.set(color.r, color.g, color.b, 1.0);
+            console.log(`Color updated: R=${color.r}, G=${color.g}, B=${color.b}`);
+            this.updateMaterials();
+        } catch (error) {
+            console.error('Error updating color:', error);
+        }
     }
 
     updateLightDirection() {
-        this.uniforms.u_light_direction.value.set(
-            this.controls.lightDirectionX,
-            this.controls.lightDirectionY,
-            this.controls.lightDirectionZ
-        ).normalize();
-        this.updateMaterials();
+        try {
+            this.uniforms.u_light_direction.value.set(
+                this.controls.lightDirectionX,
+                this.controls.lightDirectionY,
+                this.controls.lightDirectionZ
+            ).normalize();
+            console.log(`Light Direction updated: X=${this.controls.lightDirectionX}, Y=${this.controls.lightDirectionY}, Z=${this.controls.lightDirectionZ}`);
+            this.updateMaterials();
+        } catch (error) {
+            console.error('Error updating light direction:', error);
+        }
     }
 
     updateMaterials() {
-        this.waterChunks.forEach((mesh) => {
+        console.log('Updating materials for all water chunks');
+        this.waterChunks.forEach((mesh, key) => {
             if (mesh.material && mesh.material.uniforms) {
-                Object.assign(mesh.material.uniforms, this.uniforms);
+                // Explicitly copy all uniforms except chunk-specific ones
+                mesh.material.uniforms.u_time.value = this.uniforms.u_time.value;
+                mesh.material.uniforms.u_wave_height.value = this.uniforms.u_wave_height.value;
+                mesh.material.uniforms.u_wave_frequency.value = this.uniforms.u_wave_frequency.value;
+                mesh.material.uniforms.u_wave_speed.value = this.uniforms.u_wave_speed.value;
+                mesh.material.uniforms.u_shallow_color.value.copy(this.uniforms.u_shallow_color.value);
+                mesh.material.uniforms.u_deep_color.value.copy(this.uniforms.u_deep_color.value);
+                mesh.material.uniforms.u_foam_color.value.copy(this.uniforms.u_foam_color.value);
+                mesh.material.uniforms.u_normal_texture.value = this.uniforms.u_normal_texture.value;
+                mesh.material.uniforms.u_caustics_texture.value = this.uniforms.u_caustics_texture.value;
+                mesh.material.uniforms.u_sky_reflection_texture.value = this.uniforms.u_sky_reflection_texture.value;
+                mesh.material.uniforms.u_light_direction.value.copy(this.uniforms.u_light_direction.value);
+                mesh.material.uniforms.u_camera_position.value.copy(this.uniforms.u_camera_position.value);
+                mesh.material.uniforms.u_water_level.value = this.uniforms.u_water_level.value;
+                mesh.material.uniforms.u_fresnel_power.value = this.uniforms.u_fresnel_power.value;
+                mesh.material.uniforms.u_specular_shininess.value = this.uniforms.u_specular_shininess.value;
+                mesh.material.uniforms.u_foam_threshold.value = this.uniforms.u_foam_threshold.value;
+                mesh.material.uniforms.u_transparency_depth_fade.value = this.uniforms.u_transparency_depth_fade.value;
+                mesh.material.uniforms.u_caustics_intensity.value = this.uniforms.u_caustics_intensity.value;
+                mesh.material.uniforms.u_reflection_strength.value = this.uniforms.u_reflection_strength.value;
+                mesh.material.uniforms.u_normal_strength.value = this.uniforms.u_normal_strength.value;
+                mesh.material.uniforms.u_caustics_speed.value = this.uniforms.u_caustics_speed.value;
+                mesh.material.uniforms.u_enable_caustics.value = this.uniforms.u_enable_caustics.value;
+                mesh.material.uniforms.u_enable_foam.value = this.uniforms.u_enable_foam.value;
+                mesh.material.uniforms.u_enable_reflections.value = this.uniforms.u_enable_reflections.value;
+                
                 mesh.material.needsUpdate = true;
+                console.log(`Updated material for chunk ${key}`);
+            } else {
+                console.warn(`Chunk ${key} has no material or uniforms`);
             }
         });
     }
 
     regenerateTextures(size) {
-        // Dispose old textures
-        if (this.normalTexture) this.normalTexture.dispose();
-        if (this.causticsTexture) this.causticsTexture.dispose();
-        if (this.skyReflectionTexture) this.skyReflectionTexture.dispose();
-        
-        // Regenerate with new size
-        this.normalTexture = this.createFallbackNormalTexture(size);
-        this.causticsTexture = this.createFallbackCausticsTexture(size);
-        this.skyReflectionTexture = this.createFallbackSkyTexture(size);
-        
-        this.updateMaterialTextures();
+        console.log(`Regenerating textures with size ${size}`);
+        try {
+            // Dispose old textures
+            if (this.normalTexture) this.normalTexture.dispose();
+            if (this.causticsTexture) this.causticsTexture.dispose();
+            if (this.skyReflectionTexture) this.skyReflectionTexture.dispose();
+            
+            // Regenerate with new size
+            this.normalTexture = this.createFallbackNormalTexture(size);
+            this.causticsTexture = this.createFallbackCausticsTexture(size);
+            this.skyReflectionTexture = this.createFallbackSkyTexture(size);
+            
+            // Update uniforms
+            this.uniforms.u_normal_texture.value = this.normalTexture;
+            this.uniforms.u_caustics_texture.value = this.causticsTexture;
+            this.uniforms.u_sky_reflection_texture.value = this.skyReflectionTexture;
+            
+            this.updateMaterialTextures();
+            console.log('Textures regenerated successfully');
+        } catch (error) {
+            console.error('Error regenerating textures:', error);
+        }
     }
 
     generateHeightTexture(chunkX, chunkZ, heightCalculator) {
