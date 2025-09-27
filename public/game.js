@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { SimpleTerrainRenderer, CONFIG } from './terrain.js';
 import { ui } from './ui.js';
 import { WaterRenderer } from './WaterRenderer.js';
+import { SimpleTerrainRenderer, CONFIG, roundCoord } from './terrain.js';
 
 
 

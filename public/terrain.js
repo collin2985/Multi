@@ -1,5 +1,9 @@
 import * as THREE from 'three';
 
+
+
+export const roundCoord = (coord) => Math.round(coord * FLOAT_PRECISION) / FLOAT_PRECISION;
+
 // --- CONFIG ---
 export const CONFIG = Object.freeze({
     TERRAIN: {
