@@ -152,10 +152,10 @@ vec3 waterBaseColor = mix(u_shallow_color.rgb, u_deep_color.rgb, transitionFacto
 float alpha;
 if (depth <= 0.2) {
     // Very shallow (0–0.2): fade in gently
-    alpha = smoothstep(0.0, 0.2, depth) * 0.6; // up to ~60% visible
+    alpha = smoothstep(0.0, 0.2, depth) * 0.3; // up to ~60% visible
 } else if (depth <= 0.4) {
     // Transition (0.2–0.4): ease into full opacity
-    alpha = mix(0.6, 1.0, smoothstep(0.2, 0.4, depth));
+    alpha = mix(0.3, 1.0, smoothstep(0.2, 0.4, depth));
 } else {
     // Deep water fully opaque
     alpha = 1.0;
