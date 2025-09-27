@@ -177,8 +177,8 @@ if (depth <= 0.4) {
         vec3 foamTexColor = texture2D(u_foam_texture, foamUv).rgb;
 
 // Option 1: Softer shoreline foam with better falloff
-float shorelineFoam = 1.0 - smoothstep(0.0, 0.25, depth);
-shorelineFoam = pow(shorelineFoam, 2.0); // More gradual falloff
+//float shorelineFoam = 1.0 - smoothstep(0.0, 0.25, depth);
+//shorelineFoam = pow(shorelineFoam, 2.0); // More gradual falloff
 
 // Option 2: Noise-based shoreline foam (more natural)
 float foamNoise1 = sin(vWorldPosition.x * 8.0 + u_time * 2.0) * 0.5 + 0.5;
@@ -188,10 +188,10 @@ float noisyShorelineFoam = (1.0 - smoothstep(0.0, 0.3, depth)) * combinedNoise;
 noisyShorelineFoam = smoothstep(0.3, 0.8, noisyShorelineFoam);
 
 // Option 3: Distance-based foam with texture variation
-float distanceToShore = depth / 0.2; // Normalized distance
-float foamPattern = texture2D(u_foam_texture, vWorldPosition.xz * 0.05 + vec2(u_time * 0.01)).r;
-float patternedFoam = (1.0 - smoothstep(0.0, 1.0, distanceToShore)) * foamPattern;
-patternedFoam = smoothstep(0.4, 0.9, patternedFoam);
+//float distanceToShore = depth / 0.2; // Normalized distance
+//float foamPattern = texture2D(u_foam_texture, vWorldPosition.xz * 0.05 + vec2(u_time * 0.01)).r;
+//float patternedFoam = (1.0 - smoothstep(0.0, 1.0, distanceToShore)) * foamPattern;
+//patternedFoam = smoothstep(0.4, 0.9, patternedFoam);
 
 // Wave-based foam (keep this as is, it's working well)
 float waveFoam = smoothstep(u_foam_threshold, u_foam_threshold + 0.3, vWaveSlope);
@@ -204,16 +204,16 @@ waveFoam *= (wavefoamNoise * 0.5 + 0.5);
 //float foam = max(shorelineFoam * 0.6, waveFoam * 0.6);
 
 // Or use Option 2 for more natural, noisy foam:
-// float foam = max(noisyShorelineFoam * 0.8, waveFoam * 0.6);
+ float foam = max(noisyShorelineFoam * 0.8, waveFoam * 0.6);
 
 // Or use Option 3 for texture-based foam patterns:
 // float foam = max(patternedFoam * 0.7, waveFoam * 0.6);
 
 // Advanced: Combine multiple approaches
- float foam = max(
-     max(shorelineFoam * 0.4, noisyShorelineFoam * 0.5),
-     waveFoam * 0.6
- );
+// float foam = max(
+//     max(shorelineFoam * 0.4, noisyShorelineFoam * 0.5),
+//     waveFoam * 0.6
+// );
         // Caustics effects
         vec2 causticsUv1 = vUv * 6.0 + vec2(u_time * 0.002, u_time * 0.0015);
         vec2 causticsUv2 = vUv * 8.5 + vec2(u_time * -0.0012, u_time * 0.0018);
