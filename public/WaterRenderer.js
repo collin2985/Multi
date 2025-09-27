@@ -84,7 +84,8 @@ const waterFragmentShader = `
                      depth <= 0.2 ? mix(0.3, 0.8, smoothstep(0.1, 0.2, depth)) : 0.8;
         
         // Simple foam based on depth only (removed complex noise calculations)
-        float foam = depth < 0.05 ? (1.0 - depth / 0.05) * 0.5 : 0.0;
+        float foam = 0.0;
+        //depth < 0.05 ? (1.0 - depth / 0.05) * 0.5 : 0.0;
         
         // Simplified final color mixing
         vec3 finalColor = mix(waterBaseColor, u_foam_color.rgb, foam);
