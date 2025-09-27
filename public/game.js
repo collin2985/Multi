@@ -33,7 +33,6 @@ let waterRenderer = null;
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 const playerTargetPosition = new THREE.Vector3();
-const cameraOffset = new THREE.Vector3(0, 15, 5); // Move this OUTSIDE too
 let cameraTargetPosition = new THREE.Vector3();
 let isMoving = false;
 
@@ -619,18 +618,7 @@ function animate() {
     const now = performance.now();
     const deltaTime = now - lastFrameTime;
 
-// NOTE: This check block is redundant and should be removed or merged with the main chunk update logic below.
-/*
-if (now - lastChunkUpdateTime > chunkUpdateInterval) {
-    lastChunkUpdateTime = now;
-    
-    // Assuming your player object's position is available, e.g., camera or avatar
-    const playerX = camera.position.x; // Replace camera with your player object if needed
-    const playerZ = camera.position.z;
 
-    updateChunks(playerX, playerZ);
-}
-*/
 
     if (isMoving) {
         const distance = playerObject.position.distanceTo(playerTargetPosition);
@@ -694,7 +682,7 @@ if (now - lastChunkUpdateTime > chunkUpdateInterval) {
     // In your main animation loop, add this temporary debug
 
 
-    const cameraOffset = new THREE.Vector3(0, 15, 5);  //0, 15, 5 sets a good height
+    const cameraOffset = new THREE.Vector3(0, 15, 8);  //0, 15, 5 sets a good height
 cameraTargetPosition.copy(playerObject.position).add(cameraOffset);
     const smoothedCameraPosition = camera.position.lerp(cameraTargetPosition, 0.5);
     camera.position.copy(smoothedCameraPosition);
