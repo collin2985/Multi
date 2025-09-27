@@ -371,6 +371,8 @@ export class TerrainMaterialFactory {
             texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
             texture.minFilter = THREE.LinearFilter;
             texture.magFilter = THREE.LinearFilter;
+            texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+            texture.needsUpdate = true;
         }, undefined, (err) => {
             console.error('Failed to load grass texture:', err);
         });

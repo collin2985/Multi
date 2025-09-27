@@ -280,7 +280,7 @@ export class WaterRenderer {
         // Create a default height texture for chunks without terrain data
         const defaultHeightTexture = this.createDefaultHeightTexture();
         
-        const shallowColor = new THREE.Color(0x4dd0e1);
+        const shallowColor = new THREE.Color(0x85997F);
         const deepColor = new THREE.Color(0x001f5f);
         const foamColor = new THREE.Color(0xffffff);
         
