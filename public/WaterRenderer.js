@@ -86,14 +86,8 @@ const waterFragmentShader = `
         
         // Simple foam based on depth only (removed complex noise calculations)
         //float foam = depth < 0.05 ? (1.0 - depth / 0.05) * 0.5 : 0.0;
-
-    
         
         // Simplified final color mixing
-        //vec3 finalColor = mix(waterBaseColor, u_foam_color.rgb, foam);
-        //alpha = mix(alpha, 1.0, foam * 0.3);
-
-
         vec3 finalColor = waterBaseColor;
         
         gl_FragColor = vec4(finalColor, alpha);
@@ -256,25 +250,29 @@ export class WaterRenderer {
         const geometry = new THREE.PlaneGeometry(50, 50, 32, 32); // Reduced from 64x64
         geometry.rotateX(-Math.PI / 2);
         
-        // Use shared material instead of cloning for better performance
-        const material = this.sharedMaterial;
+        // Clone the shared material for each chunk to have individual uniforms
+        const material = this.sharedMaterial.clone();
+        
+        // Set chunk-specific uniforms
+        material.uniforms.u_chunk_offset.value.set(chunkX, chunkZ);
+        
+        // Set height texture for this chunk
+        if (heightTexture) {
+            material.uniforms.u_height_texture.value = heightTexture;
+            this.heightTextures.set(key, heightTexture);
+        } else if (this.terrainRenderer && this.terrainRenderer.heightCalculator) {
+            // Generate height texture if terrain renderer is available
+            const generatedTexture = this.generateHeightTexture(chunkX, chunkZ, this.terrainRenderer.heightCalculator);
+            material.uniforms.u_height_texture.value = generatedTexture;
+            this.heightTextures.set(key, generatedTexture);
+        }
         
         // Create mesh
         const mesh = new THREE.Mesh(geometry, material);
         mesh.position.set(chunkX, this.waterLevel, chunkZ);
         
-        // Store chunk-specific data separately
-        mesh.userData = {
-            chunkOffset: new THREE.Vector2(chunkX, chunkZ),
-            heightTexture: heightTexture || this.uniforms.u_height_texture.value
-        };
-        
         this.scene.add(mesh);
         this.waterChunks.set(key, mesh);
-        
-        if (heightTexture) {
-            this.heightTextures.set(key, heightTexture);
-        }
         
         console.log(`Water chunk added successfully at (${chunkX}, ${chunkZ})`);
     }
@@ -286,7 +284,7 @@ export class WaterRenderer {
         if (mesh) {
             this.scene.remove(mesh);
             mesh.geometry.dispose();
-            // Don't dispose material since it's shared
+            mesh.material.dispose(); // Now we need to dispose cloned materials
             this.waterChunks.delete(key);
             
             // Clean up height texture
@@ -304,6 +302,7 @@ export class WaterRenderer {
         this.waterChunks.forEach((mesh, key) => {
             this.scene.remove(mesh);
             mesh.geometry.dispose();
+            mesh.material.dispose(); // Dispose cloned materials
         });
         this.waterChunks.clear();
         
@@ -323,21 +322,13 @@ export class WaterRenderer {
         }
         this.lastUpdateTime = time;
         
-        // Update time uniform only if material exists
-        if (this.sharedMaterial && this.sharedMaterial.uniforms.u_time) {
-            this.sharedMaterial.uniforms.u_time.value = time * 0.001;
-            
-            // Update chunk-specific uniforms before rendering
-            // This is a simplified approach - in a full implementation you'd want
-            // to handle this per-chunk during rendering
-            if (this.waterChunks.size > 0) {
-                const firstChunk = this.waterChunks.values().next().value;
-                if (firstChunk && firstChunk.userData) {
-                    this.sharedMaterial.uniforms.u_chunk_offset.value.copy(firstChunk.userData.chunkOffset);
-                    this.sharedMaterial.uniforms.u_height_texture.value = firstChunk.userData.heightTexture;
-                }
+        // Update time uniform for each water chunk's material
+        const timeValue = time * 0.001;
+        this.waterChunks.forEach((mesh) => {
+            if (mesh.material && mesh.material.uniforms && mesh.material.uniforms.u_time) {
+                mesh.material.uniforms.u_time.value = timeValue;
             }
-        }
+        });
     }
 
     getWaterHeightAt(x, z, time) {
