@@ -171,7 +171,7 @@ const waterFragmentShader = `
         
         // Foam effects
         vec3 foamTexColor = texture2D(u_foam_texture, foamUv).rgb;
-        float shorelineFoam = smoothstep(0.0, 1.0, depth);
+        float shorelineFoam = smoothstep(0.0, 2.0, depth);
         float waveFoam = smoothstep(u_foam_threshold, u_foam_threshold + 0.3, vWaveSlope);
         float foamNoise = sin(vWaveSlope * 10.0 + u_time * 3.0) * 0.5 + 0.5;
         float foam = shorelineFoam * waveFoam * (foamNoise * 0.5 + 0.5);
@@ -303,7 +303,7 @@ export class WaterRenderer {
             u_normal_scale: { value: 1.5 },
             u_water_level: { value: this.waterLevel },
             u_shininess: { value: 32.0 },
-            u_foam_threshold: { value: 0.8 },
+            u_foam_threshold: { value: 0.3},
             u_texture_scale: { value: 1.0 },
             u_chunk_size: { value: 50.0 },
             u_chunk_offset: { value: new THREE.Vector2(0, 0) },
