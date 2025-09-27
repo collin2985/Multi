@@ -198,7 +198,7 @@ export class HeightCalculator {
                  this.perlin.noise(rx * noiseConfig.jaggedFrequency2, rz * noiseConfig.jaggedFrequency2, noiseConfig.jaggedNoiseOffset2) * noiseConfig.jaggedAmplitude2 * elevNorm;
     
     const height = heightBeforeJagged + jagged;
-    console.log(`Terrain height at (${worldX}, ${worldZ}): ${height}`);
+    console.log(`Terrain height at (${rx}, ${rz}): ${height}`);
     this.heightCache.set(key, height);
     
     Utilities.limitCacheSize(this.heightCache, this.MAX_CACHE_SIZE);
