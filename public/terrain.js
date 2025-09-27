@@ -5,7 +5,7 @@ import * as THREE from 'three';
 export const roundCoord = (coord) => Math.round(coord * FLOAT_PRECISION) / FLOAT_PRECISION;
 
 // --- CONFIG ---
-export export const CONFIG = Object.freeze({
+export const CONFIG = Object.freeze({
     TERRAIN: {
         chunkSize: 50,
         segments: 100,
