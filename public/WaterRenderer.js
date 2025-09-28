@@ -230,7 +230,7 @@ const waterFragmentShader = `
 
 // --- Main Hybrid WaterRenderer Class ---
 export class WaterRenderer {
-    constructor(scene = null, waterLevel = 0.9, terrainRenderer = null) {
+    constructor(scene = null, waterLevel = 1.05, terrainRenderer = null) {
         this.scene = scene || this.createTestScene();
         this.waterLevel = waterLevel;
         this.terrainRenderer = terrainRenderer;
@@ -480,18 +480,18 @@ export class WaterRenderer {
         const defaultHeightTexture = this.createDefaultHeightTexture();
         
         // Use old version's appealing colors
-        const shallowColor = new THREE.Color(0x000d67); // Deep blue from old version
-        const deepColor = new THREE.Color(0x000A40);    // Deeper blue from old version
+        const shallowColor = new THREE.Color(0x00205b); // Deep blue from old version
+        const deepColor = new THREE.Color(0x07074c);    // Deeper blue from old version
         const foamColor = new THREE.Color(0xffffff);
         
         this.uniforms = {
             // Time and animation
             u_time: { value: 0.0 },
-            u_wave_speed: { value: 1.0 },
+            u_wave_speed: { value: 0.8 },
             
             // Wave parameters (old version defaults)
-            u_wave_height: { value: 0.01 },
-            u_wave_frequency: { value: 0.1 },
+            u_wave_height: { value: 0.011 },
+            u_wave_frequency: { value: 1.38 },
             
             // Colors (old version colors)
             u_shallow_color: { value: new THREE.Vector4(shallowColor.r, shallowColor.g, shallowColor.b, 1.0) },
@@ -517,10 +517,10 @@ export class WaterRenderer {
             // GUI parameters (old version defaults)
             u_shininess: { value: 1.0 },
             u_foam_threshold: { value: 5.0 },
-            u_normal_scale: { value: 2.0 },
-            u_texture_scale: { value: 1.0 },
-            u_transparency: { value: 0.5 },
-            u_caustics_intensity: { value: 0.3 },
+            u_normal_scale: { value: 0.7 },
+            u_texture_scale: { value: 0.6 },
+            u_transparency: { value: 1.0 },
+            u_caustics_intensity: { value: 0.13 },
             u_enable_caustics: { value: true },
             u_enable_foam: { value: true },
             u_enable_reflections: { value: true }
@@ -572,7 +572,7 @@ export class WaterRenderer {
             this.uniforms.u_wave_frequency.value = v; 
             this.updateMaterials(); 
         });
-        wavesFolder.add(this.controls, 'waveSpeed', 0.5, 3.0).name('Wave Speed').onChange((v) => { 
+        wavesFolder.add(this.controls, 'waveSpeed', 0.0, 3.0).name('Wave Speed').onChange((v) => { 
             this.uniforms.u_wave_speed.value = v; 
             this.updateMaterials(); 
         });
