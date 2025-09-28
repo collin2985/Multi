@@ -152,7 +152,7 @@ function updateChunksAroundPlayer(chunkX, chunkZ) {
 // Lighting
 const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
 scene.add(ambientLight);
-const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+const directionalLight = new THREE.DirectionalLight(0xffffff, 1.8);
 directionalLight.position.set(10, 10, 5);
 scene.add(directionalLight);
 
