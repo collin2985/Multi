@@ -313,53 +313,49 @@ export class WaterRenderer {
     }
 
     async loadTextures() {
-        const loader = new THREE.TextureLoader();
+    const loader = new THREE.TextureLoader();
+    
+    try {
+        console.log('Loading water textures...');
+        
+        // Load textures with fallback handling
+        try {
+            const newNormalTexture = await this.loadTexture(loader, './terrain/water_normal.png');
+            this.setupTextureProperties(newNormalTexture, true);
+            this.normalTexture = newNormalTexture;
+        } catch (e) {
+            console.warn('Failed to load normal texture, keeping fallback');
+        }
         
         try {
-            console.log('Loading water textures...');
-            
-            // Load textures with fallback handling - avoid Promise.all to prevent race conditions
-            try {
-                const newNormalTexture = await this.loadTexture(loader, './terrain/water_normal.png');
-                this.setupTextureProperties(newNormalTexture, true);
-                if (this.normalTexture && this.normalTexture.dispose) this.normalTexture.dispose();
-                this.normalTexture = newNormalTexture;
-            } catch (e) {
-                console.warn('Failed to load normal texture, keeping fallback');
-            }
-            
-            try {
-                const newCausticsTexture = await this.loadTexture(loader, './terrain/caustics.png');
-                this.setupTextureProperties(newCausticsTexture, true);
-                if (this.causticsTexture && this.causticsTexture.dispose) this.causticsTexture.dispose();
-                this.causticsTexture = newCausticsTexture;
-            } catch (e) {
-                console.warn('Failed to load caustics texture, keeping fallback');
-            }
-            
-            try {
-                const newSkyTexture = await this.loadTexture(loader, './terrain/sky_reflection.png');
-                this.setupTextureProperties(newSkyTexture, false);
-                if (this.skyReflectionTexture && this.skyReflectionTexture.dispose) this.skyReflectionTexture.dispose();
-                this.skyReflectionTexture = newSkyTexture;
-            } catch (e) {
-                console.warn('Failed to load sky reflection texture, keeping fallback');
-            }
-            
-            try {
-                const newFoamTexture = await this.loadTexture(loader, './terrain/foam.png');
-                this.setupTextureProperties(newFoamTexture, true);
-                if (this.foamTexture && this.foamTexture.dispose) this.foamTexture.dispose();
-                this.foamTexture = newFoamTexture;
-            } catch (e) {
-                console.warn('Failed to load foam texture, keeping fallback');
-            }
-            
-            console.log('Water texture loading completed');
-        } catch (error) {
-            console.warn('Texture loading error:', error);
+            const newCausticsTexture = await this.loadTexture(loader, './terrain/caustics.png');
+            this.setupTextureProperties(newCausticsTexture, true);
+            this.causticsTexture = newCausticsTexture;
+        } catch (e) {
+            console.warn('Failed to load caustics texture, keeping fallback');
         }
+        
+        try {
+            const newSkyTexture = await this.loadTexture(loader, './terrain/sky_reflection.png');
+            this.setupTextureProperties(newSkyTexture, false);
+            this.skyReflectionTexture = newSkyTexture;
+        } catch (e) {
+            console.warn('Failed to load sky reflection texture, keeping fallback');
+        }
+        
+        try {
+            const newFoamTexture = await this.loadTexture(loader, './terrain/foam.png');
+            this.setupTextureProperties(newFoamTexture, true);
+            this.foamTexture = newFoamTexture;
+        } catch (e) {
+            console.warn('Failed to load foam texture, keeping fallback');
+        }
+        
+        console.log('Water texture loading completed');
+    } catch (error) {
+        console.warn('Texture loading error:', error);
     }
+}
 
     loadTexture(loader, path) {
         return new Promise((resolve, reject) => {
@@ -367,17 +363,18 @@ export class WaterRenderer {
         });
     }
 
-    setupTextureProperties(texture, repeat) {
-        if (repeat) {
-            texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-        } else {
-            texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
-        }
-        texture.minFilter = THREE.LinearFilter;
-        texture.magFilter = THREE.LinearFilter;
-        texture.generateMipmaps = false; // Avoid immutable storage issues
-        texture.needsUpdate = true;
+setupTextureProperties(texture, repeat) {
+    // Set all properties at creation time and never change them
+    texture.generateMipmaps = false; // Be explicit - set before first upload
+    if (repeat) {
+        texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    } else {
+        texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
     }
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.needsUpdate = true;
+}
 
     createFallbackTextures() {
         // Create fallback textures
@@ -449,8 +446,8 @@ export class WaterRenderer {
         return texture;
     }
 
-    createFallbackSkyTexture(size = 128) {
-        const canvas = document.createElement('canvas');
+createFallbackSkyTexture(size = 64) {
+            const canvas = document.createElement('canvas');
         canvas.width = canvas.height = size;
         const ctx = canvas.getContext('2d');
         
@@ -489,21 +486,23 @@ export class WaterRenderer {
     }
 
     createDefaultHeightTexture() {
-        const size = 32;
-        const canvas = document.createElement('canvas');
-        canvas.width = canvas.height = size;
-        const ctx = canvas.getContext('2d');
-        
-        ctx.fillStyle = '#808080';
-        ctx.fillRect(0, 0, size, size);
-        
-        const texture = new THREE.CanvasTexture(canvas);
-        texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
-        texture.minFilter = THREE.LinearFilter;
-        texture.magFilter = THREE.LinearFilter;
-        
-        return texture;
-    }
+    const size = 64;
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    
+    ctx.fillStyle = '#808080';
+    ctx.fillRect(0, 0, size, size);
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.generateMipmaps = false; // Set before first upload
+    texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.needsUpdate = true;
+    
+    return texture;
+}
 
     createSharedMaterial() {
         const defaultHeightTexture = this.createDefaultHeightTexture();
@@ -715,27 +714,35 @@ export class WaterRenderer {
     }
 
     updateMaterialTextures() {
-        // Update shared uniforms - make sure we're not causing texture mutations
-        if (this.uniforms.u_normal_texture) {
-            this.uniforms.u_normal_texture.value = this.normalTexture;
-        }
-        if (this.uniforms.u_caustics_texture) {
-            this.uniforms.u_caustics_texture.value = this.causticsTexture;
-        }
-        if (this.uniforms.u_sky_reflection_texture) {
-            this.uniforms.u_sky_reflection_texture.value = this.skyReflectionTexture;
-        }
-        if (this.uniforms.u_foam_texture) {
-            this.uniforms.u_foam_texture.value = this.foamTexture;
-        }
-        
-        // Force material updates
-        if (this.sharedMaterial) {
-            this.sharedMaterial.needsUpdate = true;
-        }
-        
-        this.updateMaterials();
+    // Dispose old textures before replacing them
+    if (this.uniforms.u_normal_texture) {
+        const old = this.uniforms.u_normal_texture.value;
+        if (old && old.dispose && old !== this.normalTexture) old.dispose();
+        this.uniforms.u_normal_texture.value = this.normalTexture;
     }
+    if (this.uniforms.u_caustics_texture) {
+        const old = this.uniforms.u_caustics_texture.value;
+        if (old && old.dispose && old !== this.causticsTexture) old.dispose();
+        this.uniforms.u_caustics_texture.value = this.causticsTexture;
+    }
+    if (this.uniforms.u_sky_reflection_texture) {
+        const old = this.uniforms.u_sky_reflection_texture.value;
+        if (old && old.dispose && old !== this.skyReflectionTexture) old.dispose();
+        this.uniforms.u_sky_reflection_texture.value = this.skyReflectionTexture;
+    }
+    if (this.uniforms.u_foam_texture) {
+        const old = this.uniforms.u_foam_texture.value;
+        if (old && old.dispose && old !== this.foamTexture) old.dispose();
+        this.uniforms.u_foam_texture.value = this.foamTexture;
+    }
+    
+    // Force material updates
+    if (this.sharedMaterial) {
+        this.sharedMaterial.needsUpdate = true;
+    }
+    
+    this.updateMaterials();
+}
 
     generateHeightTexture(chunkX, chunkZ, heightCalculator) {
         const size = 64;
@@ -770,12 +777,14 @@ export class WaterRenderer {
         ctx.putImageData(imgData, 0, 0);
         
         const texture = new THREE.CanvasTexture(canvas);
-        texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
-        texture.minFilter = THREE.LinearFilter;
-        texture.magFilter = THREE.LinearFilter;
-        texture.flipY = false;
-        
-        return texture;
+texture.generateMipmaps = false; // Set before first upload
+texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
+texture.minFilter = THREE.LinearFilter;
+texture.magFilter = THREE.LinearFilter;
+texture.flipY = false;
+texture.needsUpdate = true;
+
+return texture;
     }
 
     addWaterChunk(chunkX, chunkZ, heightTexture = null) {
