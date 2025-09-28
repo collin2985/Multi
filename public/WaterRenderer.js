@@ -206,9 +206,15 @@ const waterFragmentShader = `
             vec2 foamUv = vUv * 25.0 + vec2(u_time * 0.015, u_time * 0.009);
             vec3 foamTexColor = texture2D(u_foam_texture, foamUv).rgb;
             
-            float shorelineFoamFactor = smoothstep(0.0, 1.0, local_depth);
-            foam = shorelineFoamFactor * smoothstep(u_foam_threshold, u_foam_threshold + 0.3, vWaveSlope);
-            
+float minDepth = 1.04;
+float maxDepth = 1.05;
+float shorelineFoamFactor = smoothstep(minDepth, maxDepth, local_depth) * (1.0 - smoothstep(maxDepth, maxDepth + 0.01, local_depth));
+            float adjustedThreshold = 0.001; // Very low to trigger with small slopes
+foam = shorelineFoamFactor * smoothstep(adjustedThreshold, adjustedThreshold + 0.05, vWaveSlope);
+foam *= 3.0; // Boost foam strength
+foam = clamp(foam, 0.0, 1.0); // Prevent over-brightness
+
+
             float foamNoise = sin(vWaveSlope * 10.0 + u_time * 3.0) * 0.5 + 0.5;
             foam *= foamNoise * 0.5 + 0.5;
         }
@@ -243,8 +249,8 @@ const waterFragmentShader = `
         // Add foam
         if (u_enable_foam) {
             vec3 foamTexColor = texture2D(u_foam_texture, vUv * 25.0 + vec2(u_time * 0.015, u_time * 0.009)).rgb;
-            finalColor = mix(finalColor, foamTexColor * u_foam_color.rgb, foam * 0.8);
-            alpha = mix(alpha, 1.0, foam * 0.5);
+finalColor = mix(finalColor, foamTexColor * u_foam_color.rgb, foam * 1.8); // Stronger foam blend
+alpha = mix(alpha, 1.0, foam * 0.9); // More opaque foam
         }
         
         gl_FragColor = vec4(finalColor, alpha);
