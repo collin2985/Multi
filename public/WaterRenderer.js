@@ -4,6 +4,8 @@ import * as THREE from 'three';
 const dat = window.dat;
 
 // --- Simplified Water Vertex Shader (based on old version) ---
+// Replace your existing waterVertexShader with this modified version:
+
 const waterVertexShader = `
     precision mediump float;
     uniform float u_time;
@@ -11,6 +13,9 @@ const waterVertexShader = `
     uniform float u_wave_frequency;
     uniform float u_wave_speed;
     uniform vec2 u_chunk_offset;
+    uniform sampler2D u_height_texture;
+    uniform float u_chunk_size;
+    uniform float u_water_level;
     
     varying vec2 vUv;
     varying vec3 vViewPosition;
@@ -18,6 +23,15 @@ const waterVertexShader = `
     varying vec3 vWorldNormal;
     varying float vWaveHeight;
     varying float vWaveSlope;
+
+    // Sample terrain height function (same as in fragment shader)
+    float sampleTerrainHeight(vec2 worldPos) {
+        vec2 localPos = worldPos - u_chunk_offset;
+        vec2 uv = (localPos / u_chunk_size) + 0.5;
+        uv = clamp(uv, 0.001, 0.999);
+        float heightNormalized = texture2D(u_height_texture, uv).r;
+        return mix(-10.0, 80.0, heightNormalized);
+    }
 
     // Simplified wave function (from old version)
     float wave(vec2 pos, float freq, float speed) {
@@ -39,32 +53,41 @@ const waterVertexShader = `
         // Apply chunk offset for wave calculations
         vec2 worldPos = pos.xz + u_chunk_offset;
         
+        // Calculate water depth at this position
+        float terrainHeight = sampleTerrainHeight(worldPos);
+        float waterDepth = u_water_level - terrainHeight;
+        
+        // Create depth-based wave damping factor
+        // Waves fade to 0 when depth <= 0.1, full strength when depth >= 0.5
+        float depthFactor = smoothstep(0.1, 0.5, waterDepth);
+        
         // Simplified 3-wave system (from old version)
         float waveDisplacement = 0.0;
         waveDisplacement += wave(worldPos, u_wave_frequency, 1.5) * 0.5;
         waveDisplacement += wave(worldPos * 1.8, u_wave_frequency * 1.7, 2.1) * 0.3;
         waveDisplacement += wave(worldPos * 2.3, u_wave_frequency * 0.9, 1.8) * 0.2;
         
-        pos.y += waveDisplacement * u_wave_height;
-        vWaveHeight = waveDisplacement;
+        // Apply depth-based damping to wave displacement
+        pos.y += waveDisplacement * u_wave_height * depthFactor;
+        vWaveHeight = waveDisplacement * depthFactor;
         
-        // Calculate wave slopes for foam and normal calculations
+        // Calculate wave slopes for foam and normal calculations (also dampened)
         float slopeX = 0.0;
         float slopeZ = 0.0;
         slopeX += waveDerivativeX(worldPos, u_wave_frequency, 1.5) * 0.5;
         slopeX += waveDerivativeX(worldPos * 1.8, u_wave_frequency * 1.7, 2.1) * 0.3;
         slopeZ += waveDerivativeZ(worldPos, u_wave_frequency, 1.5) * 0.5;
         slopeZ += waveDerivativeZ(worldPos * 1.8, u_wave_frequency * 1.7, 2.1) * 0.3;
-        vWaveSlope = length(vec2(slopeX, slopeZ)) * u_wave_height;
+        vWaveSlope = length(vec2(slopeX, slopeZ)) * u_wave_height * depthFactor;
         
         // Transform to world space
         vec4 worldPosition = modelMatrix * vec4(pos, 1.0);
         vWorldPosition = worldPosition.xyz;
         vViewPosition = cameraPosition - worldPosition.xyz;
         
-        // Calculate normal from wave slopes
-        vec3 tangentX = vec3(1.0, slopeX * u_wave_height, 0.0);
-        vec3 tangentZ = vec3(0.0, slopeZ * u_wave_height, 1.0);
+        // Calculate normal from wave slopes (also dampened)
+        vec3 tangentX = vec3(1.0, slopeX * u_wave_height * depthFactor, 0.0);
+        vec3 tangentZ = vec3(0.0, slopeZ * u_wave_height * depthFactor, 1.0);
         vWorldNormal = normalize(cross(tangentX, tangentZ));
         
         gl_Position = projectionMatrix * viewMatrix * worldPosition;
