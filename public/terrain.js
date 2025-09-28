@@ -260,6 +260,7 @@ export class TerrainMaterialFactory {
             uniform sampler2D uRock2;
             uniform sampler2D uSnow;
             uniform sampler2D uSand;
+            uniform sampler2D uSand2;
             uniform float uTextureRepeat;
             
             varying float vHeight;
@@ -279,20 +280,24 @@ export class TerrainMaterialFactory {
                 vec3 rock2 = texture2D(uRock2, worldUv).rgb;
                 vec3 snow = texture2D(uSnow, worldUv).rgb;
                 vec3 sand = texture2D(uSand, worldUv).rgb;
+                vec3 sand2 = texture2D(uSand2, worldUv).rgb;
+
                 
 
 
 
-                float wSand = smoothstep(0.5, 1.3, vHeight) * (1.0 - smoothstep(0.5, 1.3, vHeight));
+                float wSand = smoothstep(1.05, 1.3, vHeight) * (1.0 - smoothstep(1.05, 1.3, vHeight));
+                float wSand2 = smoothstep(0.5, 1.15, vHeight) * (1.0 - smoothstep(0.5, 1.15, vHeight));
                 float wDirt = smoothstep(-25.0, 0.6, vHeight) * (1.0 - smoothstep(0.0, 1.0, vHeight));
                 float wGrass = smoothstep(0.9, 3.5, vHeight) * (1.0 - smoothstep(0.9, 3.5, vHeight));
                 float wRock1 = smoothstep(2.0, 3.0, vHeight) * (1.0 - smoothstep(2.0, 3.5, vHeight));
                 float wRock2 = smoothstep(3.0, 9.0, vHeight) * (1.0 - smoothstep(3.0, 9.0, vHeight)); 
                 float wSnow = smoothstep(7.5, 12.0, vHeight);
                 
-                float totalWeight = wSand + wDirt + wGrass + wRock1 + wRock2 + wSnow;
+                float totalWeight = wSand + wSand2 + wDirt + wGrass + wRock1 + wRock2 + wSnow;
                 if (totalWeight > 0.0) {
                     wSand /= totalWeight;
+                    wSand2 /= totalWeight;
                     wDirt /= totalWeight;
                     wGrass /= totalWeight;
                     wRock1 /= totalWeight;
@@ -304,7 +309,7 @@ export class TerrainMaterialFactory {
                 
                 float slopeFactor = smoothstep(0.05, 0.3, vSlope);
                 
-                vec3 baseColor = sand * wSand + dirt * wDirt + grass * wGrass + rock1 * wRock1 + rock2 * wRock2 + snow * wSnow;
+                vec3 baseColor = sand * wSand + sand2 * wSand2 + dirt * wDirt + grass * wGrass + rock1 * wRock1 + rock2 * wRock2 + snow * wSnow;
                 baseColor = mix(baseColor, rock, slopeFactor * 0.8); // Reduced rock blending for smoother transitions
                 
                 float dp = max(0.0, dot(normalize(vNormal), normalize(uLightDir)));
@@ -326,6 +331,7 @@ export class TerrainMaterialFactory {
                 uRock2: { value: textures.rock2 },
                 uSnow: { value: textures.snow },
                 uSand: { value: textures.sand },
+                uSand2: { value: textures.sand2 },
                 uLightDir: { value: new THREE.Vector3(1, 1, 1).normalize() },
                 uTextureRepeat: { value: CONFIG.GRAPHICS.textureRepeat }
             },
@@ -400,7 +406,9 @@ export class TerrainMaterialFactory {
             rock1: rock1Texture,
             rock2: createTexture({ r: 120, g: 120, b: 120 }, { r: 150, g: 150, b: 150 }),
             snow: createTexture({ r: 255, g: 250, b: 250 }, { r: 240, g: 248, b: 255 }),
-            sand: createTexture({ r: 194, g: 178, b: 128 }, { r: 160, g: 140, b: 100 })
+            sand: createTexture({ r: 249, g: 218, b: 161 }, { r: 242, g: 210, b: 150 }),
+            sand2: createTexture({ r: 224, g: 180, b: 131 }, { r: 247, g: 196, b: 138 })
+
         };
     }
 }
