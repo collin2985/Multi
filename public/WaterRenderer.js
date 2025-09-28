@@ -509,8 +509,8 @@ export class WaterRenderer {
         const defaultHeightTexture = this.createDefaultHeightTexture();
         
         // Use old version's appealing colors
-        const shallowColor = new THREE.Color(0x00205b); // Deep blue from old version
-        const deepColor = new THREE.Color(0x07074c);    // Deeper blue from old version
+        const shallowColor = new THREE.Color(0x00ba71); // Deep blue from old version
+        const deepColor = new THREE.Color(0x00ba71);    // Deeper blue from old version
         const foamColor = new THREE.Color(0xffffff);
         
         this.uniforms = {
