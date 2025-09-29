@@ -35,13 +35,14 @@ export const ui = {
     // Sets up event listeners, accepting callbacks for actions
     initializeUI(callbacks) {
     addBtn.onclick = () => {
-        const chunkX = callbacks.getCurrentChunkX();
-        const chunkZ = callbacks.getCurrentChunkZ();
-        callbacks.sendServerMessage('add_box_request', {
-            chunkId: `chunk_${chunkX}_${chunkZ}`,
-            position: { x: 0, y: 0, z: -3 }
-        });
-    };
+    const chunkX = callbacks.getCurrentChunkX();
+    const chunkZ = callbacks.getCurrentChunkZ();
+    callbacks.sendServerMessage('add_box_request', {  // Keep the message type the same for server compatibility
+        chunkId: `chunk_${chunkX}_${chunkZ}`,
+        position: { x: 0, y: 0, z: -3 }
+    });
+};
+
 
     removeBtn.onclick = () => {
         const chunkX = callbacks.getCurrentChunkX();

@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { ui } from './ui.js';
 import { WaterRenderer } from './WaterRenderer.js';
 import { SimpleTerrainRenderer, CONFIG, roundCoord } from './terrain.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 
 
@@ -163,15 +164,23 @@ const playerObject = new THREE.Mesh(
 playerObject.position.set(0, 5, 0);
 scene.add(playerObject);
 
-const box = new THREE.Mesh(
-    new THREE.BoxGeometry(1, 1, 1),
-    new THREE.MeshLambertMaterial({ color: 0x00ff00 })
-);
-box.position.set(0, 0, -3);
-box.name = 'serverBox';
+
+// Tree model loader
+const loader = new GLTFLoader();
+let treeModel = null;
+
+// Load the tree model
+loader.load('./models/tree92.glb', function (gltf) {
+    treeModel = gltf.scene;
+    treeModel.name = 'serverTree';
+    console.log('Tree model loaded successfully');
+}, undefined, function (error) {
+    console.error('Error loading tree model:', error);
+});
+
 
 terrainRenderer = new SimpleTerrainRenderer(scene);
-waterRenderer = new WaterRenderer(scene, 0.9, terrainRenderer); // Pass terrainRenderer
+waterRenderer = new WaterRenderer(scene, 1.02, terrainRenderer); // Pass terrainRenderer
 terrainRenderer.setWaterRenderer(waterRenderer); // NEW: Set reference for integration
 
 
@@ -531,22 +540,40 @@ function broadcastP2P(message) {
 
 function handleChunkStateChange(payload) {
     const chunkState = payload.state;
-    ui.updateStatus(`🏠 Chunk update: ${chunkState.players.length} players, box: ${chunkState.boxPresent}`);
+    ui.updateStatus(`Chunk update: ${chunkState.players.length} players, tree: ${chunkState.boxPresent}`);
     const parts = payload.chunkId.split('_');
-    const chunkX = parseInt(parts[1]); // This is the GRID index
-    const chunkZ = parseInt(parts[2]); // This is the GRID index
+    const chunkX = parseInt(parts[1]);
+    const chunkZ = parseInt(parts[2]);
     
-    // ✅ Ensure spawning uses world coordinates derived from gridX/Z × chunkSize.
     const chunkSize = CONFIG.TERRAIN.chunkSize;
     const worldX = chunkX * chunkSize;
     const worldZ = chunkZ * chunkSize;
-    terrainRenderer.createChunk(worldX, worldZ); 
+    terrainRenderer.createChunk(worldX, worldZ);
     
-    boxInScene = chunkState.boxPresent; // Update boxInScene
+    // Handle tree addition/removal
+    const existingTree = scene.getObjectByName('serverTree');
+    
+    if (chunkState.boxPresent && !existingTree) {
+        // Add tree to scene
+        if (treeModel) {
+            const treeClone = treeModel.clone();
+            treeClone.name = 'serverTree';
+            treeClone.position.set(0, 0, -3);
+            treeClone.scale.setScalar(1); // Adjust scale if needed
+            scene.add(treeClone);
+            boxInScene = true;
+            ui.updateStatus('Tree added to scene');
+        }
+    } else if (!chunkState.boxPresent && existingTree) {
+        // Remove tree from scene
+        scene.remove(existingTree);
+        boxInScene = false;
+        ui.updateStatus('Tree removed from scene');
+    }
+    
     ui.updateButtonStates(isInChunk, boxInScene);
     ui.updatePeerInfo(peers, avatars);
 }
-
 function handleProximityUpdate(payload) {
     const players = payload.players; // Array of { id, chunkId }
     ui.updateStatus(`📍 Proximity update: ${players.length} players`);
@@ -688,11 +715,10 @@ cameraTargetPosition.copy(playerObject.position).add(cameraOffset);
     camera.position.copy(smoothedCameraPosition);
     camera.lookAt(playerObject.position);
 
-    const serverBox = scene.getObjectByName('serverBox');
-    if (serverBox) {
-        box.rotation.x += 0.005;
-        box.rotation.y += 0.01;
-    }
+    const serverTree = scene.getObjectByName('serverTree');
+if (serverTree) {
+    serverTree.rotation.y += 0.005; // Slow rotation for the tree
+}
 
     renderer.render(scene, camera);
     lastFrameTime = now;

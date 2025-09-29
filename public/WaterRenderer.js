@@ -259,7 +259,7 @@ alpha = mix(alpha, 1.0, foam * 0.9); // More opaque foam
 
 // --- Main Hybrid WaterRenderer Class ---
 export class WaterRenderer {
-    constructor(scene = null, waterLevel = 1.05, terrainRenderer = null) {
+    constructor(scene = null, waterLevel = 1.02, terrainRenderer = null) {  //requires change in game.js
         this.scene = scene || this.createTestScene();
         this.waterLevel = waterLevel;
         this.terrainRenderer = terrainRenderer;
