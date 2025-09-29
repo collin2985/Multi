@@ -558,8 +558,8 @@ function handleChunkStateChange(payload) {
         if (treeModel) {
             const treeClone = treeModel.clone();
             treeClone.name = 'serverTree';
-            treeClone.position.set(0, 0, -3);
-            treeClone.scale.setScalar(1); // Adjust scale if needed
+            treeClone.position.set(0, 0, 1.05);
+            treeClone.scale.setScalar(0.1); // Adjust scale if needed
             scene.add(treeClone);
             boxInScene = true;
             ui.updateStatus('Tree added to scene');
@@ -717,7 +717,7 @@ cameraTargetPosition.copy(playerObject.position).add(cameraOffset);
 
     const serverTree = scene.getObjectByName('serverTree');
 if (serverTree) {
-    serverTree.rotation.y += 0.005; // Slow rotation for the tree
+    serverTree.rotation.y += 0.0; // Slow rotation for the tree
 }
 
     renderer.render(scene, camera);
