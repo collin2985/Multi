@@ -558,7 +558,8 @@ function handleChunkStateChange(payload) {
         if (treeModel) {
             const treeClone = treeModel.clone();
             treeClone.name = 'serverTree';
-            treeClone.position.set(0, 0, 1.05);
+        const terrainHeight = terrainRenderer.getTerrainHeightAt(0, -3);
+        treeClone.position.set(0, terrainHeight + 0.1, -3); //
             treeClone.scale.setScalar(0.1); // Adjust scale if needed
             scene.add(treeClone);
             boxInScene = true;
