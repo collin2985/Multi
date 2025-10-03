@@ -2,6 +2,7 @@
 
 
 import * as THREE from 'three';
+import { addTreesToChunk, removeTrees } from './objects.js';
 
 
 
@@ -61,7 +62,7 @@ export const Utilities = {
             const entriesToRemove = Math.floor(cache.size * 0.25);
             const keysToDelete = Array.from(cache.keys()).slice(0, entriesToRemove);
             keysToDelete.forEach(key => cache.delete(key));
-            console.log(`Cache cleanup: removed ${entriesToRemove} entries, ${cache.size} remaining`);
+            //console.log(`Cache cleanup: removed ${entriesToRemove} entries, ${cache.size} remaining`);
         }
     },
 
@@ -232,116 +233,155 @@ export class HeightCalculator {
 
 // --- TERRAIN MATERIAL FACTORY ---
 export class TerrainMaterialFactory {
-    static createTerrainMaterial(textures) {
-        const vertexShader = `
-            varying float vHeight;
-            varying float vSlope;
-            varying vec3 vNormal;
-            varying vec2 vUv;
-            varying vec3 vWorldPosition;
+   static createTerrainMaterial(textures) {
+    const vertexShader = `
+        varying float vHeight;
+        varying float vSlope;
+        varying vec3 vNormal;
+        varying vec2 vUv;
+        varying vec3 vWorldPosition;
+        
+        // Adding shadow coordinate for shadow mapping
+        varying vec4 vShadowCoord;
+        uniform mat4 uShadowMatrix;
+
+        void main() {
+            vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+            vWorldPosition = worldPosition.xyz;
+            vUv = uv;
+            vHeight = position.y;
+            vNormal = normal;
+            vSlope = 1.0 - dot(normal, vec3(0, 1, 0));
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
             
-            void main() {
-                vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-                vWorldPosition = worldPosition.xyz;
-                vUv = uv;
-                vHeight = position.y;
-                vNormal = normal;
-                vSlope = 1.0 - dot(normal, vec3(0, 1, 0));
-                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-            }
-        `;
+            // Compute shadow coordinate
+            vShadowCoord = uShadowMatrix * worldPosition;
+        }
+    `;
 
-        const fragmentShader = `
-            uniform vec3 uLightDir;
-            uniform sampler2D uDirt;
-            uniform sampler2D uGrass;
-            uniform sampler2D uRock;
-            uniform sampler2D uRock1;
-            uniform sampler2D uRock2;
-            uniform sampler2D uSnow;
-            uniform sampler2D uSand;
-            uniform sampler2D uSand2;
-            uniform float uTextureRepeat;
-            
-            varying float vHeight;
-            varying float vSlope;
-            varying vec3 vNormal;
-            varying vec2 vUv;
-            varying vec3 vWorldPosition;
-            
-            void main() {
-                // Use world position for texture coordinates to eliminate seams
-                float repeat = uTextureRepeat;
-                vec2 worldUv = fract(vWorldPosition.xz * repeat);
-                vec3 dirt = texture2D(uDirt, worldUv).rgb;
-                vec3 grass = texture2D(uGrass, worldUv).rgb;
-                vec3 rock = texture2D(uRock, worldUv).rgb;
-                vec3 rock1 = texture2D(uRock1, worldUv).rgb;
-                vec3 rock2 = texture2D(uRock2, worldUv).rgb;
-                vec3 snow = texture2D(uSnow, worldUv).rgb;
-                vec3 sand = texture2D(uSand, worldUv).rgb;
-                vec3 sand2 = texture2D(uSand2, worldUv).rgb;
+    const fragmentShader = `
+        uniform vec3 uLightDir;
+        uniform sampler2D uDirt;
+        uniform sampler2D uGrass;
+        uniform sampler2D uRock;
+        uniform sampler2D uRock1;
+        uniform sampler2D uRock2;
+        uniform sampler2D uSnow;
+        uniform sampler2D uSand;
+        uniform sampler2D uSand2;
+        uniform float uTextureRepeat;
+        
+        // Shadow uniforms
+        uniform sampler2D uShadowMap;
+        uniform float uShadowBias;
+        uniform float uShadowDarkness;
 
-                
+        varying float vHeight;
+        varying float vSlope;
+        varying vec3 vNormal;
+        varying vec2 vUv;
+        varying vec3 vWorldPosition;
+        varying vec4 vShadowCoord;
 
+        // Function to compute shadow with simple PCF for softness
+        float getShadow() {
+            vec3 shadowCoord = (vShadowCoord.xyz / vShadowCoord.w) * 0.5 + 0.5;
+            shadowCoord.z += uShadowBias;
 
-                float wSand2 = smoothstep(0.5, 1.29, vHeight) * (1.0 - smoothstep(0.5, 1.29, vHeight));
-                float wSand = smoothstep(1.05, 1.3, vHeight) * (1.0 - smoothstep(1.05, 1.3, vHeight));
-                float wDirt = smoothstep(-25.0, 0.6, vHeight) * (1.0 - smoothstep(0.0, 1.0, vHeight));
-                float wGrass = smoothstep(0.9, 3.5, vHeight) * (1.0 - smoothstep(0.9, 3.5, vHeight));
-                float wRock1 = smoothstep(2.0, 3.0, vHeight) * (1.0 - smoothstep(2.0, 3.5, vHeight));
-                float wRock2 = smoothstep(3.0, 9.0, vHeight) * (1.0 - smoothstep(3.0, 9.0, vHeight)); 
-                float wSnow = smoothstep(7.5, 12.0, vHeight);
-                
-                float totalWeight = wSand + wSand2 + wDirt + wGrass + wRock1 + wRock2 + wSnow;
-                if (totalWeight > 0.0) {
-                    wSand /= totalWeight;
-                    wSand2 /= totalWeight;
-                    wDirt /= totalWeight;
-                    wGrass /= totalWeight;
-                    wRock1 /= totalWeight;
-                    wRock2 /= totalWeight;
-                    wSnow /= totalWeight;
-                } else {
-                    wDirt = 1.0; // Fallback to dirt
+            float shadow = 0.0;
+            vec2 texelSize = vec2(1.0 / 1024.0, 1.0 / 1024.0); // Adjust based on shadow map size
+
+            // 3x3 PCF for softer shadows
+            for (float x = -1.0; x <= 1.0; x += 1.0) {
+                for (float y = -1.0; y <= 1.0; y += 1.0) {
+                    float pcfDepth = texture2D(uShadowMap, shadowCoord.xy + vec2(x, y) * texelSize).r;
+                    shadow += (shadowCoord.z > pcfDepth) ? 1.0 : 0.0;
                 }
-                
-                float slopeFactor = smoothstep(0.05, 0.3, vSlope);
-                
-                vec3 baseColor = sand * wSand + sand2 * wSand2 + dirt * wDirt + grass * wGrass + rock1 * wRock1 + rock2 * wRock2 + snow * wSnow;
-                baseColor = mix(baseColor, rock, slopeFactor * 0.8); // Reduced rock blending for smoother transitions
-                
-                float dp = max(0.0, dot(normalize(vNormal), normalize(uLightDir)));
-                float lightFactor = vHeight < -2.0 ? 0.3 + dp * 0.3 : 0.5 + dp * 0.5;
-                baseColor *= lightFactor;
-                
-                gl_FragColor = vec4(baseColor, 1.0);
             }
-        `;
+            shadow /= 9.0;
 
-        const material = new THREE.ShaderMaterial({
-            vertexShader,
-            fragmentShader,
-            uniforms: {
-                uDirt: { value: textures.dirt },
-                uGrass: { value: textures.grass },
-                uRock: { value: textures.rock },
-                uRock: { value: textures.rock1 },
-                uRock2: { value: textures.rock2 },
-                uSnow: { value: textures.snow },
-                uSand: { value: textures.sand },
-                uSand2: { value: textures.sand2 },
-                uLightDir: { value: new THREE.Vector3(1, 1, 1).normalize() },
-                uTextureRepeat: { value: CONFIG.GRAPHICS.textureRepeat }
-            },
-            side: THREE.FrontSide,
-            polygonOffset: true,
-            polygonOffsetFactor: 1,
-            polygonOffsetUnits: 1
-        });
+            return shadow;
+        }
 
-        return material;
-    }
+        void main() {
+            // Use world position for texture coordinates to eliminate seams
+            float repeat = uTextureRepeat;
+            vec2 worldUv = fract(vWorldPosition.xz * repeat);
+            vec3 dirt = texture2D(uDirt, worldUv).rgb;
+            vec3 grass = texture2D(uGrass, worldUv).rgb;
+            vec3 rock = texture2D(uRock, worldUv).rgb;
+            vec3 rock1 = texture2D(uRock1, worldUv).rgb;
+            vec3 rock2 = texture2D(uRock2, worldUv).rgb;
+            vec3 snow = texture2D(uSnow, worldUv).rgb;
+            vec3 sand = texture2D(uSand, worldUv).rgb;
+            vec3 sand2 = texture2D(uSand2, worldUv).rgb;
+
+            float wSand2 = smoothstep(0.5, 1.29, vHeight) * (1.0 - smoothstep(0.5, 1.29, vHeight));
+            float wSand = smoothstep(1.05, 1.3, vHeight) * (1.0 - smoothstep(1.05, 1.3, vHeight));
+            float wDirt = smoothstep(-25.0, 0.6, vHeight) * (1.0 - smoothstep(0.0, 1.0, vHeight));
+            float wGrass = smoothstep(0.9, 5.0, vHeight) * (1.0 - smoothstep(0.9, 5.0, vHeight));
+            float wRock1 = smoothstep(4.0, 5.0, vHeight) * (1.0 - smoothstep(4.0, 6.0, vHeight));
+            float wRock2 = smoothstep(5.5, 9.0, vHeight) * (1.0 - smoothstep(5.0, 9.0, vHeight)); 
+            float wSnow = smoothstep(7.5, 12.0, vHeight);
+            
+            float totalWeight = wSand + wSand2 + wDirt + wGrass + wRock1 + wRock2 + wSnow;
+            if (totalWeight > 0.0) {
+                wSand /= totalWeight;
+                wSand2 /= totalWeight;
+                wDirt /= totalWeight;
+                wGrass /= totalWeight;
+                wRock1 /= totalWeight;
+                wRock2 /= totalWeight;
+                wSnow /= totalWeight;
+            } else {
+                wDirt = 1.0; // Fallback to dirt
+            }
+            
+            float slopeFactor = smoothstep(0.05, 0.3, vSlope);
+            
+            vec3 baseColor = sand * wSand + sand2 * wSand2 + dirt * wDirt + grass * wGrass + rock1 * wRock1 + rock2 * wRock2 + snow * wSnow;
+            baseColor = mix(baseColor, rock, slopeFactor * 0.8); // Reduced rock blending for smoother transitions
+            
+            float dp = max(0.0, dot(normalize(vNormal), normalize(uLightDir)));
+            float lightFactor = vHeight < -2.0 ? 0.3 + dp * 0.3 : 0.5 + dp * 0.5;
+            baseColor *= lightFactor;
+            
+            // Apply shadow
+            float shadow = getShadow();
+            baseColor *= (1.0 - shadow * uShadowDarkness);
+
+            gl_FragColor = vec4(baseColor, 1.0);
+        }
+    `;
+
+    const material = new THREE.ShaderMaterial({
+        vertexShader,
+        fragmentShader,
+        uniforms: {
+            uDirt: { value: textures.dirt },
+            uGrass: { value: textures.grass },
+            uRock: { value: textures.rock },
+            uRock1: { value: textures.rock1 },
+            uRock2: { value: textures.rock2 },
+            uSnow: { value: textures.snow },
+            uSand: { value: textures.sand },
+            uSand2: { value: textures.sand2 },
+            uLightDir: { value: new THREE.Vector3(1, 1, 1).normalize() },
+            uTextureRepeat: { value: CONFIG.GRAPHICS.textureRepeat },
+            // Shadow uniforms
+            uShadowMap: { value: null }, // Will be set in game.js
+            uShadowMatrix: { value: new THREE.Matrix4() },
+            uShadowBias: { value: -0.001 }, // Negative to reduce shadow acne
+            uShadowDarkness: { value: 0.5 } // Controls shadow intensity (0.0 = no shadow, 1.0 = fully black)
+        },
+        side: THREE.FrontSide,
+        polygonOffset: true,
+        polygonOffsetFactor: 1,
+        polygonOffsetUnits: 1
+    });
+
+    return material;
+}
 
     static createProceduralTextures() {
         const size = CONFIG.GRAPHICS.textureSize;
@@ -538,6 +578,11 @@ export class TerrainWorkerManager {
             }
             
             const calculateHeight = (x, z) => {
+    // Validate input
+    if (!isFinite(x) || !isFinite(z)) {
+        return 0;
+    }
+
     const rx = roundCoord(x);
     const rz = roundCoord(z);
     const key = \`\${rx},\${rz}\`;
@@ -550,12 +595,18 @@ export class TerrainWorkerManager {
     let frequency = terrainConfig.baseFrequency;
     
     for (let octave = 0; octave < terrainConfig.baseOctaves; octave++) {
-        base += perlin.noise(rx * frequency, rz * frequency, 10 + octave * 7) * amplitude;
+        const noiseValue = perlin.noise(rx * frequency, rz * frequency, 10 + octave * 7);
+        if (!isFinite(noiseValue)) {
+            console.error('Invalid noise value at', rx, rz);
+            return 0;
+        }
+        base += noiseValue * amplitude;
         amplitude *= 0.5;
         frequency *= 2;
     }
 
     let maskRaw = perlin.noise(rx * terrainConfig.maskFrequency, rz * terrainConfig.maskFrequency, 400);
+    if (!isFinite(maskRaw)) maskRaw = 0;
     let mask = Math.pow((maskRaw + 1) * 0.5, 3);
 
     let mountain = 0;
@@ -563,24 +614,35 @@ export class TerrainWorkerManager {
     frequency = terrainConfig.mountainFrequency;
     
     for (let octave = 0; octave < terrainConfig.mountainOctaves; octave++) {
-        mountain += Math.abs(perlin.noise(rx * frequency, rz * frequency, 500 + octave * 11)) * amplitude;
+        const noiseValue = perlin.noise(rx * frequency, rz * frequency, 500 + octave * 11);
+        if (!isFinite(noiseValue)) continue;
+        mountain += Math.abs(noiseValue) * amplitude;
         amplitude *= 0.5;
         frequency *= 2;
     }
     mountain *= terrainConfig.mountainScale * mask;
     
     let heightBeforeJagged = base + mountain;
-
     
-const elevNorm = clamp((heightBeforeJagged + 2) / 25, 0, 1);
-let jaggedScale = heightBeforeJagged < 1.5 ? Math.max(0.1, (heightBeforeJagged + 0.5) / 10.0) : 1.0;
-let jagged = perlin.noise(rx * terrainConfig.jaggedFrequency1, rz * terrainConfig.jaggedFrequency1, terrainConfig.jaggedNoiseOffset1) * terrainConfig.jaggedAmplitude1 * elevNorm * jaggedScale + 
-             perlin.noise(rx * terrainConfig.jaggedFrequency2, rz * terrainConfig.jaggedFrequency2, terrainConfig.jaggedNoiseOffset2) * terrainConfig.jaggedAmplitude2 * elevNorm * jaggedScale;
-
+    const elevNorm = clamp((heightBeforeJagged + 2) / 25, 0, 1);
+    let jaggedScale = heightBeforeJagged < 1.5 ? Math.max(0.1, (heightBeforeJagged + 0.5) / 10.0) : 1.0;
+    
+    const jagged1 = perlin.noise(rx * terrainConfig.jaggedFrequency1, rz * terrainConfig.jaggedFrequency1, terrainConfig.jaggedNoiseOffset1);
+    const jagged2 = perlin.noise(rx * terrainConfig.jaggedFrequency2, rz * terrainConfig.jaggedFrequency2, terrainConfig.jaggedNoiseOffset2);
+    
+    let jagged = 0;
+    if (isFinite(jagged1)) jagged += jagged1 * terrainConfig.jaggedAmplitude1 * elevNorm * jaggedScale;
+    if (isFinite(jagged2)) jagged += jagged2 * terrainConfig.jaggedAmplitude2 * elevNorm * jaggedScale;
 
     const height = heightBeforeJagged + jagged;
-    workerHeightCache.set(key, height);
     
+    // Final validation
+    if (!isFinite(height)) {
+        console.error('NaN height at', rx, rz);
+        return 0;
+    }
+    
+    workerHeightCache.set(key, height);
     limitCacheSize(workerHeightCache, MAX_CACHE_SIZE);
     return height;
 };
@@ -688,6 +750,7 @@ export class SimpleTerrainRenderer {
     constructor(scene) {
         this.scene = scene;
         this.chunkMap = new Map();
+        this.chunkTrees = new Map(); // To track trees per chunk for cleanup
         this.heightCalculator = new HeightCalculator(CONFIG.TERRAIN.seed);
         this.workerManager = new TerrainWorkerManager();
         this.material = null;
@@ -748,78 +811,110 @@ generateHeightTexture(chunkX, chunkZ) {
     return texture;
 }
 
-    createChunk(chunkX, chunkZ) {
-        const chunkSize = CONFIG.TERRAIN.chunkSize;
-        const segments = CONFIG.TERRAIN.segments;
-        
-        // Ensure chunk coordinates align to grid
-        const alignedChunkX = Math.floor(chunkX / chunkSize) * chunkSize;
-        const alignedChunkZ = Math.floor(chunkZ / chunkSize) * chunkSize;
-        const key = `${alignedChunkX / chunkSize},${alignedChunkZ / chunkSize}`;
-
-        if (this.chunkMap.has(key)) {
-            return;
-        }
-
-        const geometry = new THREE.PlaneGeometry(chunkSize, chunkSize, segments, segments);
-        geometry.rotateX(-Math.PI / 2);
-
-        const points = [];
-        const verticesPerRow = segments + 1;
-
-        // Generate vertices with precise world coordinates
-        for (let z = 0; z <= segments; z++) {
-            for (let x = 0; x <= segments; x++) {
-                const worldX = alignedChunkX + (x / segments - 0.5) * chunkSize;
-                const worldZ = alignedChunkZ + (z / segments - 0.5) * chunkSize;
-                points.push({ 
-                    x: roundCoord(worldX), 
-                    z: roundCoord(worldZ), 
-                    index: z * verticesPerRow + x 
-                });
-            }
-        }
-
-        const batchId = `${alignedChunkX},${alignedChunkZ}_${Date.now()}`;
-        this.workerManager.calculateHeightBatch(points, batchId, ({ results }) => {
-            const position = geometry.attributes.position;
-            const normal = geometry.attributes.normal;
-
-            results.forEach(({ height, normal: n, index }) => {
-                position.array[index * 3 + 1] = height;
-                normal.array[index * 3] = n.x;
-                normal.array[index * 3 + 1] = n.y;
-                normal.array[index * 3 + 2] = n.z;
-            });
-
-            position.needsUpdate = true;
-            normal.needsUpdate = true;
-            geometry.computeBoundingSphere();
-
-            const mesh = new THREE.Mesh(geometry, this.material);
-            mesh.position.set(alignedChunkX, 0, alignedChunkZ);
-            
-            // Ensure chunks are rendered without gaps by adjusting material properties
-            mesh.material.side = THREE.FrontSide;
-            mesh.frustumCulled = false; // Prevent culling issues at chunk borders
-            
-            this.scene.add(mesh);
-
-            const heightTexture = this.generateHeightTexture(alignedChunkX, alignedChunkZ);
-
-            this.chunkMap.set(key, { 
-                mesh, 
-                geometry, 
-                chunkX: alignedChunkX, 
-                chunkZ: alignedChunkZ,
-                heightTexture
-            });
-            
-            if (this.waterRenderer && typeof this.waterRenderer.addWaterChunk === 'function') {
-                this.waterRenderer.addWaterChunk(alignedChunkX, alignedChunkZ, heightTexture);
-            }
-        });
+    createChunk(chunkX, chunkZ, removedObjectIds = null) {  // Add parameter
+    const chunkSize = CONFIG.TERRAIN.chunkSize;
+    const segments = CONFIG.TERRAIN.segments;
+    
+    // Ensure chunk coordinates align to grid
+    const alignedChunkX = Math.floor(chunkX / chunkSize) * chunkSize;
+    const alignedChunkZ = Math.floor(chunkZ / chunkSize) * chunkSize;
+    const key = `${alignedChunkX / chunkSize},${alignedChunkZ / chunkSize}`;
+    if (this.chunkMap.has(key)) {
+        return;
     }
+
+    const geometry = new THREE.PlaneGeometry(chunkSize, chunkSize, segments, segments);
+    geometry.rotateX(-Math.PI / 2);
+
+    const points = [];
+    const verticesPerRow = segments + 1;
+
+    // Generate vertices with precise world coordinates
+    for (let z = 0; z <= segments; z++) {
+        for (let x = 0; x <= segments; x++) {
+            const worldX = alignedChunkX + (x / segments - 0.5) * chunkSize;
+            const worldZ = alignedChunkZ + (z / segments - 0.5) * chunkSize;
+            points.push({ 
+                x: roundCoord(worldX), 
+                z: roundCoord(worldZ), 
+                index: z * verticesPerRow + x 
+            });
+        }
+    }
+
+    const batchId = `${alignedChunkX},${alignedChunkZ}_${Date.now()}`;
+    this.workerManager.calculateHeightBatch(points, batchId, ({ results }) => {
+        const position = geometry.attributes.position;
+        const normal = geometry.attributes.normal;
+
+        results.forEach(({ height, normal: n, index }) => {
+            position.array[index * 3 + 1] = height;
+            normal.array[index * 3] = n.x;
+            normal.array[index * 3 + 1] = n.y;
+            normal.array[index * 3 + 2] = n.z;
+        });
+
+        position.needsUpdate = true;
+        normal.needsUpdate = true;
+        geometry.computeBoundingSphere();
+
+        const mesh = new THREE.Mesh(geometry, this.material);
+        mesh.position.set(alignedChunkX, 0, alignedChunkZ);
+        mesh.receiveShadow = true;
+        
+        // Ensure chunks are rendered without gaps by adjusting material properties
+        mesh.material.side = THREE.FrontSide;
+        mesh.frustumCulled = false; // Prevent culling issues at chunk borders
+        
+        this.scene.add(mesh);
+
+        const trees = addTreesToChunk(this.scene, this.heightCalculator, alignedChunkX, alignedChunkZ, CONFIG.TERRAIN.seed, CONFIG.TERRAIN.chunkSize);
+        
+        // Apply removals AFTER trees are created
+        if (removedObjectIds && removedObjectIds.size > 0) {
+            const keptTrees = trees.filter(obj => !removedObjectIds.has(obj.userData.objectId));
+            
+            // Remove the filtered objects from the scene
+            trees.forEach(obj => {
+                if (removedObjectIds.has(obj.userData.objectId)) {
+                    this.scene.remove(obj);
+                    // Dispose of the object
+                    obj.traverse((child) => {
+                        if (child instanceof THREE.Mesh) {
+                            if (child.geometry) child.geometry.dispose();
+                            if (child.material) {
+                                if (Array.isArray(child.material)) {
+                                    child.material.forEach(mat => mat.dispose());
+                                } else {
+                                    child.material.dispose();
+                                }
+                            }
+                        }
+                    });
+                }
+            });
+            
+            this.chunkTrees.set(key, keptTrees);
+            console.log(`Applied ${removedObjectIds.size} removals to newly created chunk ${key}`);
+        } else {
+            this.chunkTrees.set(key, trees);
+        }
+
+        const heightTexture = this.generateHeightTexture(alignedChunkX, alignedChunkZ);
+        
+        this.chunkMap.set(key, { 
+            mesh, 
+            geometry, 
+            chunkX: alignedChunkX, 
+            chunkZ: alignedChunkZ,
+            heightTexture
+        });
+        
+        if (this.waterRenderer && typeof this.waterRenderer.addWaterChunk === 'function') {
+            this.waterRenderer.addWaterChunk(alignedChunkX, alignedChunkZ, heightTexture);
+        }
+    });
+}
     
 
     // Method to ensure vertex sharing at chunk boundaries
@@ -914,6 +1009,15 @@ generateHeightTexture(chunkX, chunkZ) {
                 chunk.heightTexture.dispose();
             }
             this.scene.remove(chunk.mesh);
+
+// Remove procedural trees
+const trees = this.chunkTrees.get(key);
+if (trees) {
+    removeTrees(this.scene, trees);
+    this.chunkTrees.delete(key);
+}
+
+
             chunk.geometry.dispose();
             this.chunkMap.delete(key);
             if (this.waterRenderer && typeof this.waterRenderer.removeWaterChunk === 'function') {
@@ -980,4 +1084,31 @@ generateHeightTexture(chunkX, chunkZ) {
             this.waterRenderer.dispose();
         }
     }
+    // Add this function to SimpleTerrainRenderer class
+updateShadowUniforms(directionalLight) {
+    if (!this.material || !directionalLight.shadow || !directionalLight.shadow.map) {
+        return;
+    }
+    
+    // Force shadow camera to update
+    directionalLight.shadow.camera.updateMatrixWorld();
+    directionalLight.shadow.camera.updateProjectionMatrix();
+    
+    // Create shadow matrix
+    const shadowMatrix = new THREE.Matrix4();
+    shadowMatrix.multiply(directionalLight.shadow.camera.projectionMatrix);
+    shadowMatrix.multiply(directionalLight.shadow.camera.matrixWorldInverse);
+    
+    this.material.uniforms.uShadowMap.value = directionalLight.shadow.map.texture;
+    this.material.uniforms.uShadowMatrix.value.copy(shadowMatrix);
+    
+    // Update all chunk materials
+    this.chunkMap.forEach(chunk => {
+        if (chunk.mesh && chunk.mesh.material && chunk.mesh.material.uniforms) {
+            chunk.mesh.material.uniforms.uShadowMap.value = directionalLight.shadow.map.texture;
+            chunk.mesh.material.uniforms.uShadowMatrix.value.copy(shadowMatrix);
+            chunk.mesh.material.uniformsNeedUpdate = true;
+        }
+    });
+}
 }

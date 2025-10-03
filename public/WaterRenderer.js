@@ -364,16 +364,18 @@ export class WaterRenderer {
     }
 
 setupTextureProperties(texture, repeat) {
-    // Set all properties at creation time and never change them
-    texture.generateMipmaps = false; // Be explicit - set before first upload
-    if (repeat) {
-        texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-    } else {
-        texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
+    // Only set properties if texture hasn't been uploaded to GPU yet
+    if (texture.image && texture.version === 0) {
+        if (repeat) {
+            texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+        } else {
+            texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
+        }
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        texture.generateMipmaps = false;
+        texture.needsUpdate = true;
     }
-    texture.minFilter = THREE.LinearFilter;
-    texture.magFilter = THREE.LinearFilter;
-    texture.needsUpdate = true;
 }
 
     createFallbackTextures() {
@@ -485,7 +487,7 @@ createFallbackSkyTexture(size = 64) {
         return texture;
     }
 
-    createDefaultHeightTexture() {
+createDefaultHeightTexture() {
     const size = 64;
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = size;
@@ -495,11 +497,10 @@ createFallbackSkyTexture(size = 64) {
     ctx.fillRect(0, 0, size, size);
     
     const texture = new THREE.CanvasTexture(canvas);
-    texture.generateMipmaps = false; // Set before first upload
     texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
     texture.minFilter = THREE.LinearFilter;
     texture.magFilter = THREE.LinearFilter;
-    texture.needsUpdate = true;
+    texture.generateMipmaps = false;
     
     return texture;
 }
@@ -559,6 +560,8 @@ createFallbackSkyTexture(size = 64) {
             vertexShader: waterVertexShader,
             fragmentShader: waterFragmentShader,
             transparent: true,
+            depthWrite: true,  
+            depthTest: true,  
             fog: false,
             side: THREE.FrontSide
         });
@@ -777,12 +780,11 @@ createFallbackSkyTexture(size = 64) {
         ctx.putImageData(imgData, 0, 0);
         
         const texture = new THREE.CanvasTexture(canvas);
-texture.generateMipmaps = false; // Set before first upload
 texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
 texture.minFilter = THREE.LinearFilter;
 texture.magFilter = THREE.LinearFilter;
+texture.generateMipmaps = false;
 texture.flipY = false;
-texture.needsUpdate = true;
 
 return texture;
     }
@@ -791,7 +793,7 @@ return texture;
         const key = `${chunkX},${chunkZ}`;
         if (this.waterChunks.has(key)) return;
         
-        console.log(`Adding hybrid water chunk at (${chunkX}, ${chunkZ})`);
+        //console.log(`Adding hybrid water chunk at (${chunkX}, ${chunkZ})`);
         
         // Use old version's geometry settings
         const geometry = new THREE.PlaneGeometry(50, 50, 100, 100);
@@ -820,7 +822,7 @@ return texture;
         this.scene.add(mesh);
         this.waterChunks.set(key, mesh);
         
-        console.log(`Hybrid water chunk added successfully at (${chunkX}, ${chunkZ})`);
+        //console.log(`Hybrid water chunk added successfully at (${chunkX}, ${chunkZ})`);
     }
 
     removeWaterChunk(chunkX, chunkZ) {

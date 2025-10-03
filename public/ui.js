@@ -1,4 +1,3 @@
-
 // ui.js
 
 // --- UI ELEMENTS ---
@@ -27,41 +26,34 @@ export const ui = {
         peerInfoEl.innerHTML = `P2P Connections: ${connectedPeers.length}/${peers.size}<br>Avatars: ${avatars.size}`;
     },
 
-    updateButtonStates(isInChunk, boxInScene) {
-        addBtn.disabled = !isInChunk || boxInScene;
-        removeBtn.disabled = !isInChunk || !boxInScene;
+    updateNearestObject(objectName) {
+        const nearestObjectEl = document.getElementById('nearestObject');
+        nearestObjectEl.textContent = objectName ? objectName : 'No object nearby';
+    },
+
+    updateButtonStates(isInChunk, nearestObject) {
+        addBtn.disabled = true; // Temporarily disabled
+        removeBtn.disabled = !isInChunk || !nearestObject;
+        removeBtn.textContent = nearestObject ? `Remove ${nearestObject.name}` : 'Remove Object';
     },
 
     // Sets up event listeners, accepting callbacks for actions
     initializeUI(callbacks) {
-    addBtn.onclick = () => {
-    const chunkX = callbacks.getCurrentChunkX();
-    const chunkZ = callbacks.getCurrentChunkZ();
-    callbacks.sendServerMessage('add_box_request', {  // Keep the message type the same for server compatibility
-        chunkId: `chunk_${chunkX}_${chunkZ}`,
-        position: { x: 0, y: 0, z: -3 }
-    });
-};
+        addBtn.onclick = () => {
+            const chunkX = callbacks.getCurrentChunkX();
+            const chunkZ = callbacks.getCurrentChunkZ();
+            callbacks.sendServerMessage('add_box_request', {  // Keep the message type the same for server compatibility
+                chunkId: `chunk_${chunkX},${chunkZ}`,
+                position: { x: 0, y: 0, z: -3 }
+            });
+        };
 
-
-    removeBtn.onclick = () => {
-        const chunkX = callbacks.getCurrentChunkX();
-        const chunkZ = callbacks.getCurrentChunkZ();
-        callbacks.sendServerMessage('remove_box_request', {
-            chunkId: `chunk_${chunkX}_${chunkZ}`
-        });
-    };
+        removeBtn.onclick = () => {
+            callbacks.onRemoveObject(callbacks.getNearestObject());
+        };
     
-    window.addEventListener('resize', () => {
-        callbacks.onResize();
-    });
-}
+        window.addEventListener('resize', () => {
+            callbacks.onResize();
+        });
+    }
 };
-
-
-
-
-
-
-
-
