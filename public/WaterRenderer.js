@@ -206,22 +206,19 @@ vec2 scrolledUvC = worldUV * 15.0 * u_texture_scale + vec2(u_time * 0.0012, u_ti
         float specular = pow(max(dot(perturbedNormal, halfVector), 0.0), u_shininess);
         vec3 specularColor = u_sun_color * specular;
         
-        // Foam calculation (from old version)
+        // Foam calculation - purely depth-based (not wave slope)
         float foam = 0.0;
         if (u_enable_foam) {
-            // Use the ACTUAL rendered depth (local_depth) which accounts for wave displacement
-            // Foam appears in very shallow water (0 to 0.25 units deep)
-            float shorelineFoamFactor = smoothstep(0.0, 0.05, local_depth) * (1.0 - smoothstep(0.05, 0.25, local_depth));
+            // Foam appears in very shallow water based on depth alone
+            // Creates a narrow band at the shoreline (0 to 0.2 units deep)
+            foam = smoothstep(0.0, 0.02, local_depth) * (1.0 - smoothstep(0.02, 0.2, local_depth));
 
-            // Wave-based foam
-            float adjustedThreshold = 0.002;
-            foam = shorelineFoamFactor * smoothstep(adjustedThreshold, adjustedThreshold + 0.02, vWaveSlope);
-            foam *= 2.5; // Moderate foam strength
-            foam = clamp(foam, 0.0, 1.0); // Prevent over-brightness
+            // Add time-based foam animation for variation
+            float foamNoise = sin(local_depth * 50.0 + u_time * 2.0) * 0.5 + 0.5;
+            foam *= foamNoise * 0.3 + 0.7; // Subtle variation
 
-            // Add foam noise variation
-            float foamNoise = sin(vWaveSlope * 10.0 + u_time * 3.0) * 0.5 + 0.5;
-            foam *= foamNoise * 0.5 + 0.5;
+            foam *= 2.0; // Boost visibility
+            foam = clamp(foam, 0.0, 1.0);
         }
         
         // Caustics (simplified from old version)
