@@ -1,4 +1,3 @@
-// server.js
 const WebSocket = require('ws');
 const fs = require('fs');
 
@@ -43,40 +42,50 @@ function loadChunk(chunkId) {
         console.log(`Loaded chunk: ${chunkId}`);
         return chunkData;
     } catch (error) {
-        console.error(`Failed to load chunk ${chunkId}:`, error);
-        return null;
+        // File doesn't exist = pristine chunk with no modifications
+        console.log(`Chunk ${chunkId} has no saved data, creating empty state`);
+        const emptyChunkData = { players: [], objectChanges: [], seed: terrainSeed };
+        chunkCache.set(chunkId, emptyChunkData);
+        return emptyChunkData;
     }
 }
 
 // Broadcast a message to all clients in a specific chunk
 function broadcastToChunk(chunkId, message) {
-    wss.clients.forEach(client => {
-        if (client.currentChunk === chunkId && client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify(message));
+    const recipients = [];
+    clients.forEach((clientData, clientId) => {
+        if (clientData && clientData.currentChunk === chunkId &&
+            clientData.ws && clientData.ws.readyState === WebSocket.OPEN) {
+            try {
+                clientData.ws.send(JSON.stringify(message));
+                recipients.push(clientId);
+            } catch (err) {
+                console.error(`Failed to send ${message.type} to ${clientId}:`, err);
+            }
         }
     });
-    console.log(`Broadcasted ${message.type} to chunk ${chunkId}`);
+    console.log(`Broadcasted ${message.type} to chunk ${chunkId}. Recipients: ${recipients.join(',')}`);
 }
+
 
 // Get players in a 3x3 grid around a chunk
 function getPlayersInProximity(chunkId) {
-    const parts = chunkId.split('_');
-    const chunkX = parseInt(parts[1]);
-    const chunkZ = parseInt(parts[2]);
+    const [chunkX, chunkZ] = chunkId.replace('chunk_', '').split(',').map(Number);
+
     const players = [];
 
     // Check 3x3 grid (1-chunk radius)
     for (let x = chunkX - 1; x <= chunkX + 1; x++) {
-        for (let z = chunkZ - 1; z <= chunkZ + 1; z++) {
-            const targetChunkId = `chunk_${x}_${z}`;
-            const chunkData = chunkCache.get(targetChunkId);
-            if (chunkData) {
-                chunkData.players.forEach(player => {
-                    players.push({ id: player.id, chunkId: targetChunkId });
-                });
-            }
+    for (let z = chunkZ - 1; z <= chunkZ + 1; z++) {
+        const targetChunkId = `chunk_${x},${z}`;
+        const chunkData = loadChunk(targetChunkId); // Use loadChunk instead of chunkCache.get
+        if (chunkData && chunkData.players) {
+            chunkData.players.forEach(player => {
+                players.push({ id: player.id, chunkId: targetChunkId });
+            });
         }
     }
+}
     return players;
 }
 
@@ -99,17 +108,52 @@ function processNotificationQueue() {
             if (!clientData || !clientData.ws || clientData.ws.readyState !== WebSocket.OPEN) return;
 
             const clientPlayers = getPlayersInProximity(clientData.currentChunk);
-            clientData.ws.send(JSON.stringify({
-                type: 'proximity_update',
-                payload: { players: clientPlayers }
-            }));
-            console.log(`Sent proximity_update to ${clientId} with ${clientPlayers.length} players`);
+            try {
+    clientData.ws.send(JSON.stringify({
+        type: 'proximity_update',
+        payload: { players: clientPlayers }
+    }));
+    console.log(`Sent proximity_update to ${clientId} with ${clientPlayers.length} players`);
+} catch (err) {
+    console.error(`Failed to send proximity_update to ${clientId}:`, err);
+}
+
         });
     });
 }
 
 // Start notification queue processing
 setInterval(processNotificationQueue, notificationInterval);
+
+function broadcastTo5x5Grid(chunkId, message) {
+    const [chunkX, chunkZ] = chunkId.replace('chunk_', '').split(',').map(Number);
+    const radius = 2;
+
+
+    // build set of target chunk ids
+    const targetChunks = new Set();
+    for (let x = chunkX - radius; x <= chunkX + radius; x++) {
+        for (let z = chunkZ - radius; z <= chunkZ + radius; z++) {
+            targetChunks.add(`chunk_${x},${z}`);
+        }
+    }
+
+    const recipients = [];
+    clients.forEach((clientData, clientId) => {
+        if (clientData && clientData.currentChunk && targetChunks.has(clientData.currentChunk) &&
+            clientData.ws && clientData.ws.readyState === WebSocket.OPEN) {
+            try {
+                clientData.ws.send(JSON.stringify(message));
+                recipients.push(clientId);
+            } catch (err) {
+                console.error(`Failed to send ${message.type} to ${clientId}:`, err);
+            }
+        }
+    });
+
+    console.log(`Broadcasted ${message.type} to 5x5 grid around chunk ${chunkId}. Recipients: ${recipients.join(',')}`);
+}
+
 
 // Handle new connections
 wss.on('connection', ws => {
@@ -139,12 +183,11 @@ wss.on('connection', ws => {
                 }
                 ws.clientId = clientId;
                 clients.set(clientId, { ws, currentChunk: chunkId, lastChunk: null });
-                ws.currentChunk = chunkId; // Keep for backward compatibility
 
                 let chunkData = loadChunk(chunkId);
                 if (!chunkData) {
                     // Initialize chunk if it doesn't exist
-                    chunkData = { players: [], boxPresent: false, seed: terrainSeed };
+                    chunkData = { players: [], objectChanges: [], seed: terrainSeed };
                     chunkCache.set(chunkId, chunkData);
                     saveChunk(chunkId);
                 }
@@ -157,7 +200,26 @@ wss.on('connection', ws => {
                 }
 
                 notificationQueue.push({ chunkId });
+                // Send chunk_objects_state for 5x5 grid
+const [chunkX, chunkZ] = chunkId.replace('chunk_', '').split(',').map(Number);
 
+const objectChanges = [];
+for (let x = chunkX - 2; x <= chunkX + 2; x++) {
+    for (let z = chunkZ - 2; z <= chunkZ + 2; z++) {
+        const targetChunkId = `chunk_${x},${z}`;
+        const targetChunkData = loadChunk(targetChunkId); // Use loadChunk instead of chunkCache.get
+        if (targetChunkData && targetChunkData.objectChanges) {
+            targetChunkData.objectChanges.forEach(change => {
+                objectChanges.push({ ...change, chunkId: targetChunkId });
+            });
+        }
+    }
+}
+                ws.send(JSON.stringify({
+                    type: 'chunk_objects_state',
+                    payload: { chunkId, objectChanges }
+                }));
+                console.log(`Sent chunk_objects_state for 5x5 grid around ${chunkId} to ${clientId}`);
                 break;
 
             case 'chunk_update':
@@ -171,7 +233,6 @@ wss.on('connection', ws => {
                 // Update client data
                 clientData.currentChunk = newChunkId;
                 clientData.lastChunk = lastChunkId;
-                clientData.ws.currentChunk = newChunkId; // Update for compatibility
 
                 // Update chunk data
                 if (lastChunkId) {
@@ -184,7 +245,7 @@ wss.on('connection', ws => {
 
                 let newChunkData = chunkCache.get(newChunkId);
                 if (!newChunkData) {
-                    newChunkData = { players: [], boxPresent: false, seed: terrainSeed };
+                    newChunkData = { players: [], objectChanges: [], seed: terrainSeed };
                     chunkCache.set(newChunkId, newChunkData);
                 }
                 if (!newChunkData.players.some(p => p.id === updateClientId)) {
@@ -192,13 +253,33 @@ wss.on('connection', ws => {
                     saveChunk(newChunkId);
                 }
 
+                // Send chunk_objects_state for 5x5 grid
+                const [updateChunkX, updateChunkZ] = newChunkId.replace('chunk_', '').split(',').map(Number);
+
+                const updateObjectChanges = [];
+for (let x = updateChunkX - 2; x <= updateChunkX + 2; x++) {
+    for (let z = updateChunkZ - 2; z <= updateChunkZ + 2; z++) {
+        const targetChunkId = `chunk_${x},${z}`;
+        const targetChunkData = loadChunk(targetChunkId); // Use loadChunk instead of chunkCache.get
+        if (targetChunkData && targetChunkData.objectChanges) {
+            targetChunkData.objectChanges.forEach(change => {
+                updateObjectChanges.push({ ...change, chunkId: targetChunkId });
+            });
+        }
+    }
+}
+                clientData.ws.send(JSON.stringify({
+                    type: 'chunk_objects_state',
+                    payload: { chunkId: newChunkId, objectChanges: updateObjectChanges }
+                }));
+                console.log(`Sent chunk_objects_state for 5x5 grid around ${newChunkId} to ${updateClientId}`);
+
                 // Queue notifications for both chunks
                 notificationQueue.push({ chunkId: newChunkId });
                 if (lastChunkId) {
                     notificationQueue.push({ chunkId: lastChunkId });
                 }
                 console.log(`Processed chunk_update for ${updateClientId}: ${lastChunkId || 'none'} -> ${newChunkId}`);
-
                 break;
 
             case 'add_box_request':
@@ -225,6 +306,25 @@ wss.on('connection', ws => {
                         payload: { chunkId: removeChunkId, state: removeChunkData }
                     });
                 }
+                break;
+
+            case 'remove_object_request':
+                const { chunkId: removeObjChunkId, objectId, name, position } = parsedMessage.payload;
+                // loadChunk now always returns valid data, never null
+let removeObjChunkData = loadChunk(removeObjChunkId);
+                const change = { action: 'remove', id: objectId, name, position };
+                const existingIndex = removeObjChunkData.objectChanges.findIndex(c => c.id === objectId);
+                if (existingIndex !== -1) {
+                    removeObjChunkData.objectChanges[existingIndex] = change;
+                } else {
+                    removeObjChunkData.objectChanges.push(change);
+                }
+                saveChunk(removeObjChunkId);
+                broadcastTo5x5Grid(removeObjChunkId, {
+                    type: 'object_removed',
+                    payload: { chunkId: removeObjChunkId, objectId, name, position }
+                });
+                console.log(`Processed remove_object_request for ${objectId} in chunk ${removeObjChunkId}`);
                 break;
 
             case 'webrtc_offer':
