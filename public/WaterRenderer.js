@@ -16,6 +16,8 @@ const waterVertexShader = `
     uniform sampler2D u_height_texture;
     uniform float u_chunk_size;
     uniform float u_water_level;
+    uniform float u_wave_damp_min_depth;
+    uniform float u_wave_damp_max_depth;
     
     varying vec2 vUv;
     varying vec3 vViewPosition;
@@ -56,10 +58,9 @@ const waterVertexShader = `
         // Calculate water depth at this position
         float terrainHeight = sampleTerrainHeight(worldPos);
         float waterDepth = u_water_level - terrainHeight;
-        
-        // Create depth-based wave damping factor
-        // Waves fade to 0 when depth <= 0.1, full strength when depth >= 0.5
-        float depthFactor = smoothstep(0.1, 0.5, waterDepth);
+
+        // Create depth-based wave damping factor (adjustable via GUI)
+        float depthFactor = smoothstep(u_wave_damp_min_depth, u_wave_damp_max_depth, waterDepth);
         
         // Simplified 3-wave system (from old version)
         float waveDisplacement = 0.0;
@@ -121,6 +122,11 @@ const waterFragmentShader = `
     uniform bool u_enable_caustics;
     uniform bool u_enable_foam;
     uniform bool u_enable_reflections;
+    uniform float u_wave_damp_min_depth;
+    uniform float u_wave_damp_max_depth;
+    uniform float u_foam_min_depth;
+    uniform float u_foam_max_depth;
+    uniform float u_foam_wave_influence;
     
     varying vec2 vUv;
     varying vec3 vViewPosition;
@@ -206,12 +212,18 @@ vec2 scrolledUvC = worldUV * 15.0 * u_texture_scale + vec2(u_time * 0.0012, u_ti
         float specular = pow(max(dot(perturbedNormal, halfVector), 0.0), u_shininess);
         vec3 specularColor = u_sun_color * specular;
         
-        // Foam calculation - purely depth-based (not wave slope)
+        // Foam calculation - depth-based with adjustable wave influence
         float foam = 0.0;
         if (u_enable_foam) {
-            // Foam appears in very shallow water based on depth alone
-            // Creates a narrow band at the shoreline (0 to 0.2 units deep)
-            foam = smoothstep(0.0, 0.02, local_depth) * (1.0 - smoothstep(0.02, 0.2, local_depth));
+            // Depth-based foam factor (adjustable via GUI)
+            float depthFoamFactor = smoothstep(u_foam_min_depth, u_foam_min_depth + 0.05, local_depth) *
+                                    (1.0 - smoothstep(u_foam_max_depth - 0.1, u_foam_max_depth, local_depth));
+
+            // Wave slope influence (adjustable via GUI)
+            float waveFoamFactor = smoothstep(0.001, 0.02, vWaveSlope);
+
+            // Combine depth and wave influences
+            foam = depthFoamFactor * mix(1.0, waveFoamFactor, u_foam_wave_influence);
 
             // Add time-based foam animation for variation
             float foamNoise = sin(local_depth * 50.0 + u_time * 2.0) * 0.5 + 0.5;
@@ -555,7 +567,16 @@ createDefaultHeightTexture() {
             u_caustics_intensity: { value: 0.13 },
             u_enable_caustics: { value: true },
             u_enable_foam: { value: true },
-            u_enable_reflections: { value: true }
+            u_enable_reflections: { value: true },
+
+            // Wave damping controls
+            u_wave_damp_min_depth: { value: 0.1 },
+            u_wave_damp_max_depth: { value: 0.5 },
+
+            // Foam controls
+            u_foam_min_depth: { value: 0.0 },
+            u_foam_max_depth: { value: 0.2 },
+            u_foam_wave_influence: { value: 0.5 }
         };
         
         this.sharedMaterial = new THREE.ShaderMaterial({
@@ -593,7 +614,12 @@ createDefaultHeightTexture() {
             waterLevel: this.waterLevel,
             enableCaustics: this.uniforms.u_enable_caustics.value,
             enableFoam: this.uniforms.u_enable_foam.value,
-            enableReflections: this.uniforms.u_enable_reflections.value
+            enableReflections: this.uniforms.u_enable_reflections.value,
+            waveDampMinDepth: this.uniforms.u_wave_damp_min_depth.value,
+            waveDampMaxDepth: this.uniforms.u_wave_damp_max_depth.value,
+            foamMinDepth: this.uniforms.u_foam_min_depth.value,
+            foamMaxDepth: this.uniforms.u_foam_max_depth.value,
+            foamWaveInfluence: this.uniforms.u_foam_wave_influence.value
         };
         
         // GUI Folders
@@ -666,9 +692,31 @@ createDefaultHeightTexture() {
             this.uniforms.u_enable_foam.value = v; 
             this.updateMaterials(); 
         });
-        globalFolder.add(this.controls, 'enableReflections').name('Enable Reflections').onChange((v) => { 
-            this.uniforms.u_enable_reflections.value = v; 
-            this.updateMaterials(); 
+        globalFolder.add(this.controls, 'enableReflections').name('Enable Reflections').onChange((v) => {
+            this.uniforms.u_enable_reflections.value = v;
+            this.updateMaterials();
+        });
+
+        const foamFolder = this.gui.addFolder('Foam & Wave Damping');
+        foamFolder.add(this.controls, 'waveDampMinDepth', 0.0, 1.0).name('Wave Damp Min Depth').onChange((v) => {
+            this.uniforms.u_wave_damp_min_depth.value = v;
+            this.updateMaterials();
+        });
+        foamFolder.add(this.controls, 'waveDampMaxDepth', 0.0, 2.0).name('Wave Damp Max Depth').onChange((v) => {
+            this.uniforms.u_wave_damp_max_depth.value = v;
+            this.updateMaterials();
+        });
+        foamFolder.add(this.controls, 'foamMinDepth', 0.0, 0.5).name('Foam Min Depth').onChange((v) => {
+            this.uniforms.u_foam_min_depth.value = v;
+            this.updateMaterials();
+        });
+        foamFolder.add(this.controls, 'foamMaxDepth', 0.0, 1.0).name('Foam Max Depth').onChange((v) => {
+            this.uniforms.u_foam_max_depth.value = v;
+            this.updateMaterials();
+        });
+        foamFolder.add(this.controls, 'foamWaveInfluence', 0.0, 1.0).name('Foam Wave Influence').onChange((v) => {
+            this.uniforms.u_foam_wave_influence.value = v;
+            this.updateMaterials();
         });
 
         // Water chunks debug info
