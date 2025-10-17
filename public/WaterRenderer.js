@@ -18,6 +18,7 @@ const waterVertexShader = `
     uniform float u_water_level;
     uniform float u_wave_damp_min_depth;
     uniform float u_wave_damp_max_depth;
+    uniform float u_deep_water_threshold;
     
     varying vec2 vUv;
     varying vec3 vViewPosition;
@@ -60,7 +61,14 @@ const waterVertexShader = `
         float waterDepth = u_water_level - terrainHeight;
 
         // Create depth-based wave damping factor (adjustable via GUI)
-        float depthFactor = smoothstep(u_wave_damp_min_depth, u_wave_damp_max_depth, waterDepth);
+        // Shallow water uses inverted smoothstep for foam tuning
+        float shallowDamping = smoothstep(u_wave_damp_min_depth, u_wave_damp_max_depth, waterDepth);
+
+        // Deep water always has full waves
+        float deepWaterFactor = smoothstep(u_deep_water_threshold - 0.2, u_deep_water_threshold, waterDepth);
+
+        // Blend: shallow damping in shallow water, full waves in deep water
+        float depthFactor = mix(shallowDamping, 1.0, deepWaterFactor);
         
         // Simplified 3-wave system (from old version)
         float waveDisplacement = 0.0;
@@ -572,6 +580,7 @@ createDefaultHeightTexture() {
             // Wave damping controls
             u_wave_damp_min_depth: { value: 0.1 },
             u_wave_damp_max_depth: { value: 0.01 },
+            u_deep_water_threshold: { value: 0.5 },
 
             // Foam controls
             u_foam_min_depth: { value: 0.0 },
@@ -617,6 +626,7 @@ createDefaultHeightTexture() {
             enableReflections: this.uniforms.u_enable_reflections.value,
             waveDampMinDepth: this.uniforms.u_wave_damp_min_depth.value,
             waveDampMaxDepth: this.uniforms.u_wave_damp_max_depth.value,
+            deepWaterThreshold: this.uniforms.u_deep_water_threshold.value,
             foamMinDepth: this.uniforms.u_foam_min_depth.value,
             foamMaxDepth: this.uniforms.u_foam_max_depth.value,
             foamWaveInfluence: this.uniforms.u_foam_wave_influence.value
@@ -704,6 +714,10 @@ createDefaultHeightTexture() {
         });
         foamFolder.add(this.controls, 'waveDampMaxDepth', 0.0, 2.0).name('Wave Damp Max Depth').onChange((v) => {
             this.uniforms.u_wave_damp_max_depth.value = v;
+            this.updateMaterials();
+        });
+        foamFolder.add(this.controls, 'deepWaterThreshold', 0.0, 2.0).name('Deep Water Threshold').onChange((v) => {
+            this.uniforms.u_deep_water_threshold.value = v;
             this.updateMaterials();
         });
         foamFolder.add(this.controls, 'foamMinDepth', 0.0, 0.5).name('Foam Min Depth').onChange((v) => {
