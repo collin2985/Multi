@@ -570,13 +570,13 @@ createDefaultHeightTexture() {
             u_enable_reflections: { value: true },
 
             // Wave damping controls
-            u_wave_damp_min_depth: { value: 0.1 },
-            u_wave_damp_max_depth: { value: 0.5 },
+            u_wave_damp_min_depth: { value: 0.01 },
+            u_wave_damp_max_depth: { value: 0.1 },
 
             // Foam controls
             u_foam_min_depth: { value: 0.0 },
-            u_foam_max_depth: { value: 0.2 },
-            u_foam_wave_influence: { value: 0.5 }
+            u_foam_max_depth: { value: 0.15 },
+            u_foam_wave_influence: { value: 1.0 }
         };
         
         this.sharedMaterial = new THREE.ShaderMaterial({
