@@ -209,20 +209,20 @@ vec2 scrolledUvC = worldUV * 15.0 * u_texture_scale + vec2(u_time * 0.0012, u_ti
         // Foam calculation (from old version)
         float foam = 0.0;
         if (u_enable_foam) {
-vec2 foamUv = worldUV * 25.0 + vec2(u_time * 0.015, u_time * 0.009);
-            vec3 foamTexColor = texture2D(u_foam_texture, foamUv).rgb;
+            // Calculate how close terrain is to water level (not depth!)
+            float distanceToWaterLevel = u_water_level - terrainHeight;
 
-            // Use base water level (without wave displacement) for foam calculation
-            float base_depth = u_water_level - terrainHeight;
-float minDepth = 0.0;  // Foam starts right at shore
-float maxDepth = 0.2;  // Foam extends 0.2 units into water
-float shorelineFoamFactor = smoothstep(minDepth, maxDepth, base_depth) * (1.0 - smoothstep(maxDepth, maxDepth + 0.3, base_depth));
+            // Foam appears where terrain is between -0.1 below and 0.3 above water level
+            // This creates foam right at the shoreline intersection
+            float shorelineFoamFactor = smoothstep(-0.1, 0.0, distanceToWaterLevel) * (1.0 - smoothstep(0.0, 0.3, distanceToWaterLevel));
+
+            // Wave-based foam
             float adjustedThreshold = 0.001; // Very low to trigger with small slopes
-foam = shorelineFoamFactor * smoothstep(adjustedThreshold, adjustedThreshold + 0.05, vWaveSlope);
-foam *= 3.0; // Boost foam strength
-foam = clamp(foam, 0.0, 1.0); // Prevent over-brightness
+            foam = shorelineFoamFactor * smoothstep(adjustedThreshold, adjustedThreshold + 0.05, vWaveSlope);
+            foam *= 2.0; // Boost foam strength (reduced from 3.0)
+            foam = clamp(foam, 0.0, 1.0); // Prevent over-brightness
 
-
+            // Add foam noise variation
             float foamNoise = sin(vWaveSlope * 10.0 + u_time * 3.0) * 0.5 + 0.5;
             foam *= foamNoise * 0.5 + 0.5;
         }
@@ -256,9 +256,10 @@ foam = clamp(foam, 0.0, 1.0); // Prevent over-brightness
         
         // Add foam
         if (u_enable_foam) {
-            vec3 foamTexColor = texture2D(u_foam_texture, vUv * 25.0 + vec2(u_time * 0.015, u_time * 0.009)).rgb;
-finalColor = mix(finalColor, foamTexColor * u_foam_color.rgb, foam * 1.8); // Stronger foam blend
-alpha = mix(alpha, 1.0, foam * 0.9); // More opaque foam
+            // Use pure white foam color to avoid pink tint
+            vec3 pureWhiteFoam = vec3(1.0, 1.0, 1.0);
+            finalColor = mix(finalColor, pureWhiteFoam, foam * 0.8); // Clean white foam
+            alpha = mix(alpha, 1.0, foam * 0.9); // More opaque foam
         }
         
         gl_FragColor = vec4(finalColor, alpha);
