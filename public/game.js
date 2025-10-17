@@ -810,7 +810,7 @@ if (this.terrainRenderer.chunkMap.size === 0) {
         }
 
         // Update camera to follow player
-        const cameraOffset = new THREE.Vector3(0, 15, 8);
+        const cameraOffset = new THREE.Vector3(0, 12, 8);  // Lowered by 20% from 15 to zoom in
         this.gameState.cameraTargetPosition.copy(this.playerObject.position).add(cameraOffset);
         this.camera.position.lerp(this.gameState.cameraTargetPosition, 0.8);  // Much more rigid camera (was 0.1)
         this.camera.lookAt(this.playerObject.position);
