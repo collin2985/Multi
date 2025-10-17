@@ -212,14 +212,14 @@ vec2 scrolledUvC = worldUV * 15.0 * u_texture_scale + vec2(u_time * 0.0012, u_ti
             // Calculate how close terrain is to water level (not depth!)
             float distanceToWaterLevel = u_water_level - terrainHeight;
 
-            // Foam appears where terrain is between -0.1 below and 0.3 above water level
-            // This creates foam right at the shoreline intersection
-            float shorelineFoamFactor = smoothstep(-0.1, 0.0, distanceToWaterLevel) * (1.0 - smoothstep(0.0, 0.3, distanceToWaterLevel));
+            // Foam appears where water depth is shallow (0 to 0.5 units deep)
+            // This creates foam right at the water's edge
+            float shorelineFoamFactor = smoothstep(-0.05, 0.05, distanceToWaterLevel) * (1.0 - smoothstep(0.4, 0.6, distanceToWaterLevel));
 
-            // Wave-based foam
-            float adjustedThreshold = 0.001; // Very low to trigger with small slopes
-            foam = shorelineFoamFactor * smoothstep(adjustedThreshold, adjustedThreshold + 0.05, vWaveSlope);
-            foam *= 2.0; // Boost foam strength (reduced from 3.0)
+            // Wave-based foam with increased visibility
+            float adjustedThreshold = 0.0005; // Lower threshold for more foam
+            foam = shorelineFoamFactor * smoothstep(adjustedThreshold, adjustedThreshold + 0.08, vWaveSlope);
+            foam *= 3.5; // Increased foam strength for better visibility
             foam = clamp(foam, 0.0, 1.0); // Prevent over-brightness
 
             // Add foam noise variation
@@ -258,8 +258,8 @@ vec2 scrolledUvC = worldUV * 15.0 * u_texture_scale + vec2(u_time * 0.0012, u_ti
         if (u_enable_foam) {
             // Use pure white foam color to avoid pink tint
             vec3 pureWhiteFoam = vec3(1.0, 1.0, 1.0);
-            finalColor = mix(finalColor, pureWhiteFoam, foam * 0.8); // Clean white foam
-            alpha = mix(alpha, 1.0, foam * 0.9); // More opaque foam
+            finalColor = mix(finalColor, pureWhiteFoam, foam); // Full foam blend for maximum visibility
+            alpha = mix(alpha, 1.0, foam); // Fully opaque foam
         }
         
         gl_FragColor = vec4(finalColor, alpha);
