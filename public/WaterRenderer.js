@@ -570,8 +570,8 @@ createDefaultHeightTexture() {
             u_enable_reflections: { value: true },
 
             // Wave damping controls
-            u_wave_damp_min_depth: { value: 0.01 },
-            u_wave_damp_max_depth: { value: 0.1 },
+            u_wave_damp_min_depth: { value: 0.1 },
+            u_wave_damp_max_depth: { value: 0.01 },
 
             // Foam controls
             u_foam_min_depth: { value: 0.0 },
