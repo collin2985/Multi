@@ -147,17 +147,23 @@ const waterFragmentShader = `
         if (local_depth < 0.0) discard;
         
         // Simplified normal mapping (from old version approach)
-        vec2 scrolledUvA = vUv * 8.0 * u_texture_scale + vec2(u_time * 0.003, u_time * 0.0024);
-        vec2 scrolledUvB = vUv * 12.0 * u_texture_scale + vec2(u_time * -0.0018, u_time * 0.0036);
-        vec2 scrolledUvC = vUv * 15.0 * u_texture_scale + vec2(u_time * 0.0012, u_time * -0.0021);
+        vec2 worldUV = vWorldPosition.xz * 0.02; // Scale world coordinates
+vec2 scrolledUvA = worldUV * 8.0 * u_texture_scale + vec2(u_time * 0.003, u_time * 0.0024);
+vec2 scrolledUvB = worldUV * 12.0 * u_texture_scale + vec2(u_time * -0.0018, u_time * 0.0036);
+vec2 scrolledUvC = worldUV * 15.0 * u_texture_scale + vec2(u_time * 0.0012, u_time * -0.0021);
         
         vec3 normalSampleA = texture2D(u_normal_texture, scrolledUvA).rgb;
         vec3 normalSampleB = texture2D(u_normal_texture, scrolledUvB).rgb;
         vec3 normalSampleC = texture2D(u_normal_texture, scrolledUvC).rgb;
-        
-        vec3 normalA = normalize(normalSampleA * 2.0 - 1.0);
-        vec3 normalB = normalize(normalSampleB * 2.0 - 1.0);
-        vec3 normalC = normalize(normalSampleC * 2.0 - 1.0);
+
+        // Fix: Ensure Z component is positive for tangent space normals
+        vec3 normalA = vec3(normalSampleA.xy * 2.0 - 1.0, normalSampleA.z);
+        vec3 normalB = vec3(normalSampleB.xy * 2.0 - 1.0, normalSampleB.z);
+        vec3 normalC = vec3(normalSampleC.xy * 2.0 - 1.0, normalSampleC.z);
+
+        normalA = normalize(normalA);
+        normalB = normalize(normalB);
+        normalC = normalize(normalC);
         
         vec3 blendedNormal = normalize(normalA + normalB * 0.5 + normalC * 0.3);
         vec3 perturbedNormal = normalize(mix(vWorldNormal, blendedNormal, u_normal_scale * 0.3));
@@ -203,12 +209,14 @@ const waterFragmentShader = `
         // Foam calculation (from old version)
         float foam = 0.0;
         if (u_enable_foam) {
-            vec2 foamUv = vUv * 25.0 + vec2(u_time * 0.015, u_time * 0.009);
+vec2 foamUv = worldUV * 25.0 + vec2(u_time * 0.015, u_time * 0.009);
             vec3 foamTexColor = texture2D(u_foam_texture, foamUv).rgb;
-            
-float minDepth = 1.04;
-float maxDepth = 1.05;
-float shorelineFoamFactor = smoothstep(minDepth, maxDepth, local_depth) * (1.0 - smoothstep(maxDepth, maxDepth + 0.01, local_depth));
+
+            // Use base water level (without wave displacement) for foam calculation
+            float base_depth = u_water_level - terrainHeight;
+float minDepth = 0.0;  // Foam starts right at shore
+float maxDepth = 0.2;  // Foam extends 0.2 units into water
+float shorelineFoamFactor = smoothstep(minDepth, maxDepth, base_depth) * (1.0 - smoothstep(maxDepth, maxDepth + 0.3, base_depth));
             float adjustedThreshold = 0.001; // Very low to trigger with small slopes
 foam = shorelineFoamFactor * smoothstep(adjustedThreshold, adjustedThreshold + 0.05, vWaveSlope);
 foam *= 3.0; // Boost foam strength
@@ -364,16 +372,18 @@ export class WaterRenderer {
     }
 
 setupTextureProperties(texture, repeat) {
-    // Set all properties at creation time and never change them
-    texture.generateMipmaps = false; // Be explicit - set before first upload
-    if (repeat) {
-        texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-    } else {
-        texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
+    // Only set properties if texture hasn't been uploaded to GPU yet
+    if (texture.image && texture.version === 0) {
+        if (repeat) {
+            texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+        } else {
+            texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
+        }
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        texture.generateMipmaps = false;
+        texture.needsUpdate = true;
     }
-    texture.minFilter = THREE.LinearFilter;
-    texture.magFilter = THREE.LinearFilter;
-    texture.needsUpdate = true;
 }
 
     createFallbackTextures() {
@@ -407,9 +417,9 @@ setupTextureProperties(texture, repeat) {
             for (let x = 0; x < size; x++) {
                 const index = (y * size + x) * 4;
                 const wave = Math.sin(x * 0.2) * Math.cos(y * 0.2);
-                data[index] = 128 + wave * 20; // R (X normal)
-                data[index + 1] = 128 + wave * 15; // G (Y normal)  
-                data[index + 2] = 200; // B (Z normal - pointing up)
+                data[index] = 128 + wave * 30; // R (X normal)
+                data[index + 1] = 128 - wave * 30; // G (Y normal) - inverted for correct direction
+                data[index + 2] = 255;
                 data[index + 3] = 255; // A
             }
         }
@@ -485,7 +495,7 @@ createFallbackSkyTexture(size = 64) {
         return texture;
     }
 
-    createDefaultHeightTexture() {
+createDefaultHeightTexture() {
     const size = 64;
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = size;
@@ -495,11 +505,10 @@ createFallbackSkyTexture(size = 64) {
     ctx.fillRect(0, 0, size, size);
     
     const texture = new THREE.CanvasTexture(canvas);
-    texture.generateMipmaps = false; // Set before first upload
     texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
     texture.minFilter = THREE.LinearFilter;
     texture.magFilter = THREE.LinearFilter;
-    texture.needsUpdate = true;
+    texture.generateMipmaps = false;
     
     return texture;
 }
@@ -515,11 +524,11 @@ createFallbackSkyTexture(size = 64) {
         this.uniforms = {
             // Time and animation
             u_time: { value: 0.0 },
-            u_wave_speed: { value: 0.8 },
+            u_wave_speed: { value: 0.27 },
             
             // Wave parameters (old version defaults)
-            u_wave_height: { value: 0.011 },
-            u_wave_frequency: { value: 1.38 },
+            u_wave_height: { value: 0.085 },
+            u_wave_frequency: { value: 1.1 },
             
             // Colors (old version colors)
             u_shallow_color: { value: new THREE.Vector4(shallowColor.r, shallowColor.g, shallowColor.b, 1.0) },
@@ -545,7 +554,7 @@ createFallbackSkyTexture(size = 64) {
             // GUI parameters (old version defaults)
             u_shininess: { value: 1.0 },
             u_foam_threshold: { value: 5.0 },
-            u_normal_scale: { value: 0.7 },
+            u_normal_scale: { value: 0.0 },
             u_texture_scale: { value: 0.6 },
             u_transparency: { value: 1.0 },
             u_caustics_intensity: { value: 0.13 },
@@ -559,6 +568,8 @@ createFallbackSkyTexture(size = 64) {
             vertexShader: waterVertexShader,
             fragmentShader: waterFragmentShader,
             transparent: true,
+            depthWrite: true,  
+            depthTest: true,  
             fog: false,
             side: THREE.FrontSide
         });
@@ -777,12 +788,11 @@ createFallbackSkyTexture(size = 64) {
         ctx.putImageData(imgData, 0, 0);
         
         const texture = new THREE.CanvasTexture(canvas);
-texture.generateMipmaps = false; // Set before first upload
 texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
 texture.minFilter = THREE.LinearFilter;
 texture.magFilter = THREE.LinearFilter;
+texture.generateMipmaps = false;
 texture.flipY = false;
-texture.needsUpdate = true;
 
 return texture;
     }
@@ -791,7 +801,7 @@ return texture;
         const key = `${chunkX},${chunkZ}`;
         if (this.waterChunks.has(key)) return;
         
-        console.log(`Adding hybrid water chunk at (${chunkX}, ${chunkZ})`);
+        //console.log(`Adding hybrid water chunk at (${chunkX}, ${chunkZ})`);
         
         // Use old version's geometry settings
         const geometry = new THREE.PlaneGeometry(50, 50, 100, 100);
@@ -820,7 +830,7 @@ return texture;
         this.scene.add(mesh);
         this.waterChunks.set(key, mesh);
         
-        console.log(`Hybrid water chunk added successfully at (${chunkX}, ${chunkZ})`);
+        //console.log(`Hybrid water chunk added successfully at (${chunkX}, ${chunkZ})`);
     }
 
     removeWaterChunk(chunkX, chunkZ) {
