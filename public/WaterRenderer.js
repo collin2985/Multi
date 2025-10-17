@@ -209,17 +209,14 @@ vec2 scrolledUvC = worldUV * 15.0 * u_texture_scale + vec2(u_time * 0.0012, u_ti
         // Foam calculation (from old version)
         float foam = 0.0;
         if (u_enable_foam) {
-            // Calculate how close terrain is to water level (not depth!)
-            float distanceToWaterLevel = u_water_level - terrainHeight;
+            // Use the ACTUAL rendered depth (local_depth) which accounts for wave displacement
+            // Foam appears in very shallow water (0 to 0.25 units deep)
+            float shorelineFoamFactor = smoothstep(0.0, 0.05, local_depth) * (1.0 - smoothstep(0.05, 0.25, local_depth));
 
-            // Foam appears where water depth is shallow (0 to 0.5 units deep)
-            // This creates foam right at the water's edge
-            float shorelineFoamFactor = smoothstep(-0.05, 0.05, distanceToWaterLevel) * (1.0 - smoothstep(0.4, 0.6, distanceToWaterLevel));
-
-            // Wave-based foam with increased visibility
-            float adjustedThreshold = 0.0005; // Lower threshold for more foam
-            foam = shorelineFoamFactor * smoothstep(adjustedThreshold, adjustedThreshold + 0.08, vWaveSlope);
-            foam *= 3.5; // Increased foam strength for better visibility
+            // Wave-based foam
+            float adjustedThreshold = 0.002;
+            foam = shorelineFoamFactor * smoothstep(adjustedThreshold, adjustedThreshold + 0.02, vWaveSlope);
+            foam *= 2.5; // Moderate foam strength
             foam = clamp(foam, 0.0, 1.0); // Prevent over-brightness
 
             // Add foam noise variation
