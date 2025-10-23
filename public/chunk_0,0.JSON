@@ -1,0 +1,1202 @@
+{
+  "players": [],
+  "objectChanges": [
+    {
+      "action": "add",
+      "id": "0,0_limestone_36",
+      "name": "limestone",
+      "position": [
+        4.247385135386139,
+        1.94625823939042,
+        0.4353028489276767
+      ],
+      "quality": 22,
+      "scale": 0.19270822165999563,
+      "totalResources": 19,
+      "remainingResources": 17,
+      "chunkId": "chunk_0,0",
+      "harvestedBy": null,
+      "harvestStartTime": null
+    },
+    {
+      "action": "remove",
+      "id": "0,0_fir_55",
+      "name": "fir",
+      "position": [
+        5.464079731609672,
+        2.6670329323648576,
+        -6.266569998115301
+      ],
+      "quality": 22,
+      "scale": 0.13063226412050427,
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "add",
+      "id": "fir_log_1761121640670_eqmfnn81q",
+      "name": "fir_log",
+      "position": [
+        5.464079731609672,
+        2.6670329323648576,
+        -6.266569998115301
+      ],
+      "quality": 22,
+      "scale": 0.04354408804016809,
+      "chunkId": "chunk_0,0",
+      "totalResources": 13,
+      "remainingResources": 12,
+      "harvestedBy": null,
+      "harvestStartTime": null
+    },
+    {
+      "action": "remove",
+      "id": "construction_1761130983577_rxco1c8q9",
+      "name": "construction",
+      "position": [
+        11,
+        1.0515357667632828,
+        10
+      ],
+      "quality": null,
+      "scale": 0.017,
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "add",
+      "id": "0,0_limestone_62",
+      "name": "limestone",
+      "position": [
+        10.55773216066882,
+        2.138974517143004,
+        6.59489338286221
+      ],
+      "quality": 85,
+      "scale": 0.06328637547558175,
+      "totalResources": 6,
+      "remainingResources": 3,
+      "chunkId": "chunk_0,0",
+      "harvestedBy": null,
+      "harvestStartTime": null
+    },
+    {
+      "action": "add",
+      "id": "construction_1761131698143_vx7te4hho",
+      "name": "construction",
+      "position": [
+        10.5,
+        1.2516402983918382,
+        10
+      ],
+      "quality": null,
+      "scale": 0.017,
+      "chunkId": "chunk_0,0",
+      "totalResources": null,
+      "remainingResources": null,
+      "harvestedBy": null,
+      "harvestStartTime": null,
+      "isConstructionSite": true,
+      "targetStructure": "foundation",
+      "rotation": -90,
+      "requiredMaterials": {
+        "chiseledlimestone": 1
+      },
+      "materials": {},
+      "finalFoundationY": 0.5
+    },
+    {
+      "action": "remove",
+      "id": "construction_1761131698143_vx7te4hho",
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "foundation_1761131708535_f3cup9oy0",
+      "name": "foundation",
+      "position": [
+        10.5,
+        0.5,
+        10
+      ],
+      "quality": 50,
+      "scale": 0.5,
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "0,0_limestone_63",
+      "name": "limestone",
+      "position": [
+        8.915444172453135,
+        2.0335150669134263,
+        6.900805281475186
+      ],
+      "quality": 65,
+      "scale": 0.1036410851054825,
+      "totalResources": 10,
+      "remainingResources": 0,
+      "chunkId": "chunk_0,0",
+      "harvestedBy": null,
+      "harvestStartTime": null
+    },
+    {
+      "action": "add",
+      "id": "construction_1761131795196_e5h9b03q2",
+      "name": "construction",
+      "position": [
+        11.5,
+        0.8004605931236228,
+        10
+      ],
+      "quality": null,
+      "scale": 0.017,
+      "chunkId": "chunk_0,0",
+      "totalResources": null,
+      "remainingResources": null,
+      "harvestedBy": null,
+      "harvestStartTime": null,
+      "isConstructionSite": true,
+      "targetStructure": "foundation",
+      "rotation": -90,
+      "requiredMaterials": {
+        "chiseledlimestone": 1
+      },
+      "materials": {},
+      "finalFoundationY": 0.5
+    },
+    {
+      "action": "remove",
+      "id": "construction_1761131795196_e5h9b03q2",
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "foundation_1761131806050_qdpgr6qky",
+      "name": "foundation",
+      "position": [
+        11.5,
+        0.5,
+        10
+      ],
+      "quality": 50,
+      "scale": 0.5,
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "add",
+      "id": "construction_1761131814528_npwanq5er",
+      "name": "construction",
+      "position": [
+        9.5,
+        1.4630624278664413,
+        10
+      ],
+      "quality": null,
+      "scale": 0.017,
+      "chunkId": "chunk_0,0",
+      "totalResources": null,
+      "remainingResources": null,
+      "harvestedBy": null,
+      "harvestStartTime": null,
+      "isConstructionSite": true,
+      "targetStructure": "foundation",
+      "rotation": 90,
+      "requiredMaterials": {
+        "chiseledlimestone": 1
+      },
+      "materials": {},
+      "finalFoundationY": 0.5
+    },
+    {
+      "action": "remove",
+      "id": "construction_1761131814528_npwanq5er",
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "foundation_1761131824176_3v7wphrxg",
+      "name": "foundation",
+      "position": [
+        9.5,
+        0.5,
+        10
+      ],
+      "quality": 50,
+      "scale": 0.5,
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "add",
+      "id": "construction_1761131903590_jwlpxf790",
+      "name": "construction",
+      "position": [
+        8.5,
+        1.6040332776835848,
+        10
+      ],
+      "quality": null,
+      "scale": 0.017,
+      "chunkId": "chunk_0,0",
+      "totalResources": null,
+      "remainingResources": null,
+      "harvestedBy": null,
+      "harvestStartTime": null,
+      "isConstructionSite": true,
+      "targetStructure": "foundation",
+      "rotation": 90,
+      "requiredMaterials": {
+        "chiseledlimestone": 1
+      },
+      "materials": {},
+      "finalFoundationY": 0.5
+    },
+    {
+      "action": "remove",
+      "id": "construction_1761131903590_jwlpxf790",
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "foundation_1761131927224_kdemuh0o9",
+      "name": "foundation",
+      "position": [
+        8.5,
+        0.5,
+        10
+      ],
+      "quality": 50,
+      "scale": 0.5,
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "add",
+      "id": "construction_1761132007716_od2okz06v",
+      "name": "construction",
+      "position": [
+        12.5,
+        0.2439097695790387,
+        10
+      ],
+      "quality": null,
+      "scale": 0.017,
+      "chunkId": "chunk_0,0",
+      "totalResources": null,
+      "remainingResources": null,
+      "harvestedBy": null,
+      "harvestStartTime": null,
+      "isConstructionSite": true,
+      "targetStructure": "foundation",
+      "rotation": 90,
+      "requiredMaterials": {
+        "chiseledlimestone": 1
+      },
+      "materials": {},
+      "finalFoundationY": 0.5
+    },
+    {
+      "action": "remove",
+      "id": "construction_1761132007716_od2okz06v",
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "foundation_1761132050665_anjzjne4d",
+      "name": "foundation",
+      "position": [
+        12.5,
+        0.5,
+        10
+      ],
+      "quality": 50,
+      "scale": 0.5,
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "add",
+      "id": "construction_1761132103390_pi2i17hsr",
+      "name": "construction",
+      "position": [
+        7.5,
+        1.6491453198461863,
+        10
+      ],
+      "quality": null,
+      "scale": 0.017,
+      "chunkId": "chunk_0,0",
+      "totalResources": null,
+      "remainingResources": null,
+      "harvestedBy": null,
+      "harvestStartTime": null,
+      "isConstructionSite": true,
+      "targetStructure": "foundation",
+      "rotation": 90,
+      "requiredMaterials": {
+        "chiseledlimestone": 1
+      },
+      "materials": {},
+      "finalFoundationY": 0.5
+    },
+    {
+      "action": "remove",
+      "id": "construction_1761132103390_pi2i17hsr",
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "foundation_1761132115006_3azybqdcs",
+      "name": "foundation",
+      "position": [
+        7.5,
+        0.5,
+        10
+      ],
+      "quality": 50,
+      "scale": 0.5,
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "add",
+      "id": "construction_1761140675240_twm09r35k",
+      "name": "construction",
+      "position": [
+        8.5,
+        0.6400000000000001,
+        10
+      ],
+      "quality": null,
+      "scale": 0.017,
+      "chunkId": "chunk_0,0",
+      "totalResources": null,
+      "remainingResources": null,
+      "harvestedBy": null,
+      "harvestStartTime": null,
+      "isConstructionSite": true,
+      "targetStructure": "crate",
+      "rotation": 90,
+      "requiredMaterials": {
+        "oakplank": 1
+      },
+      "materials": {},
+      "finalCrateY": 0.6400000000000001,
+      "foundationId": "foundation_1761131927224_kdemuh0o9"
+    },
+    {
+      "action": "remove",
+      "id": "0,0_oak_11",
+      "name": "oak",
+      "position": [
+        4.862691857852042,
+        1.8387598949164408,
+        10.126287478487939
+      ],
+      "quality": 57,
+      "scale": 0.14369700173847377,
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "add",
+      "id": "oak_log_1761140799115_px8dbxydh",
+      "name": "oak_log",
+      "position": [
+        4.862691857852042,
+        1.8387598949164408,
+        10.126287478487939
+      ],
+      "quality": 57,
+      "scale": 0.04789900057949126,
+      "chunkId": "chunk_0,0",
+      "totalResources": 14,
+      "remainingResources": 5,
+      "harvestedBy": null,
+      "harvestStartTime": null
+    },
+    {
+      "action": "remove",
+      "id": "construction_1761140675240_twm09r35k",
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "crate_1761140857323_u14agblp3",
+      "name": "crate",
+      "position": [
+        8.5,
+        0.6400000000000001,
+        10
+      ],
+      "quality": 50,
+      "scale": 0.5,
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "construction_1761141586072_pa6rdelvj",
+      "name": "construction",
+      "position": [
+        7.5,
+        0.6400000000000001,
+        10
+      ],
+      "quality": null,
+      "scale": 0.017,
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "add",
+      "id": "construction_1761142107338_jdqrvkd4s",
+      "name": "construction",
+      "position": [
+        9.5,
+        0.5700000000000001,
+        10
+      ],
+      "quality": null,
+      "scale": 0.017,
+      "chunkId": "chunk_0,0",
+      "totalResources": null,
+      "remainingResources": null,
+      "harvestedBy": null,
+      "harvestStartTime": null,
+      "isConstructionSite": true,
+      "targetStructure": "crate",
+      "rotation": 90,
+      "requiredMaterials": {
+        "oakplank": 1
+      },
+      "materials": {},
+      "finalCrateY": 0.5700000000000001,
+      "foundationId": "foundation_1761131824176_3v7wphrxg"
+    },
+    {
+      "action": "remove",
+      "id": "construction_1761142107338_jdqrvkd4s",
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "crate_1761142188937_khfyo6mlk",
+      "name": "crate",
+      "position": [
+        9.5,
+        0.5700000000000001,
+        10
+      ],
+      "quality": 50,
+      "scale": 0.5,
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "add",
+      "id": "construction_1761142593771_17l1isdxc",
+      "name": "construction",
+      "position": [
+        10.5,
+        1,
+        10
+      ],
+      "quality": null,
+      "scale": 0.017,
+      "chunkId": "chunk_0,0",
+      "totalResources": null,
+      "remainingResources": null,
+      "harvestedBy": null,
+      "harvestStartTime": null,
+      "isConstructionSite": true,
+      "targetStructure": "crate",
+      "rotation": -90,
+      "requiredMaterials": {
+        "oakplank": 1
+      },
+      "materials": {},
+      "finalCrateY": 1,
+      "foundationId": "foundation_1761131708535_f3cup9oy0"
+    },
+    {
+      "action": "remove",
+      "id": "construction_1761142593771_17l1isdxc",
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "crate_1761142894469_syahm2niq",
+      "name": "crate",
+      "position": [
+        10.5,
+        1,
+        10
+      ],
+      "quality": 50,
+      "scale": 0.5,
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "add",
+      "id": "construction_1761143015259_7uwzc3lpz",
+      "name": "construction",
+      "position": [
+        11.5,
+        2.1,
+        10
+      ],
+      "quality": null,
+      "scale": 0.017,
+      "chunkId": "chunk_0,0",
+      "totalResources": null,
+      "remainingResources": null,
+      "harvestedBy": null,
+      "harvestStartTime": null,
+      "isConstructionSite": true,
+      "targetStructure": "crate",
+      "rotation": -90,
+      "requiredMaterials": {
+        "oakplank": 1
+      },
+      "materials": {},
+      "finalCrateY": 2.1,
+      "foundationId": "foundation_1761131806050_qdpgr6qky"
+    },
+    {
+      "action": "remove",
+      "id": "construction_1761143015259_7uwzc3lpz",
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "crate_1761143026941_6tdzg6ibl",
+      "name": "crate",
+      "position": [
+        11.5,
+        2.1,
+        10
+      ],
+      "quality": 50,
+      "scale": 0.5,
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "add",
+      "id": "construction_1761143103999_ogujw7gun",
+      "name": "construction",
+      "position": [
+        10.5,
+        1.2516402983918382,
+        10
+      ],
+      "quality": null,
+      "scale": 0.017,
+      "chunkId": "chunk_0,0",
+      "totalResources": null,
+      "remainingResources": null,
+      "harvestedBy": null,
+      "harvestStartTime": null,
+      "isConstructionSite": true,
+      "targetStructure": "foundation",
+      "rotation": 0,
+      "requiredMaterials": {
+        "chiseledlimestone": 1
+      },
+      "materials": {},
+      "finalFoundationY": 0.5
+    },
+    {
+      "action": "remove",
+      "id": "construction_1761143103999_ogujw7gun",
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "foundation_1761143114776_olhysrxb4",
+      "name": "foundation",
+      "position": [
+        10.5,
+        0.5,
+        10
+      ],
+      "quality": 50,
+      "scale": 0.5,
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "0,0_pine_log_28",
+      "name": "pine_log",
+      "position": [
+        11.525703454390168,
+        1.3011712383824943,
+        8.768483577296138
+      ],
+      "quality": 24,
+      "scale": 0.030049817741382868,
+      "totalResources": 3,
+      "remainingResources": 0,
+      "chunkId": "chunk_0,0",
+      "harvestedBy": null,
+      "harvestStartTime": null
+    },
+    {
+      "action": "add",
+      "id": "construction_1761144221559_3u8zpam5h",
+      "name": "construction",
+      "position": [
+        10.5,
+        1.925,
+        10
+      ],
+      "quality": null,
+      "scale": 0.017,
+      "chunkId": "chunk_0,0",
+      "totalResources": null,
+      "remainingResources": null,
+      "harvestedBy": null,
+      "harvestStartTime": null,
+      "isConstructionSite": true,
+      "targetStructure": "crate",
+      "rotation": 90,
+      "requiredMaterials": {
+        "oakplank": 1
+      },
+      "materials": {},
+      "finalCrateY": 1.925,
+      "foundationId": "foundation_1761143114776_olhysrxb4"
+    },
+    {
+      "action": "remove",
+      "id": "construction_1761144221559_3u8zpam5h",
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "crate_1761144267705_zqyunna4z",
+      "name": "crate",
+      "position": [
+        10.5,
+        1.925,
+        10
+      ],
+      "quality": 50,
+      "scale": 0.5,
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "add",
+      "id": "construction_1761144740460_9shlyvy3n",
+      "name": "construction",
+      "position": [
+        9.5,
+        1.4630624278664413,
+        10
+      ],
+      "quality": null,
+      "scale": 0.017,
+      "chunkId": "chunk_0,0",
+      "totalResources": null,
+      "remainingResources": null,
+      "harvestedBy": null,
+      "harvestStartTime": null,
+      "isConstructionSite": true,
+      "targetStructure": "foundation",
+      "rotation": -90,
+      "requiredMaterials": {
+        "chiseledlimestone": 1
+      },
+      "materials": {},
+      "finalFoundationY": 0.5
+    },
+    {
+      "action": "remove",
+      "id": "construction_1761144740460_9shlyvy3n",
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "foundation_1761144750929_pla2o74ro",
+      "name": "foundation",
+      "position": [
+        9.5,
+        0.5,
+        10
+      ],
+      "quality": 50,
+      "scale": 0.5,
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "construction_1761145001782_clwr84kvs",
+      "name": "construction",
+      "position": [
+        9.5,
+        2.1,
+        10
+      ],
+      "quality": null,
+      "scale": 0.017,
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "0,0_pine_log_28",
+      "name": "pine_log",
+      "position": [
+        11.525703454390168,
+        1.3011712383824943,
+        8.768483577296138
+      ],
+      "quality": 24,
+      "scale": 0.030049817741382868,
+      "totalResources": 3,
+      "remainingResources": 0,
+      "chunkId": "chunk_0,0",
+      "harvestedBy": null,
+      "harvestStartTime": null
+    },
+    {
+      "action": "remove",
+      "id": "construction_1761145001782_clwr84kvs",
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "crate_1761145076751_0ocy6syru",
+      "name": "crate",
+      "position": [
+        9.5,
+        2.1,
+        10
+      ],
+      "quality": 50,
+      "scale": 0.5,
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "add",
+      "id": "construction_1761145399565_3lmdiwwme",
+      "name": "construction",
+      "position": [
+        8.5,
+        1.6040332776835848,
+        10
+      ],
+      "quality": null,
+      "scale": 0.017,
+      "chunkId": "chunk_0,0",
+      "totalResources": null,
+      "remainingResources": null,
+      "harvestedBy": null,
+      "harvestStartTime": null,
+      "isConstructionSite": true,
+      "targetStructure": "foundation",
+      "rotation": -90,
+      "requiredMaterials": {
+        "chiseledlimestone": 1
+      },
+      "materials": {},
+      "finalFoundationY": 0.5
+    },
+    {
+      "action": "remove",
+      "id": "construction_1761145399565_3lmdiwwme",
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "foundation_1761145409741_dpuvzf0ub",
+      "name": "foundation",
+      "position": [
+        8.5,
+        0.5,
+        10
+      ],
+      "quality": 50,
+      "scale": 0.5,
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "construction_1761145454591_54oa7s8yn",
+      "name": "construction",
+      "position": [
+        8.5,
+        2.1,
+        10
+      ],
+      "quality": null,
+      "scale": 0.017,
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "construction_1761145454591_54oa7s8yn",
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "crate_1761145464778_67hm5vpws",
+      "name": "crate",
+      "position": [
+        8.5,
+        2.1,
+        10
+      ],
+      "quality": 50,
+      "scale": 0.5,
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "add",
+      "id": "construction_1761151638707_lhxknvaqt",
+      "name": "construction",
+      "position": [
+        7.5,
+        1.6491453198461863,
+        10
+      ],
+      "quality": null,
+      "scale": 0.017,
+      "chunkId": "chunk_0,0",
+      "totalResources": null,
+      "remainingResources": null,
+      "harvestedBy": null,
+      "harvestStartTime": null,
+      "isConstructionSite": true,
+      "targetStructure": "foundation",
+      "rotation": -90,
+      "requiredMaterials": {
+        "chiseledlimestone": 1
+      },
+      "materials": {},
+      "finalFoundationY": 1
+    },
+    {
+      "action": "remove",
+      "id": "construction_1761151638707_lhxknvaqt",
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "foundation_1761152406195_dwyepoxb6",
+      "name": "foundation",
+      "position": [
+        7.5,
+        1,
+        10
+      ],
+      "quality": 50,
+      "scale": 0.5,
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "construction_1761152430738_j8mibi9pd",
+      "name": "construction",
+      "position": [
+        7.5,
+        2.6,
+        10
+      ],
+      "quality": null,
+      "scale": 0.017,
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "construction_1761152430738_j8mibi9pd",
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "crate_1761152440792_t0gdc5ixd",
+      "name": "crate",
+      "position": [
+        7.5,
+        2.6,
+        10
+      ],
+      "quality": 50,
+      "scale": 0.5,
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "add",
+      "id": "construction_1761152536223_gyuqy91xz",
+      "name": "construction",
+      "position": [
+        6.5,
+        1.6821665476727516,
+        10
+      ],
+      "quality": null,
+      "scale": 0.017,
+      "chunkId": "chunk_0,0",
+      "totalResources": null,
+      "remainingResources": null,
+      "harvestedBy": null,
+      "harvestStartTime": null,
+      "isConstructionSite": true,
+      "targetStructure": "foundation",
+      "rotation": 0,
+      "requiredMaterials": {
+        "chiseledlimestone": 1
+      },
+      "materials": {},
+      "finalFoundationY": 0.5
+    },
+    {
+      "action": "remove",
+      "id": "construction_1761152536223_gyuqy91xz",
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "foundation_1761152549929_pnzu13nx9",
+      "name": "foundation",
+      "position": [
+        6.5,
+        0.5,
+        10
+      ],
+      "quality": 50,
+      "scale": 0.5,
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "add",
+      "id": "0,0_limestone_28",
+      "name": "limestone",
+      "position": [
+        7.163805572781712,
+        1.5547708208443585,
+        12.412535026669502
+      ],
+      "quality": 94,
+      "scale": 0.05564593734452501,
+      "totalResources": 5,
+      "remainingResources": 4,
+      "chunkId": "chunk_0,0",
+      "harvestedBy": null,
+      "harvestStartTime": null
+    },
+    {
+      "action": "remove",
+      "id": "0,0_oak_408",
+      "name": "oak",
+      "position": [
+        4.831704939715564,
+        2.0000122634117816,
+        -2.772986306808889
+      ],
+      "quality": 74,
+      "scale": 0.08151720615569502,
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "oak_log_1761153946199_nrnfm1tb1",
+      "name": "oak_log",
+      "position": [
+        4.831704939715564,
+        2.0000122634117816,
+        -2.772986306808889
+      ],
+      "quality": 74,
+      "scale": 0.02717240205189834,
+      "chunkId": "chunk_0,0",
+      "totalResources": 8,
+      "remainingResources": 0,
+      "harvestedBy": null,
+      "harvestStartTime": null
+    },
+    {
+      "action": "add",
+      "id": "0,0_limestone_86",
+      "name": "limestone",
+      "position": [
+        -1.3932548346929252,
+        1.8802615318332707,
+        -4.812945227604359
+      ],
+      "quality": 34,
+      "scale": 0.1822464772500098,
+      "totalResources": 18,
+      "remainingResources": 17,
+      "chunkId": "chunk_0,0",
+      "harvestedBy": null,
+      "harvestStartTime": null
+    },
+    {
+      "action": "remove",
+      "id": "0,0_limestone_73",
+      "name": "limestone",
+      "position": [
+        1.5045502688735723,
+        1.8199878242367526,
+        -1.717516325879842
+      ],
+      "quality": 26,
+      "scale": 0.08077056923648343,
+      "totalResources": 8,
+      "remainingResources": 0,
+      "chunkId": "chunk_0,0",
+      "harvestedBy": null,
+      "harvestStartTime": null
+    },
+    {
+      "action": "add",
+      "id": "0,0_limestone_73",
+      "name": "limestone",
+      "position": [
+        1.5045502688735723,
+        1.8199878242367526,
+        -1.717516325879842
+      ],
+      "quality": 26,
+      "scale": 0.08077056923648343,
+      "totalResources": 8,
+      "remainingResources": 7,
+      "chunkId": "chunk_0,0",
+      "harvestedBy": null,
+      "harvestStartTime": null
+    },
+    {
+      "action": "add",
+      "id": "0,0_limestone_65",
+      "name": "limestone",
+      "position": [
+        -6.241675314959139,
+        1.8300718774469233,
+        3.197651356458664
+      ],
+      "quality": 71,
+      "scale": 0.08476939799729735,
+      "totalResources": 8,
+      "remainingResources": 5,
+      "chunkId": "chunk_0,0",
+      "harvestedBy": null,
+      "harvestStartTime": null
+    },
+    {
+      "action": "add",
+      "id": "0,0_limestone_124",
+      "name": "limestone",
+      "position": [
+        -6.05052737519145,
+        1.7453549190555144,
+        -0.41664494201540947
+      ],
+      "quality": 9,
+      "scale": 0.06922418490285054,
+      "totalResources": 6,
+      "remainingResources": 5,
+      "chunkId": "chunk_0,0",
+      "harvestedBy": null,
+      "harvestStartTime": null
+    },
+    {
+      "action": "add",
+      "id": "0,0_limestone_95",
+      "name": "limestone",
+      "position": [
+        -3.5573611734434962,
+        1.8022279922827555,
+        -2.3935145931318402
+      ],
+      "quality": 23,
+      "scale": 0.18327832337236033,
+      "totalResources": 18,
+      "remainingResources": 17,
+      "chunkId": "chunk_0,0",
+      "harvestedBy": null,
+      "harvestStartTime": null
+    },
+    {
+      "action": "remove",
+      "id": "0,0_oak_460",
+      "name": "oak",
+      "position": [
+        -2.807679818943143,
+        1.7694827439151704,
+        1.2277463334612548
+      ],
+      "quality": 81,
+      "scale": 0.09994703705888242,
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "add",
+      "id": "oak_log_1761235648369_p1kmu3xe3",
+      "name": "oak_log",
+      "position": [
+        -2.807679818943143,
+        1.7694827439151704,
+        1.2277463334612548
+      ],
+      "quality": 81,
+      "scale": 0.033315679019627474,
+      "chunkId": "chunk_0,0",
+      "totalResources": 9,
+      "remainingResources": 8,
+      "harvestedBy": null,
+      "harvestStartTime": null
+    },
+    {
+      "action": "remove",
+      "id": "0,0_oak_200",
+      "name": "oak",
+      "position": [
+        -5.168464803136885,
+        1.847914566290128,
+        1.324266940355301
+      ],
+      "quality": 100,
+      "scale": 0.10370806525461376,
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "add",
+      "id": "oak_log_1761236242923_1branzmnm",
+      "name": "oak_log",
+      "position": [
+        -5.168464803136885,
+        1.847914566290128,
+        1.324266940355301
+      ],
+      "quality": 100,
+      "scale": 0.03456935508487125,
+      "chunkId": "chunk_0,0",
+      "totalResources": 10,
+      "remainingResources": 8,
+      "harvestedBy": null,
+      "harvestStartTime": null
+    },
+    {
+      "action": "remove",
+      "id": "0,0_oak_150",
+      "name": "oak",
+      "position": [
+        -17.709033959545195,
+        1.7417364700649978,
+        -0.8415599353611469
+      ],
+      "quality": 68,
+      "scale": 0.0610734548419714,
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "add",
+      "id": "oak_log_1761240951261_21ubpl03b",
+      "name": "oak_log",
+      "position": [
+        -17.709033959545195,
+        1.7417364700649978,
+        -0.8415599353611469
+      ],
+      "quality": 68,
+      "scale": 0.020357818280657133,
+      "chunkId": "chunk_0,0",
+      "totalResources": 6,
+      "remainingResources": 5,
+      "harvestedBy": null,
+      "harvestStartTime": null
+    }
+  ],
+  "seed": 12345
+}

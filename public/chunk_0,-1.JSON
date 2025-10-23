@@ -1,0 +1,200 @@
+{
+  "players": [
+    {
+      "id": "client_6holt0k8vzj"
+    }
+  ],
+  "objectChanges": [
+    {
+      "action": "add",
+      "id": "construction_1761153911480_571u19g9x",
+      "name": "construction",
+      "position": [
+        0.5,
+        1.6637886052684236,
+        -2
+      ],
+      "quality": null,
+      "scale": 0.017,
+      "chunkId": "chunk_0,-1",
+      "totalResources": null,
+      "remainingResources": null,
+      "harvestedBy": null,
+      "harvestStartTime": null,
+      "isConstructionSite": true,
+      "targetStructure": "foundation",
+      "rotation": -135,
+      "requiredMaterials": {
+        "chiseledlimestone": 1
+      },
+      "materials": {},
+      "finalFoundationY": 0.5
+    },
+    {
+      "action": "remove",
+      "id": "construction_1761153911480_571u19g9x",
+      "chunkId": "chunk_0,-1"
+    },
+    {
+      "action": "add",
+      "id": "foundation_1761153921392_xiq3i35rl",
+      "name": "foundation",
+      "position": [
+        0.5,
+        0.5,
+        -2
+      ],
+      "quality": 50,
+      "scale": 0.5,
+      "chunkId": "chunk_0,-1",
+      "totalResources": null,
+      "remainingResources": null,
+      "harvestedBy": null,
+      "harvestStartTime": null,
+      "rotation": -135
+    },
+    {
+      "action": "add",
+      "id": "construction_1761153967396_twk79hgwp",
+      "name": "construction",
+      "position": [
+        0.5,
+        2.1,
+        -2
+      ],
+      "quality": null,
+      "scale": 0.017,
+      "chunkId": "chunk_0,-1",
+      "totalResources": null,
+      "remainingResources": null,
+      "harvestedBy": null,
+      "harvestStartTime": null,
+      "isConstructionSite": true,
+      "targetStructure": "crate",
+      "rotation": 135,
+      "requiredMaterials": {
+        "oakplank": 1
+      },
+      "materials": {},
+      "finalCrateY": 2.1,
+      "foundationId": "foundation_1761153921392_xiq3i35rl"
+    },
+    {
+      "action": "remove",
+      "id": "construction_1761153967396_twk79hgwp",
+      "chunkId": "chunk_0,-1"
+    },
+    {
+      "action": "add",
+      "id": "crate_1761153977397_qpfj99g2y",
+      "name": "crate",
+      "position": [
+        0.5,
+        2.1,
+        -2
+      ],
+      "quality": 50,
+      "scale": 0.5,
+      "chunkId": "chunk_0,-1",
+      "totalResources": null,
+      "remainingResources": null,
+      "harvestedBy": null,
+      "harvestStartTime": null,
+      "rotation": 135,
+      "foundationId": "foundation_1761153921392_xiq3i35rl",
+      "inventory": {
+        "items": [
+          {
+            "id": "limestone_1761156164080_9c70o2ce4",
+            "type": "limestone",
+            "x": 0,
+            "y": 1,
+            "width": 1,
+            "height": 1,
+            "rotation": 0,
+            "quality": 26,
+            "durability": 100
+          },
+          {
+            "id": "limestone_1761156198725_nbdxssngs",
+            "type": "limestone",
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1,
+            "rotation": 0,
+            "quality": 26,
+            "durability": 100
+          },
+          {
+            "id": "limestone_1761156227020_299rfljtb",
+            "type": "limestone",
+            "x": 1,
+            "y": 1,
+            "width": 1,
+            "height": 1,
+            "rotation": 0,
+            "quality": 26,
+            "durability": 100
+          },
+          {
+            "id": "test_chiseledlimestone",
+            "type": "chiseledlimestone",
+            "x": 1,
+            "y": 0,
+            "width": 1,
+            "height": 1,
+            "rotation": 0,
+            "quality": 80,
+            "durability": null
+          },
+          {
+            "id": "limestone_1761156213659_tdzwfuls2",
+            "type": "limestone",
+            "x": 1,
+            "y": 3,
+            "width": 1,
+            "height": 1,
+            "rotation": 0,
+            "quality": 26,
+            "durability": 100
+          },
+          {
+            "id": "test_chiseledlimestone",
+            "type": "chiseledlimestone",
+            "x": 0,
+            "y": 3,
+            "width": 1,
+            "height": 1,
+            "rotation": 0,
+            "quality": 80,
+            "durability": null
+          },
+          {
+            "id": "test_chiseledlimestone",
+            "type": "chiseledlimestone",
+            "x": 1,
+            "y": 2,
+            "width": 1,
+            "height": 1,
+            "rotation": 0,
+            "quality": 80,
+            "durability": null
+          },
+          {
+            "id": "test_chiseledlimestone",
+            "type": "chiseledlimestone",
+            "x": 0,
+            "y": 2,
+            "width": 1,
+            "height": 1,
+            "rotation": 0,
+            "quality": 80,
+            "durability": null
+          }
+        ]
+      }
+    }
+  ],
+  "seed": 12345
+}

@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat:*)",
+      "Bash(dir \"C:\\Users\\colli\\Desktop\\test horses\\horses\\public\\models\")",
+      "Bash(dir \"C:\\Users\\colli\\Desktop\\test horses\\horses\\public\\structures\")",
+      "Bash(powershell -Command \"Get-Content client.html | Select-Object -Last 100\")"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

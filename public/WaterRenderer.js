@@ -1,7 +1,7 @@
-// WaterRenderer.js - Hybrid Version: New GUI + Old Visual Appeal
-import * as THREE from 'three';
+// File: public/WaterRenderer.js
+// Location: C:\Users\colli\Desktop\test Horses\Horses\public\WaterRenderer.js
 
-const dat = window.dat;
+import * as THREE from 'three';
 
 // --- Simplified Water Vertex Shader (based on old version) ---
 // Replace your existing waterVertexShader with this modified version:
@@ -13,13 +13,14 @@ const waterVertexShader = `
     uniform float u_wave_frequency;
     uniform float u_wave_speed;
     uniform vec2 u_chunk_offset;
-    uniform sampler2D u_height_texture;
     uniform float u_chunk_size;
     uniform float u_water_level;
+    uniform sampler2D u_height_texture;
     uniform float u_wave_damp_min_depth;
     uniform float u_wave_damp_max_depth;
     uniform float u_deep_water_threshold;
-    
+    uniform int u_terrain_seed;
+
     varying vec2 vUv;
     varying vec3 vViewPosition;
     varying vec3 vWorldPosition;
@@ -27,13 +28,264 @@ const waterVertexShader = `
     varying float vWaveHeight;
     varying float vWaveSlope;
 
-    // Sample terrain height function (same as in fragment shader)
+    // Perlin noise implementation for GLSL
+    vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+    vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+    vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
+    vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+    vec3 fade(vec3 t) { return t*t*t*(t*(t*6.0-15.0)+10.0); }
+
+    float perlinNoise(vec3 P) {
+        vec3 Pi0 = floor(P);
+        vec3 Pi1 = Pi0 + vec3(1.0);
+        Pi0 = mod289(Pi0);
+        Pi1 = mod289(Pi1);
+        vec3 Pf0 = fract(P);
+        vec3 Pf1 = Pf0 - vec3(1.0);
+        vec4 ix = vec4(Pi0.x, Pi1.x, Pi0.x, Pi1.x);
+        vec4 iy = vec4(Pi0.yy, Pi1.yy);
+        vec4 iz0 = Pi0.zzzz;
+        vec4 iz1 = Pi1.zzzz;
+
+        vec4 ixy = permute(permute(ix) + iy);
+        vec4 ixy0 = permute(ixy + iz0);
+        vec4 ixy1 = permute(ixy + iz1);
+
+        vec4 gx0 = ixy0 * (1.0 / 7.0);
+        vec4 gy0 = fract(floor(gx0) * (1.0 / 7.0)) - 0.5;
+        gx0 = fract(gx0);
+        vec4 gz0 = vec4(0.5) - abs(gx0) - abs(gy0);
+        vec4 sz0 = step(gz0, vec4(0.0));
+        gx0 -= sz0 * (step(0.0, gx0) - 0.5);
+        gy0 -= sz0 * (step(0.0, gy0) - 0.5);
+
+        vec4 gx1 = ixy1 * (1.0 / 7.0);
+        vec4 gy1 = fract(floor(gx1) * (1.0 / 7.0)) - 0.5;
+        gx1 = fract(gx1);
+        vec4 gz1 = vec4(0.5) - abs(gx1) - abs(gy1);
+        vec4 sz1 = step(gz1, vec4(0.0));
+        gx1 -= sz1 * (step(0.0, gx1) - 0.5);
+        gy1 -= sz1 * (step(0.0, gy1) - 0.5);
+
+        vec3 g000 = vec3(gx0.x,gy0.x,gz0.x);
+        vec3 g100 = vec3(gx0.y,gy0.y,gz0.y);
+        vec3 g010 = vec3(gx0.z,gy0.z,gz0.z);
+        vec3 g110 = vec3(gx0.w,gy0.w,gz0.w);
+        vec3 g001 = vec3(gx1.x,gy1.x,gz1.x);
+        vec3 g101 = vec3(gx1.y,gy1.y,gz1.y);
+        vec3 g011 = vec3(gx1.z,gy1.z,gz1.z);
+        vec3 g111 = vec3(gx1.w,gy1.w,gz1.w);
+
+        vec4 norm0 = taylorInvSqrt(vec4(dot(g000, g000), dot(g010, g010), dot(g100, g100), dot(g110, g110)));
+        g000 *= norm0.x; g010 *= norm0.y; g100 *= norm0.z; g110 *= norm0.w;
+        vec4 norm1 = taylorInvSqrt(vec4(dot(g001, g001), dot(g011, g011), dot(g101, g101), dot(g111, g111)));
+        g001 *= norm1.x; g011 *= norm1.y; g101 *= norm1.z; g111 *= norm1.w;
+
+        float n000 = dot(g000, Pf0);
+        float n100 = dot(g100, vec3(Pf1.x, Pf0.yz));
+        float n010 = dot(g010, vec3(Pf0.x, Pf1.y, Pf0.z));
+        float n110 = dot(g110, vec3(Pf1.xy, Pf0.z));
+        float n001 = dot(g001, vec3(Pf0.xy, Pf1.z));
+        float n101 = dot(g101, vec3(Pf1.x, Pf0.y, Pf1.z));
+        float n011 = dot(g011, vec3(Pf0.x, Pf1.yz));
+        float n111 = dot(g111, Pf1);
+
+        vec3 fade_xyz = fade(Pf0);
+        vec4 n_z = mix(vec4(n000, n100, n010, n110), vec4(n001, n101, n011, n111), fade_xyz.z);
+        vec2 n_yz = mix(n_z.xy, n_z.zw, fade_xyz.y);
+        float n_xyz = mix(n_yz.x, n_yz.y, fade_xyz.x);
+        return n_xyz;
+    }
+
+    // Round coordinates for precision matching (like roundCoord in terrain.js)
+    const float FLOAT_PRECISION = 1000000.0;
+    float roundCoord(float coord) {
+        return floor(coord * FLOAT_PRECISION + 0.5) / FLOAT_PRECISION;
+    }
+
+    // ⚠️ ============================================================================
+    // ⚠️ CRITICAL SYNCHRONIZATION WARNING - TERRAIN GENERATION CODE
+    // ⚠️ ============================================================================
+    // ⚠️ This terrain generation algorithm is DUPLICATED in THREE locations:
+    // ⚠️
+    // ⚠️   1. terrain.js HeightCalculator.calculateHeight() (MAIN THREAD)
+    // ⚠️   2. terrain.js worker calculateHeight() (WEB WORKER - line ~636)
+    // ⚠️   3. WaterRenderer.js calculateTerrainHeight() (GPU VERTEX SHADER - line ~106)
+    // ⚠️   4. WaterRenderer.js calculateTerrainHeight() (GPU FRAGMENT SHADER - line ~348)
+    // ⚠️
+    // ⚠️ ANY CHANGES TO THIS ALGORITHM MUST BE MANUALLY REPLICATED TO ALL LOCATIONS!
+    // ⚠️
+    // ⚠️ This includes: base terrain, mountains, jagged detail, terrain floor, ocean, river
+    // ⚠️ ============================================================================
+    float calculateTerrainHeight(vec2 worldPos) {
+        // Round coordinates for precision (matches terrain.js roundCoord)
+        float x = roundCoord(worldPos.x);
+        float z = roundCoord(worldPos.y);
+
+        // Base terrain
+        float base = 0.0;
+        float amplitude = 1.0;
+        float frequency = 0.02;
+        for (int octave = 0; octave < 3; octave++) {
+            base += perlinNoise(vec3(x * frequency, z * frequency, 10.0 + float(octave) * 7.0)) * amplitude;
+            amplitude *= 0.5;
+            frequency *= 2.0;
+        }
+
+        // Mountain mask
+        float maskRaw = perlinNoise(vec3(x * 0.006, z * 0.006, 400.0));
+        float mask = pow((maskRaw + 1.0) * 0.5, 3.0);
+
+        // Mountains
+        float mountain = 0.0;
+        amplitude = 1.0;
+        frequency = 0.04;
+        for (int octave = 0; octave < 4; octave++) {
+            mountain += abs(perlinNoise(vec3(x * frequency, z * frequency, 500.0 + float(octave) * 11.0))) * amplitude;
+            amplitude *= 0.5;
+            frequency *= 2.0;
+        }
+        mountain *= 40.0 * mask;
+
+        float heightBeforeJagged = base + mountain;
+
+        // Jagged detail
+        float elevNorm = clamp((heightBeforeJagged + 2.0) / 25.0, 0.0, 1.0);
+        float jaggedScale = heightBeforeJagged < 1.5 ? max(0.1, (heightBeforeJagged + 0.5) / 10.0) : 1.0;
+        float jagged = perlinNoise(vec3(x * 0.8, z * 0.8, 900.0)) * 1.2 * elevNorm * jaggedScale +
+                      perlinNoise(vec3(x * 1.6, z * 1.6, 901.0)) * 0.6 * elevNorm * jaggedScale;
+
+        float height = heightBeforeJagged + jagged;
+
+        // ========== TERRAIN FLOOR START (DELETE FROM HERE TO REMOVE FLOOR) ==========
+        // Exponential compression floor to prevent water puddles while preserving variation
+        // Starts compressing at 1.9, asymptotically approaches 1.3 minimum
+        if (height < 1.9) {
+            float belowAmount = 1.9 - height;
+            float maxCompression = 0.6; // (1.9 - 1.3) maximum drop
+            float compressed = maxCompression * (1.0 - exp(-belowAmount * 0.5));
+            height = 1.9 - compressed; // Approaches 1.3 but never quite reaches it
+        }
+        // ========== TERRAIN FLOOR END (DELETE TO HERE TO REMOVE FLOOR) ==========
+
+        // ========== OCEAN GENERATION START (DELETE FROM HERE TO REMOVE OCEAN) ==========
+        // Create ocean by lowering terrain smoothly and randomly
+        // Coastline position varies between x=0 and x=20 based on z position
+        float coastlineThreshold = 10.0 + perlinNoise(vec3(z * 0.01, 777.0, 0.0)) * 10.0;
+        float transitionWidth = 8.0; // Units over which to blend from land to ocean
+
+        // Calculate distance from threshold (positive = ocean side, negative = land side)
+        float distanceFromThreshold = x - coastlineThreshold;
+
+        // Create smooth transition using smoothstep function
+        // t goes from 0 (before transition) to 1 (after transition)
+        float t = clamp((distanceFromThreshold + transitionWidth) / (transitionWidth * 2.0), 0.0, 1.0);
+        float smoothTransition = t * t * (3.0 - 2.0 * t); // Smoothstep S-curve
+
+        if (smoothTransition > 0.0) {
+            float oceanDistance = max(0.0, distanceFromThreshold);
+
+            // Reduce noise intensity as distance from coast increases (smoother deep ocean)
+            float noiseIntensity = 1.0 / (1.0 + oceanDistance * 0.05);
+
+            // Add noise for varied coastline - intensity reduces with distance
+            float coastlineNoise = perlinNoise(vec3(x * 0.02, z * 0.02, 999.0)) * 5.0 * noiseIntensity;
+            float adjustedDistance = max(0.0, oceanDistance + coastlineNoise);
+
+            // Gradually deepen as distance increases - depth noise also reduces with distance
+            float depthNoise = perlinNoise(vec3(x * 0.05, z * 0.05, 888.0)) * 2.0 * noiseIntensity;
+            float depthFactor = (adjustedDistance * 0.5) + depthNoise;
+
+            // Apply ocean effect gradually based on transition
+            height -= depthFactor * smoothTransition;
+
+            // Cap at ocean floor
+            height = max(height, -3.0);
+        }
+        // ========== OCEAN GENERATION END (DELETE TO HERE TO REMOVE OCEAN) ==========
+
+        // ========== RIVER GENERATION START (DELETE FROM HERE TO REMOVE RIVER) ==========
+        // Create rivers at random intervals along the Z-axis (every 100-300 units)
+        // Rivers run parallel to the coast, perpendicular to ocean
+
+        float riverSegmentSize = 200.0; // Average spacing between rivers
+        float riverTransitionWidth = 8.0; // Units over which to blend
+        float riverWidth = 10.0; // Distance from first bank to center (and center to far bank)
+
+        // Determine which river segment we're in
+        float riverSegment = floor(z / riverSegmentSize);
+
+        // Use segment number to generate deterministic random values for this segment
+        float segmentSeed = riverSegment * 73856093.0; // Large prime for good distribution
+        float segmentRandom = abs(sin(segmentSeed) * 43758.5453123);
+        float hasRiver = mod(segmentRandom, 1.0) > 0.3 ? 1.0 : 0.0; // 70% chance of river in this segment
+
+        if (hasRiver > 0.5) {
+            // Random offset within segment (0-100 range gives 100-300 spacing variability)
+            float riverOffsetInSegment = mod(segmentRandom * 7919.0, 1.0) * 100.0; // Use different multiplier for offset
+            float riverCenterZ = riverSegment * riverSegmentSize + riverOffsetInSegment + 10.0;
+
+            // River meanders based on x position
+            float riverMeanderOffset = perlinNoise(vec3(x * 0.01, 666.0 + riverSegment, 0.0)) * 10.0;
+            float riverThreshold = riverCenterZ + riverMeanderOffset;
+
+            // Calculate distance from river threshold
+            float riverDistanceFromThreshold = z - riverThreshold;
+
+            // River occupies z = threshold to threshold + 20 (two 10-unit banks)
+            if (riverDistanceFromThreshold >= -riverTransitionWidth && riverDistanceFromThreshold <= riverWidth * 2.0 + riverTransitionWidth) {
+                float riverDepthFactor = 0.0;
+
+                if (riverDistanceFromThreshold <= riverWidth) {
+                    // First bank (z = threshold to threshold + 10)
+                    float t = clamp((riverDistanceFromThreshold + riverTransitionWidth) / (riverTransitionWidth * 2.0), 0.0, 1.0);
+                    float smoothTransition = t * t * (3.0 - 2.0 * t);
+
+                    if (smoothTransition > 0.0) {
+                        float riverDistance = max(0.0, riverDistanceFromThreshold);
+                        float noiseIntensity = 1.0 / (1.0 + riverDistance * 0.05);
+                        float riverBankNoise = perlinNoise(vec3(x * 0.02, z * 0.02, 555.0)) * 5.0 * noiseIntensity;
+                        float adjustedRiverDistance = max(0.0, riverDistance + riverBankNoise);
+                        float riverDepthNoise = perlinNoise(vec3(x * 0.05, z * 0.05, 444.0)) * 2.0 * noiseIntensity;
+                        riverDepthFactor = ((adjustedRiverDistance * 0.5) + riverDepthNoise) * smoothTransition;
+                    }
+                } else {
+                    // Second bank (z = threshold + 10 to threshold + 20)
+                    float reversedDistance = riverWidth * 2.0 - riverDistanceFromThreshold;
+                    float t = clamp((reversedDistance + riverTransitionWidth) / (riverTransitionWidth * 2.0), 0.0, 1.0);
+                    float smoothTransition = t * t * (3.0 - 2.0 * t);
+
+                    if (smoothTransition > 0.0) {
+                        float riverDistance = max(0.0, reversedDistance);
+                        float noiseIntensity = 1.0 / (1.0 + riverDistance * 0.05);
+                        float riverBankNoise = perlinNoise(vec3(x * 0.02, z * 0.02, 555.0)) * 5.0 * noiseIntensity;
+                        float adjustedRiverDistance = max(0.0, riverDistance + riverBankNoise);
+                        float riverDepthNoise = perlinNoise(vec3(x * 0.05, z * 0.05, 444.0)) * 2.0 * noiseIntensity;
+                        riverDepthFactor = ((adjustedRiverDistance * 0.5) + riverDepthNoise) * smoothTransition;
+                    }
+                }
+
+                // Apply river effect
+                height -= riverDepthFactor;
+                height = max(height, -3.0);
+            }
+        }
+        // ========== RIVER GENERATION END (DELETE TO HERE TO REMOVE RIVER) ==========
+
+        return height;
+    }
+
     float sampleTerrainHeight(vec2 worldPos) {
-        vec2 localPos = worldPos - u_chunk_offset;
-        vec2 uv = (localPos / u_chunk_size) + 0.5;
-        uv = clamp(uv, 0.001, 0.999);
-        float heightNormalized = texture2D(u_height_texture, uv).r;
-        return mix(-10.0, 80.0, heightNormalized);
+        // Convert world position to texture coordinates
+        vec2 texCoord = (worldPos - u_chunk_offset) / u_chunk_size + 0.5;
+
+        // Sample the height texture
+        float normalizedHeight = texture2D(u_height_texture, texCoord).r;
+
+        // Convert from normalized [0,1] back to world height range
+        float minHeight = -10.0;
+        float maxHeight = 80.0;
+        return normalizedHeight * (maxHeight - minHeight) + minHeight;
     }
 
     // Simplified wave function (from old version)
@@ -52,12 +304,15 @@ const waterVertexShader = `
     void main() {
         vUv = uv;
         vec3 pos = position;
-        
-        // Apply chunk offset for wave calculations
-        vec2 worldPos = pos.xz + u_chunk_offset;
-        
+
+        // Get world position for this vertex (before wave displacement)
+        // The plane is 50x50 units centered at origin, so pos ranges from -25 to +25
+        // modelMatrix applies the chunk position (from mesh.position.set)
+        vec4 worldPosVec4 = modelMatrix * vec4(pos, 1.0);
+        vec2 worldXZ = worldPosVec4.xz;
+
         // Calculate water depth at this position
-        float terrainHeight = sampleTerrainHeight(worldPos);
+        float terrainHeight = sampleTerrainHeight(worldXZ);
         float waterDepth = u_water_level - terrainHeight;
 
         // Create depth-based wave damping factor (adjustable via GUI)
@@ -69,27 +324,27 @@ const waterVertexShader = `
 
         // Blend: shallow damping in shallow water, full waves in deep water
         float depthFactor = mix(shallowDamping, 1.0, deepWaterFactor);
-        
+
         // Simplified 3-wave system (from old version)
         float waveDisplacement = 0.0;
-        waveDisplacement += wave(worldPos, u_wave_frequency, 1.5) * 0.5;
-        waveDisplacement += wave(worldPos * 1.8, u_wave_frequency * 1.7, 2.1) * 0.3;
-        waveDisplacement += wave(worldPos * 2.3, u_wave_frequency * 0.9, 1.8) * 0.2;
-        
+        waveDisplacement += wave(worldXZ, u_wave_frequency, 1.5) * 0.5;
+        waveDisplacement += wave(worldXZ * 1.8, u_wave_frequency * 1.7, 2.1) * 0.3;
+        waveDisplacement += wave(worldXZ * 2.3, u_wave_frequency * 0.9, 1.8) * 0.2;
+
         // Apply depth-based damping to wave displacement
         pos.y += waveDisplacement * u_wave_height * depthFactor;
         vWaveHeight = waveDisplacement * depthFactor;
-        
+
         // Calculate wave slopes for foam and normal calculations (also dampened)
         float slopeX = 0.0;
         float slopeZ = 0.0;
-        slopeX += waveDerivativeX(worldPos, u_wave_frequency, 1.5) * 0.5;
-        slopeX += waveDerivativeX(worldPos * 1.8, u_wave_frequency * 1.7, 2.1) * 0.3;
-        slopeZ += waveDerivativeZ(worldPos, u_wave_frequency, 1.5) * 0.5;
-        slopeZ += waveDerivativeZ(worldPos * 1.8, u_wave_frequency * 1.7, 2.1) * 0.3;
+        slopeX += waveDerivativeX(worldXZ, u_wave_frequency, 1.5) * 0.5;
+        slopeX += waveDerivativeX(worldXZ * 1.8, u_wave_frequency * 1.7, 2.1) * 0.3;
+        slopeZ += waveDerivativeZ(worldXZ, u_wave_frequency, 1.5) * 0.5;
+        slopeZ += waveDerivativeZ(worldXZ * 1.8, u_wave_frequency * 1.7, 2.1) * 0.3;
         vWaveSlope = length(vec2(slopeX, slopeZ)) * u_wave_height * depthFactor;
-        
-        // Transform to world space
+
+        // Transform to final world space with wave displacement applied
         vec4 worldPosition = modelMatrix * vec4(pos, 1.0);
         vWorldPosition = worldPosition.xyz;
         vViewPosition = cameraPosition - worldPosition.xyz;
@@ -106,16 +361,16 @@ const waterVertexShader = `
 // --- Simplified Water Fragment Shader (based on old version) ---
 const waterFragmentShader = `
     precision mediump float;
-    
+
     uniform float u_time;
     uniform vec4 u_shallow_color;
     uniform vec4 u_deep_color;
     uniform vec4 u_foam_color;
-    uniform sampler2D u_height_texture;
     uniform sampler2D u_normal_texture;
     uniform sampler2D u_sky_reflection_texture;
     uniform sampler2D u_foam_texture;
     uniform sampler2D u_caustics_texture;
+    uniform sampler2D u_height_texture;
     uniform float u_water_level;
     uniform float u_chunk_size;
     uniform vec2 u_chunk_offset;
@@ -135,7 +390,8 @@ const waterFragmentShader = `
     uniform float u_foam_min_depth;
     uniform float u_foam_max_depth;
     uniform float u_foam_wave_influence;
-    
+    uniform int u_terrain_seed;
+
     varying vec2 vUv;
     varying vec3 vViewPosition;
     varying vec3 vWorldPosition;
@@ -143,22 +399,278 @@ const waterFragmentShader = `
     varying float vWaveHeight;
     varying float vWaveSlope;
 
-    // Sample terrain height
+    // Perlin noise implementation (same as vertex shader)
+    vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+    vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+    vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
+    vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+    vec3 fade(vec3 t) { return t*t*t*(t*(t*6.0-15.0)+10.0); }
+
+    float perlinNoise(vec3 P) {
+        vec3 Pi0 = floor(P);
+        vec3 Pi1 = Pi0 + vec3(1.0);
+        Pi0 = mod289(Pi0);
+        Pi1 = mod289(Pi1);
+        vec3 Pf0 = fract(P);
+        vec3 Pf1 = Pf0 - vec3(1.0);
+        vec4 ix = vec4(Pi0.x, Pi1.x, Pi0.x, Pi1.x);
+        vec4 iy = vec4(Pi0.yy, Pi1.yy);
+        vec4 iz0 = Pi0.zzzz;
+        vec4 iz1 = Pi1.zzzz;
+
+        vec4 ixy = permute(permute(ix) + iy);
+        vec4 ixy0 = permute(ixy + iz0);
+        vec4 ixy1 = permute(ixy + iz1);
+
+        vec4 gx0 = ixy0 * (1.0 / 7.0);
+        vec4 gy0 = fract(floor(gx0) * (1.0 / 7.0)) - 0.5;
+        gx0 = fract(gx0);
+        vec4 gz0 = vec4(0.5) - abs(gx0) - abs(gy0);
+        vec4 sz0 = step(gz0, vec4(0.0));
+        gx0 -= sz0 * (step(0.0, gx0) - 0.5);
+        gy0 -= sz0 * (step(0.0, gy0) - 0.5);
+
+        vec4 gx1 = ixy1 * (1.0 / 7.0);
+        vec4 gy1 = fract(floor(gx1) * (1.0 / 7.0)) - 0.5;
+        gx1 = fract(gx1);
+        vec4 gz1 = vec4(0.5) - abs(gx1) - abs(gy1);
+        vec4 sz1 = step(gz1, vec4(0.0));
+        gx1 -= sz1 * (step(0.0, gx1) - 0.5);
+        gy1 -= sz1 * (step(0.0, gy1) - 0.5);
+
+        vec3 g000 = vec3(gx0.x,gy0.x,gz0.x);
+        vec3 g100 = vec3(gx0.y,gy0.y,gz0.y);
+        vec3 g010 = vec3(gx0.z,gy0.z,gz0.z);
+        vec3 g110 = vec3(gx0.w,gy0.w,gz0.w);
+        vec3 g001 = vec3(gx1.x,gy1.x,gz1.x);
+        vec3 g101 = vec3(gx1.y,gy1.y,gz1.y);
+        vec3 g011 = vec3(gx1.z,gy1.z,gz1.z);
+        vec3 g111 = vec3(gx1.w,gy1.w,gz1.w);
+
+        vec4 norm0 = taylorInvSqrt(vec4(dot(g000, g000), dot(g010, g010), dot(g100, g100), dot(g110, g110)));
+        g000 *= norm0.x; g010 *= norm0.y; g100 *= norm0.z; g110 *= norm0.w;
+        vec4 norm1 = taylorInvSqrt(vec4(dot(g001, g001), dot(g011, g011), dot(g101, g101), dot(g111, g111)));
+        g001 *= norm1.x; g011 *= norm1.y; g101 *= norm1.z; g111 *= norm1.w;
+
+        float n000 = dot(g000, Pf0);
+        float n100 = dot(g100, vec3(Pf1.x, Pf0.yz));
+        float n010 = dot(g010, vec3(Pf0.x, Pf1.y, Pf0.z));
+        float n110 = dot(g110, vec3(Pf1.xy, Pf0.z));
+        float n001 = dot(g001, vec3(Pf0.xy, Pf1.z));
+        float n101 = dot(g101, vec3(Pf1.x, Pf0.y, Pf1.z));
+        float n011 = dot(g011, vec3(Pf0.x, Pf1.yz));
+        float n111 = dot(g111, Pf1);
+
+        vec3 fade_xyz = fade(Pf0);
+        vec4 n_z = mix(vec4(n000, n100, n010, n110), vec4(n001, n101, n011, n111), fade_xyz.z);
+        vec2 n_yz = mix(n_z.xy, n_z.zw, fade_xyz.y);
+        float n_xyz = mix(n_yz.x, n_yz.y, fade_xyz.x);
+        return n_xyz;
+    }
+
+    // Round coordinates for precision matching (like roundCoord in terrain.js)
+    const float FLOAT_PRECISION = 1000000.0;
+    float roundCoord(float coord) {
+        return floor(coord * FLOAT_PRECISION + 0.5) / FLOAT_PRECISION;
+    }
+
+    // ⚠️ ============================================================================
+    // ⚠️ CRITICAL SYNCHRONIZATION WARNING - TERRAIN GENERATION CODE
+    // ⚠️ ============================================================================
+    // ⚠️ This terrain generation algorithm is DUPLICATED in THREE locations:
+    // ⚠️
+    // ⚠️   1. terrain.js HeightCalculator.calculateHeight() (MAIN THREAD)
+    // ⚠️   2. terrain.js worker calculateHeight() (WEB WORKER - line ~636)
+    // ⚠️   3. WaterRenderer.js calculateTerrainHeight() (GPU VERTEX SHADER - line ~106)
+    // ⚠️   4. WaterRenderer.js calculateTerrainHeight() (GPU FRAGMENT SHADER - line ~348)
+    // ⚠️
+    // ⚠️ ANY CHANGES TO THIS ALGORITHM MUST BE MANUALLY REPLICATED TO ALL LOCATIONS!
+    // ⚠️
+    // ⚠️ This includes: base terrain, mountains, jagged detail, terrain floor, ocean, river
+    // ⚠️ ============================================================================
+    float calculateTerrainHeight(vec2 worldPos) {
+        // Round coordinates for precision (matches terrain.js roundCoord)
+        float x = roundCoord(worldPos.x);
+        float z = roundCoord(worldPos.y);
+
+        // Base terrain
+        float base = 0.0;
+        float amplitude = 1.0;
+        float frequency = 0.02;
+        for (int octave = 0; octave < 3; octave++) {
+            base += perlinNoise(vec3(x * frequency, z * frequency, 10.0 + float(octave) * 7.0)) * amplitude;
+            amplitude *= 0.5;
+            frequency *= 2.0;
+        }
+
+        // Mountain mask
+        float maskRaw = perlinNoise(vec3(x * 0.006, z * 0.006, 400.0));
+        float mask = pow((maskRaw + 1.0) * 0.5, 3.0);
+
+        // Mountains
+        float mountain = 0.0;
+        amplitude = 1.0;
+        frequency = 0.04;
+        for (int octave = 0; octave < 4; octave++) {
+            mountain += abs(perlinNoise(vec3(x * frequency, z * frequency, 500.0 + float(octave) * 11.0))) * amplitude;
+            amplitude *= 0.5;
+            frequency *= 2.0;
+        }
+        mountain *= 40.0 * mask;
+
+        float heightBeforeJagged = base + mountain;
+
+        // Jagged detail
+        float elevNorm = clamp((heightBeforeJagged + 2.0) / 25.0, 0.0, 1.0);
+        float jaggedScale = heightBeforeJagged < 1.5 ? max(0.1, (heightBeforeJagged + 0.5) / 10.0) : 1.0;
+        float jagged = perlinNoise(vec3(x * 0.8, z * 0.8, 900.0)) * 1.2 * elevNorm * jaggedScale +
+                      perlinNoise(vec3(x * 1.6, z * 1.6, 901.0)) * 0.6 * elevNorm * jaggedScale;
+
+        float height = heightBeforeJagged + jagged;
+
+        // ========== TERRAIN FLOOR START (DELETE FROM HERE TO REMOVE FLOOR) ==========
+        // Exponential compression floor to prevent water puddles while preserving variation
+        // Starts compressing at 1.9, asymptotically approaches 1.3 minimum
+        if (height < 1.9) {
+            float belowAmount = 1.9 - height;
+            float maxCompression = 0.6; // (1.9 - 1.3) maximum drop
+            float compressed = maxCompression * (1.0 - exp(-belowAmount * 0.5));
+            height = 1.9 - compressed; // Approaches 1.3 but never quite reaches it
+        }
+        // ========== TERRAIN FLOOR END (DELETE TO HERE TO REMOVE FLOOR) ==========
+
+        // ========== OCEAN GENERATION START (DELETE FROM HERE TO REMOVE OCEAN) ==========
+        // Create ocean by lowering terrain smoothly and randomly
+        // Coastline position varies between x=0 and x=20 based on z position
+        float coastlineThreshold = 10.0 + perlinNoise(vec3(z * 0.01, 777.0, 0.0)) * 10.0;
+        float transitionWidth = 8.0; // Units over which to blend from land to ocean
+
+        // Calculate distance from threshold (positive = ocean side, negative = land side)
+        float distanceFromThreshold = x - coastlineThreshold;
+
+        // Create smooth transition using smoothstep function
+        // t goes from 0 (before transition) to 1 (after transition)
+        float t = clamp((distanceFromThreshold + transitionWidth) / (transitionWidth * 2.0), 0.0, 1.0);
+        float smoothTransition = t * t * (3.0 - 2.0 * t); // Smoothstep S-curve
+
+        if (smoothTransition > 0.0) {
+            float oceanDistance = max(0.0, distanceFromThreshold);
+
+            // Reduce noise intensity as distance from coast increases (smoother deep ocean)
+            float noiseIntensity = 1.0 / (1.0 + oceanDistance * 0.05);
+
+            // Add noise for varied coastline - intensity reduces with distance
+            float coastlineNoise = perlinNoise(vec3(x * 0.02, z * 0.02, 999.0)) * 5.0 * noiseIntensity;
+            float adjustedDistance = max(0.0, oceanDistance + coastlineNoise);
+
+            // Gradually deepen as distance increases - depth noise also reduces with distance
+            float depthNoise = perlinNoise(vec3(x * 0.05, z * 0.05, 888.0)) * 2.0 * noiseIntensity;
+            float depthFactor = (adjustedDistance * 0.5) + depthNoise;
+
+            // Apply ocean effect gradually based on transition
+            height -= depthFactor * smoothTransition;
+
+            // Cap at ocean floor
+            height = max(height, -3.0);
+        }
+        // ========== OCEAN GENERATION END (DELETE TO HERE TO REMOVE OCEAN) ==========
+
+        // ========== RIVER GENERATION START (DELETE FROM HERE TO REMOVE RIVER) ==========
+        // Create rivers at random intervals along the Z-axis (every 100-300 units)
+        // Rivers run parallel to the coast, perpendicular to ocean
+
+        float riverSegmentSize = 200.0; // Average spacing between rivers
+        float riverTransitionWidth = 8.0; // Units over which to blend
+        float riverWidth = 10.0; // Distance from first bank to center (and center to far bank)
+
+        // Determine which river segment we're in
+        float riverSegment = floor(z / riverSegmentSize);
+
+        // Use segment number to generate deterministic random values for this segment
+        float segmentSeed = riverSegment * 73856093.0; // Large prime for good distribution
+        float segmentRandom = abs(sin(segmentSeed) * 43758.5453123);
+        float hasRiver = mod(segmentRandom, 1.0) > 0.3 ? 1.0 : 0.0; // 70% chance of river in this segment
+
+        if (hasRiver > 0.5) {
+            // Random offset within segment (0-100 range gives 100-300 spacing variability)
+            float riverOffsetInSegment = mod(segmentRandom * 7919.0, 1.0) * 100.0; // Use different multiplier for offset
+            float riverCenterZ = riverSegment * riverSegmentSize + riverOffsetInSegment + 10.0;
+
+            // River meanders based on x position
+            float riverMeanderOffset = perlinNoise(vec3(x * 0.01, 666.0 + riverSegment, 0.0)) * 10.0;
+            float riverThreshold = riverCenterZ + riverMeanderOffset;
+
+            // Calculate distance from river threshold
+            float riverDistanceFromThreshold = z - riverThreshold;
+
+            // River occupies z = threshold to threshold + 20 (two 10-unit banks)
+            if (riverDistanceFromThreshold >= -riverTransitionWidth && riverDistanceFromThreshold <= riverWidth * 2.0 + riverTransitionWidth) {
+                float riverDepthFactor = 0.0;
+
+                if (riverDistanceFromThreshold <= riverWidth) {
+                    // First bank (z = threshold to threshold + 10)
+                    float t = clamp((riverDistanceFromThreshold + riverTransitionWidth) / (riverTransitionWidth * 2.0), 0.0, 1.0);
+                    float smoothTransition = t * t * (3.0 - 2.0 * t);
+
+                    if (smoothTransition > 0.0) {
+                        float riverDistance = max(0.0, riverDistanceFromThreshold);
+                        float noiseIntensity = 1.0 / (1.0 + riverDistance * 0.05);
+                        float riverBankNoise = perlinNoise(vec3(x * 0.02, z * 0.02, 555.0)) * 5.0 * noiseIntensity;
+                        float adjustedRiverDistance = max(0.0, riverDistance + riverBankNoise);
+                        float riverDepthNoise = perlinNoise(vec3(x * 0.05, z * 0.05, 444.0)) * 2.0 * noiseIntensity;
+                        riverDepthFactor = ((adjustedRiverDistance * 0.5) + riverDepthNoise) * smoothTransition;
+                    }
+                } else {
+                    // Second bank (z = threshold + 10 to threshold + 20)
+                    float reversedDistance = riverWidth * 2.0 - riverDistanceFromThreshold;
+                    float t = clamp((reversedDistance + riverTransitionWidth) / (riverTransitionWidth * 2.0), 0.0, 1.0);
+                    float smoothTransition = t * t * (3.0 - 2.0 * t);
+
+                    if (smoothTransition > 0.0) {
+                        float riverDistance = max(0.0, reversedDistance);
+                        float noiseIntensity = 1.0 / (1.0 + riverDistance * 0.05);
+                        float riverBankNoise = perlinNoise(vec3(x * 0.02, z * 0.02, 555.0)) * 5.0 * noiseIntensity;
+                        float adjustedRiverDistance = max(0.0, riverDistance + riverBankNoise);
+                        float riverDepthNoise = perlinNoise(vec3(x * 0.05, z * 0.05, 444.0)) * 2.0 * noiseIntensity;
+                        riverDepthFactor = ((adjustedRiverDistance * 0.5) + riverDepthNoise) * smoothTransition;
+                    }
+                }
+
+                // Apply river effect
+                height -= riverDepthFactor;
+                height = max(height, -3.0);
+            }
+        }
+        // ========== RIVER GENERATION END (DELETE TO HERE TO REMOVE RIVER) ==========
+
+        return height;
+    }
+
     float sampleTerrainHeight(vec2 worldPos) {
-        vec2 localPos = worldPos - u_chunk_offset;
-        vec2 uv = (localPos / u_chunk_size) + 0.5;
-        uv = clamp(uv, 0.001, 0.999);
-        float heightNormalized = texture2D(u_height_texture, uv).r;
-        return mix(-10.0, 80.0, heightNormalized);
+        // Convert world position to texture coordinates
+        vec2 texCoord = (worldPos - u_chunk_offset) / u_chunk_size + 0.5;
+
+        // Sample the height texture
+        float normalizedHeight = texture2D(u_height_texture, texCoord).r;
+
+        // Convert from normalized [0,1] back to world height range
+        float minHeight = -10.0;
+        float maxHeight = 80.0;
+        return normalizedHeight * (maxHeight - minHeight) + minHeight;
     }
 
     void main() {
         // Sample terrain height and calculate depth
         float terrainHeight = sampleTerrainHeight(vWorldPosition.xz);
-        float local_depth = vWorldPosition.y - terrainHeight;
-        
-        // Discard fragments below terrain
-        if (local_depth < 0.0) discard;
+
+        // Calculate water depth: positive where water should be, negative where terrain is above water
+        float waterDepth = u_water_level - terrainHeight;
+
+        // Discard fragments where terrain is above water level
+        if (waterDepth < 0.0) discard;
+
+        // Use waterDepth for all depth-based calculations
+        float local_depth = waterDepth;
         
         // Simplified normal mapping (from old version approach)
         vec2 worldUV = vWorldPosition.xz * 0.02; // Scale world coordinates
@@ -223,9 +735,18 @@ vec2 scrolledUvC = worldUV * 15.0 * u_texture_scale + vec2(u_time * 0.0012, u_ti
         // Foam calculation - depth-based with adjustable wave influence
         float foam = 0.0;
         if (u_enable_foam) {
-            // Depth-based foam factor (adjustable via GUI)
-            float depthFoamFactor = smoothstep(u_foam_min_depth, u_foam_min_depth + 0.05, local_depth) *
-                                    (1.0 - smoothstep(u_foam_max_depth - 0.1, u_foam_max_depth, local_depth));
+            // Improved depth-based foam factor with smooth fades on BOTH sides
+            float fadeInWidth = 0.05;   // Fade in from shore
+            float fadeOutWidth = 0.15;  // Fade out toward ocean (wider for smoother transition)
+
+            // Fade IN from shore side (depth increases from min)
+            float fadeIn = smoothstep(u_foam_min_depth, u_foam_min_depth + fadeInWidth, local_depth);
+
+            // Fade OUT on ocean side (depth increases past max) - FIXED: was backwards!
+            float fadeOut = 1.0 - smoothstep(u_foam_max_depth, u_foam_max_depth + fadeOutWidth, local_depth);
+
+            // Combine both fades
+            float depthFoamFactor = fadeIn * fadeOut;
 
             // Wave slope influence (adjustable via GUI)
             float waveFoamFactor = smoothstep(0.001, 0.02, vWaveSlope);
@@ -580,7 +1101,7 @@ createDefaultHeightTexture() {
             // Wave damping controls
             u_wave_damp_min_depth: { value: 0.1 },
             u_wave_damp_max_depth: { value: 0.01 },
-            u_deep_water_threshold: { value: 0.5 },
+            u_deep_water_threshold: { value: 0.7 },
 
             // Foam controls
             u_foam_min_depth: { value: 0.0 },
@@ -601,7 +1122,8 @@ createDefaultHeightTexture() {
     }
 
     setupGUI() {
-        this.gui = new dat.GUI({ name: 'Water Controls' });
+        // GUI removed - water settings are configured in constructor
+        return;
         
         // Helper object to hold adjustable values
         this.controls = {
@@ -813,7 +1335,7 @@ createDefaultHeightTexture() {
 }
 
     generateHeightTexture(chunkX, chunkZ, heightCalculator) {
-        const size = 64;
+        const size = 128; // Higher resolution for better accuracy
         const chunkSize = 50;
         const canvas = document.createElement('canvas');
         canvas.width = canvas.height = size;
@@ -827,8 +1349,11 @@ createDefaultHeightTexture() {
         
         for (let y = 0; y < size; y++) {
             for (let x = 0; x < size; x++) {
-                const worldX = chunkX - chunkSize/2 + (x / size) * chunkSize;
-                const worldZ = chunkZ - chunkSize/2 + (y / size) * chunkSize;
+                // Calculate world coordinates matching terrain vertex positions
+                // x/size gives 0 to 1, multiply by chunkSize for full range,
+                // subtract chunkSize/2 to center at chunk position
+                const worldX = chunkX + (x / (size - 1) - 0.5) * chunkSize;
+                const worldZ = chunkZ + (y / (size - 1) - 0.5) * chunkSize;
                 
                 const height = heightCalculator.calculateHeight(worldX, worldZ);
                 const normalizedHeight = Math.max(0, Math.min(1, (height - minHeight) / heightRange));
@@ -857,29 +1382,23 @@ return texture;
     addWaterChunk(chunkX, chunkZ, heightTexture = null) {
         const key = `${chunkX},${chunkZ}`;
         if (this.waterChunks.has(key)) return;
-        
-        //console.log(`Adding hybrid water chunk at (${chunkX}, ${chunkZ})`);
-        
+
         // Use old version's geometry settings
         const geometry = new THREE.PlaneGeometry(50, 50, 100, 100);
         geometry.rotateX(-Math.PI / 2);
-        
+
         // Clone the shared material for each chunk
         const material = this.sharedMaterial.clone();
-        
+
         // Set chunk-specific uniforms
         material.uniforms.u_chunk_offset.value.set(chunkX, chunkZ);
-        
-        // Set height texture for this chunk
+
+        // Set height texture if provided
         if (heightTexture) {
             material.uniforms.u_height_texture.value = heightTexture;
             this.heightTextures.set(key, heightTexture);
-        } else if (this.terrainRenderer && this.terrainRenderer.heightCalculator) {
-            const generatedTexture = this.generateHeightTexture(chunkX, chunkZ, this.terrainRenderer.heightCalculator);
-            material.uniforms.u_height_texture.value = generatedTexture;
-            this.heightTextures.set(key, generatedTexture);
         }
-        
+
         // Create mesh
         const mesh = new THREE.Mesh(geometry, material);
         mesh.position.set(chunkX, this.waterLevel, chunkZ);

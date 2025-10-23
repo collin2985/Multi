@@ -1,0 +1,231 @@
+MESSAGE FLOW ANALYSIS - AI P2P Communication
+==============================================
+
+EXPECTED vs ACTUAL MESSAGE FLOW
+
+==== INITIALIZATION PHASE ====
+
+Expected Sequence:
+  T=0:    Create AI
+  T=10:   Broadcast AI to peers (when ready)
+  T=500:  P2P connection established
+  T=600:  Receive and create peer AI
+
+Actual Sequence:
+  T=0:    setupAIEnemy() runs
+            - Creates this.aiEnemy
+            - Calls broadcastP2P() immediately (Line 1504)
+            - broadcastP2P() checks this.peers (EMPTY)
+            - No channels open yet = message DROPPED
+
+  T=10:   broadcastP2P returns silently
+            - No error, just no peers to send to
+            - console.log says broadcast succeeded
+
+  T=500:  networkManager.connect() finally called
+            - WebSocket connects
+            - Peer discovery begins
+
+  T=1000+: First peer connects
+            - dataChannel.onopen fires (Line 491)
+            - Tries to send ai_enemy_update (Line 509)
+            - Checks this.aiEnemy on NetworkManager
+            - this.aiEnemy is UNDEFINED
+            - Condition fails, message NOT SENT
+            - No error logged
+
+  T=2000+: updateAIEnemyPosition() starts running
+            - Broadcasts ai_enemy_update with valid data
+            - Peer finally receives AI position
+            - Creates peer.aiEnemy
+
+
+==== AI OWNERSHIP HANDOFF PHASE ====
+
+Phase 1: Initial Setup
+  Player A:  this.aiEnemyOwner = this.clientId (Line 1132)
+  Result:    A owns the AI initially
+
+Phase 2: First Ownership Check (~1 second after spawn)
+  Runs:      updateAIEnemyPosition() → ownership check (Line 5291-5344)
+  Calculates: playerDistances = [A (dist=5), B (dist=20)]
+  Result:    A is closest, stays owner
+  Broadcast: ai_control_handoff: A → A (no change)
+
+Phase 3: Ownership Change - CORRECT
+  Scenario:  B moves closer to AI
+  T=5000:    updateAIEnemyPosition() runs again
+  Calculates: playerDistances = [B (dist=15), A (dist=5)]
+  Wait...    That's wrong. B is farther than A.
+  Let me recalculate:
+  Calculates: playerDistances = [A (dist=20), B (dist=5)]
+  Result:    B is closest, B should own
+  Broadcast: ai_control_handoff: A → B ✓
+  Impact:    B now controls AI
+
+Phase 4: Ownership Change - BROKEN (Dead Player)
+  Scenario:  AI shoots A, A dies
+  T=6000:    A.isDead = true
+  T=6500:    B moves to distance 20
+  T=7000:    updateAIEnemyPosition() runs
+  Calculates playerDistances:
+    - Line 5296-5300: Push A { clientId: A, distance: 0 } ← DEAD!
+    - Line 5303-5313: Push B { clientId: B, distance: 20 }
+  Sorts by distance:
+    - [A (0), B (20)]
+  Result:    newOwner = A.clientId ← DEAD PLAYER!
+  Broadcast: ai_control_handoff: B → A
+  Impact:    A now "owns" AI despite being dead
+
+
+==== AI CONTROL EXECUTION PHASE ====
+
+When A is Dead Owner:
+  A.updateAIEnemyPosition() still runs but:
+    - Line 5353: if (this.aiEnemyOwner !== this.clientId) return
+    - A.aiEnemyOwner = A.clientId ✓
+    - A.clientId = A ✓
+    - Condition passes, BUT...
+    
+  A doesn't execute AI behavior because:
+    - A is dead (this.isDead = true)
+    - Early return at line 5569: if (this.isDead) return
+    - No ai_enemy_update messages sent
+
+When B Receives Handoff:
+  B receives: { type: 'ai_control_handoff', newOwner: A.clientId }
+  B sets: this.aiEnemyOwner = A.clientId
+  B's AI ownership stuck with dead player A
+  
+  Next updateAIEnemyPosition on B:
+    - Line 5353: if (A.clientId !== B.clientId) return
+    - B skips all AI control logic
+    - AI appears frozen (last update from A)
+
+If A Goes Offline:
+  B still has: this.aiEnemyOwner = A.clientId
+  A is no longer in this.peers
+  A.clientId is now "undefined" (not a valid peer)
+  AI control is "lost"
+
+
+==== MESSAGE TYPE MAPPING ====
+
+ai_enemy_spawn:
+  Sent by:  setupAIEnemy() at T=0 (before peers ready)
+  Received: ai_enemy_spawn handler (Line 667)
+  Action:   Creates peer.aiEnemy if not exists
+  Status:   USUALLY LOST (sent too early)
+
+ai_enemy_update:
+  Sent by:  updateAIEnemyPosition() periodically
+  Sent by:  setupDataChannel() on peer connect (fails - no reference)
+  Received: ai_enemy_update handler (Line 589)
+  Action:   Creates or updates peer.aiEnemy position
+  Status:   WORKS (when owner sends updates)
+
+ai_control_handoff:
+  Sent by:  updateAIEnemyPosition() when ownership changes (Line 5333)
+  Received: ai_control_handoff handler (Line 644)
+  Action:   Updates aiEnemyOwner field
+  Status:   PROBLEMATIC (includes dead players)
+
+ai_enemy_shoot:
+  Sent by:  updateAIEnemyPosition() when AI shoots
+  Received: ai_enemy_shoot handler (Line 612)
+  Action:   Plays sound, applies damage if target is local player
+  Status:   DEPENDS on owner (if owner is dead, no shots)
+
+
+==== FAILURE TIMELINE EXAMPLE ====
+
+T=0:        Game loads on Player A's machine
+            - setupScene() creates this.aiEnemy
+            - setupAIEnemy() calls broadcastP2P() → FAILS (no peers)
+            - networkManager.connect() called
+
+T=5000:     Game loads on Player B's machine
+            - setupScene() creates this.aiEnemy
+            - setupAIEnemy() calls broadcastP2P() → FAILS (no peers yet)
+            - networkManager.connect() called
+
+T=5100:     P2P connection established between A and B
+            - A's dataChannel.onopen fires
+            - Sends player_sync ✓
+            - Tries to send ai_enemy_update but this.aiEnemy undefined ✗
+            - B's dataChannel.onopen fires
+            - Same issue
+
+T=5200:     B receives ai_enemy_update from A
+            - Creates B.peer.aiEnemy ✓
+            - Positions B's peer AI at A's AI location ✓
+
+T=5300:     A receives ai_enemy_update from B
+            - Checks if peer.aiEnemy exists (it won't)
+            - Creates A.peer.aiEnemy ✓
+            - Now both see each other's AI copies
+
+T=10000:    AI attacks A
+            - A.isDead = true
+            - A's avatar stops moving
+            - A's position frozen at attack location
+
+T=11000:    A's AI ownership check runs
+            - playerDistances = [A (distance=0), B (distance=25)]
+            - A is dead but STILL in array
+            - Sort: A (0) < B (25)
+            - newOwner = A.clientId
+            - Broadcast: ai_control_handoff { newOwner: A.clientId }
+
+T=11100:    B receives handoff
+            - Sets this.aiEnemyOwner = A.clientId
+            - A is dead and inactive
+
+T=12000:    A's updateAIEnemyPosition runs
+            - this.isDead = true (early return at line 5569)
+            - No AI update sent
+            - B's peer AI position becomes stale
+
+T=15000:    A's connection drops (respawn/leave)
+            - B still has this.aiEnemyOwner = A.clientId
+            - A.clientId no longer valid
+            - AI ownership appears "undefined"
+
+
+==== KEY DETECTION POINTS ====
+
+In Browser Console, look for:
+  - Missing: "Created AI enemy for peer X from spawn message"
+    (means ai_enemy_spawn never received)
+  
+  - Log: "Broadcasted AI enemy spawn to peers"
+    (but no peer actually receives it, sent too early)
+  
+  - Log: "Received AI control handoff from X: Y → Z"
+    where Z is a non-existent peer or dead player
+  
+  - Missing: "AI enemy shooting!" for dead players
+    (should not happen, owner is dead)
+  
+  - Mismatch: "AI control handoff: A → A" repeated
+    (means recalculation but dead player stays "closest")
+
+
+==== SUMMARY OF MESSAGE PATH PROBLEMS ====
+
+ai_enemy_spawn:
+  setupAIEnemy() → broadcastP2P() → [DROPPED, no peers ready]
+  Result: New peers never get initial spawn
+
+ai_enemy_update (on dataChannel open):
+  setupDataChannel() → if (this.aiEnemy) → [FAILS, undefined]
+  Result: No initial position sync on peer join
+
+ai_enemy_update (periodic):
+  updateAIEnemyPosition() → broadcastP2P() → [WORKS]
+  Result: Peers get updates, but only if owner is alive and controlling
+
+ai_control_handoff:
+  updateAIEnemyPosition() → broadcastP2P() → [WORKS BUT WRONG DATA]
+  Result: Hands off to dead players (no dead check)
+

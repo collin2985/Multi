@@ -1,9 +1,7 @@
+<!-- File: public/client.html -->
+<!-- Location: C:\Users\colli\Desktop\test Horses\Horses\public\client.html -->
 
-
-
-<!-- client.html -->
-
-><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -35,19 +33,35 @@
             background: #666;
             cursor: not-allowed;
         }
-        #status {
-            position: absolute;
-            bottom: 10px;
-            left: 10px;
-            background: rgba(0,0,0,0.8);
-            color: white;
-            padding: 10px;
-            border-radius: 4px;
-            font-family: monospace;
-            max-width: 500px;
-            max-height: 200px;
-            overflow-y: auto;
-            font-size: 12px;
+        #inventoryToggleBtn {
+            display: inline-block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            background: #2196F3 !important;
+            position: relative !important;
+        }
+        #inventoryToggleBtn:hover {
+            background: #1976D2 !important;
+        }
+        #inventoryToggleBtn:disabled {
+            background: #2196F3 !important;
+            opacity: 0.8 !important;
+            cursor: pointer !important;
+        }
+        #buildMenuToggleBtn {
+            display: inline-block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            background: #FF9800 !important;
+            position: relative !important;
+        }
+        #buildMenuToggleBtn:hover {
+            background: #F57C00 !important;
+        }
+        #buildMenuToggleBtn:disabled {
+            background: #FF9800 !important;
+            opacity: 0.8 !important;
+            cursor: pointer !important;
         }
         #connectionStatus {
             position: absolute;
@@ -80,7 +94,7 @@
         }
         #peerInfo {
             position: absolute;
-            top: 70px;
+            top: 90px;
             right: 10px;
             background: rgba(0,0,0,0.7);
             color: white;
@@ -90,17 +104,846 @@
             font-size: 12px;
             min-width: 200px;
         }
+        #fpsCounter {
+            position: absolute;
+            top: 50px;
+            right: 10px;
+            background: rgba(0,0,0,0.7);
+            color: #00ff00;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 14px;
+            font-weight: bold;
+            min-width: 80px;
+            text-align: center;
+        }
+        #zoomControls {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            z-index: 100;
+        }
+        #zoomControls button {
+            width: 40px;
+            height: 40px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            border: 2px solid #4CAF50;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            margin: 0;
+        }
+        #zoomControls button:hover {
+            background: rgba(76, 175, 80, 0.3);
+            border-color: #66BB6A;
+        }
+        #zoomControls button:active {
+            background: rgba(76, 175, 80, 0.5);
+        }
     </style>
 </head>
 <body>
     <div class="controls">
+<button id="inventoryToggleBtn">Backpack (I)</button>
+<button id="buildMenuToggleBtn">Build (B)</button>
+<button id="constructionInventoryBtn" style="display: none;">Construction</button>
+<button id="crateInventoryBtn" style="display: none;">Crate</button>
 <button id="addBoxBtn" disabled>Add Tree</button>
 <button id="removeBoxBtn" disabled>Remove Tree</button>
+<button id="sawPlanksBtn" disabled>Saw Planks</button>
     </div>
+
+    <div id="nearestObject">No object nearby</div>
+
+    <!-- STATUS LINES -->
+    <div id="statusLine1"></div>
+    <div id="statusLine2"></div>
+
+    <style>
+        #nearestObject {
+            position: absolute;
+            top: 100px; /* Below buttons: addBoxBtn at 10px, removeBoxBtn at ~55px */
+            left: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            min-width: 150px;
+        }
+
+        #statusLine1, #statusLine2 {
+            position: absolute;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            min-width: 150px;
+            max-width: 400px;
+            display: none; /* Hidden by default, shown when message is set */
+        }
+
+        #statusLine1 {
+            top: 150px; /* Below nearestObject */
+        }
+
+        #statusLine2 {
+            top: 180px; /* Below statusLine1 */
+            color: #ffeb3b; /* Yellow for secondary messages */
+        }
+    </style>
+
     <div id="connectionStatus" class="status-connecting">🔄 Connecting...</div>
     <div id="peerInfo">P2P Connections: 0</div>
-    <div id="status">Initializing...</div>
-    
+    <div id="fpsCounter">FPS: --</div>
+
+    <!-- Zoom Controls -->
+    <div id="zoomControls">
+        <button id="zoomOutBtn" title="Zoom Out">🔍−</button>
+        <button id="zoomInBtn" title="Zoom In">🔍+</button>
+    </div>
+
+    <!-- INVENTORY SYSTEM -->
+    <div id="inventoryOverlay" class="inventory-overlay" style="display: none;">
+        <div class="inventory-panel">
+            <div class="inventory-header">
+                <h2>Inventory</h2>
+                <button id="inventoryCloseBtn" class="inventory-close-btn">✕</button>
+            </div>
+            <div class="inventory-content-wrapper">
+                <div class="backpack-container">
+                    <div class="backpack-section-header">
+                        <h3>Backpack</h3>
+                    </div>
+                    <div class="inventory-grid-container">
+                        <div id="inventoryGrid" class="inventory-grid">
+                            <!-- 5x10 grid slots (50 total) -->
+                        </div>
+                        <div id="inventoryItems" class="inventory-items">
+                            <!-- Items positioned absolutely over grid -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CONSTRUCTION SECTION (appears when near construction site and stopped) -->
+                <div id="constructionSection" class="construction-section" style="display: none;">
+                    <div class="construction-section-header">
+                        <h3>Construction Site</h3>
+                    </div>
+                    <div class="construction-building-info">
+                        <h4>Building: <span id="constructionBuildingType">Foundation</span></h4>
+                    </div>
+                    <div class="construction-requirements">
+                        <h4>Required Materials:</h4>
+                        <div id="constructionRequirements"></div>
+                    </div>
+                    <div class="construction-slots-container">
+                        <div id="constructionSlots" class="construction-slots">
+                            <!-- Material slots will be dynamically created -->
+                        </div>
+                    </div>
+                    <button id="constructionBuildBtn" class="construction-build-btn" disabled>Build</button>
+                </div>
+
+                <!-- CRATE SECTION (appears when near crate and stopped) -->
+                <div id="crateSection" class="crate-section" style="display: none;">
+                    <div class="crate-section-header">
+                        <h3 id="crateTitle">Crate</h3>
+                    </div>
+                    <div class="crate-grid-container">
+                        <div id="crateGrid" class="crate-grid">
+                            <!-- 10x10 grid slots (100 total) -->
+                        </div>
+                        <div id="crateItems" class="crate-items">
+                            <!-- Items positioned absolutely over grid -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- INVENTORY TOOLTIP -->
+    <div id="inventoryTooltip" class="inventory-tooltip" style="display: none;">
+        <div class="tooltip-title"></div>
+        <div class="tooltip-stat">Quality: <span class="tooltip-quality"></span></div>
+        <div class="tooltip-stat">Durability: <span class="tooltip-durability"></span></div>
+    </div>
+
+    <!-- DISCARD CONFIRMATION MODAL -->
+    <div id="discardModal" class="discard-modal" style="display: none;">
+        <div class="discard-modal-content">
+            <p id="discardMessage">Are you sure you want to trash this item?</p>
+            <div class="discard-buttons">
+                <button id="discardCancel" class="discard-btn discard-cancel">Cancel</button>
+                <button id="discardConfirm" class="discard-btn discard-confirm">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- BUILD MENU SYSTEM -->
+    <div id="buildMenuOverlay" class="build-menu-overlay" style="display: none;">
+        <div class="build-menu-panel">
+            <div class="build-menu-header">
+                <h2>Build</h2>
+                <button id="buildMenuCloseBtn" class="build-menu-close-btn">✕</button>
+            </div>
+            <div class="build-menu-grid-container">
+                <div id="buildMenuGrid" class="build-menu-grid">
+                    <!-- 5x10 grid slots (50 total) -->
+                </div>
+                <div id="buildMenuStructures" class="build-menu-structures">
+                    <!-- Structures positioned absolutely over grid -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- BUILD MENU TOOLTIP -->
+    <div id="buildMenuTooltip" class="build-menu-tooltip" style="display: none;">
+        <div class="tooltip-title"></div>
+    </div>
+
+    <style>
+        /* INVENTORY STYLES */
+        .inventory-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            padding-left: 50px;
+            cursor: pointer; /* Clicking background closes menu */
+        }
+
+        .inventory-panel {
+            background: #2a2a2a;
+            cursor: default; /* Normal cursor on panel */
+            border: 3px solid #444;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+            z-index: 1010; /* Above overlay background */
+            position: relative;
+        }
+
+        .inventory-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #444;
+        }
+
+        .inventory-header h2 {
+            margin: 0;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            font-size: 24px;
+        }
+
+        .inventory-close-btn {
+            background: #d32f2f;
+            color: white;
+            border: none;
+            width: 30px;
+            height: 30px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            margin: 0;
+        }
+
+        .inventory-close-btn:hover {
+            background: #b71c1c;
+        }
+
+        .inventory-content-wrapper {
+            display: flex;
+            flex-direction: row;
+            gap: 0;
+        }
+
+        .inventory-grid-container {
+            position: relative;
+            width: fit-content;
+            flex-shrink: 0;
+        }
+
+        .inventory-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 60px);
+            grid-template-rows: repeat(10, 60px);
+            gap: 2px;
+            background: #1a1a1a;
+            padding: 2px;
+            border: 2px solid #555;
+        }
+
+        .inventory-slot {
+            width: 60px;
+            height: 60px;
+            background: #333;
+            border: 1px solid #555;
+            box-sizing: border-box;
+        }
+
+        .inventory-slot:hover {
+            background: #3a3a3a;
+            border-color: #777;
+        }
+
+        .inventory-items {
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            pointer-events: none;
+        }
+
+        .inventory-item-wrapper {
+            position: absolute;
+            pointer-events: all;
+            cursor: grab;
+        }
+
+        .inventory-item {
+            position: relative;
+            display: block;
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+
+        .inventory-item:active {
+            cursor: grabbing;
+        }
+
+        .inventory-item-wrapper.dragging {
+            opacity: 0.8;
+            z-index: 1001;
+            cursor: grabbing;
+        }
+
+        .inventory-item-wrapper.invalid-placement {
+            outline: 3px solid #ff0000;
+            outline-offset: -3px;
+        }
+
+        .inventory-item-wrapper.chisel-target {
+            outline: 5px solid #00ff00 !important;
+            outline-offset: -5px;
+            box-shadow: 0 0 15px #00ff00 !important;
+        }
+
+        /* INVENTORY TOOLTIP */
+        .inventory-tooltip {
+            position: fixed;
+            background: rgba(20, 20, 20, 0.95);
+            border: 2px solid #666;
+            border-radius: 6px;
+            padding: 10px 12px;
+            pointer-events: none;
+            z-index: 2000;
+            font-family: Arial, sans-serif;
+            min-width: 150px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.8);
+        }
+
+        .tooltip-title {
+            color: #fff;
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 6px;
+            text-transform: capitalize;
+        }
+
+        .tooltip-stat {
+            color: #ccc;
+            font-size: 12px;
+            margin: 3px 0;
+        }
+
+        .tooltip-quality,
+        .tooltip-durability {
+            font-weight: bold;
+        }
+
+        .stat-good {
+            color: #4caf50;
+        }
+
+        .stat-worn {
+            color: #ffeb3b;
+        }
+
+        .stat-poor {
+            color: #f44336;
+        }
+
+        /* DISCARD BUTTON ON ITEMS */
+        .item-discard-btn {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 20px;
+            height: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            border: 1px solid #fff;
+            border-radius: 3px;
+            color: #fff;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            pointer-events: all;
+        }
+
+        .item-discard-btn:hover {
+            background: rgba(255, 0, 0, 0.8);
+            border-color: #fff;
+        }
+
+        /* DISCARD CONFIRMATION MODAL */
+        .discard-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 3000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .discard-modal-content {
+            background: #2a2a2a;
+            border: 3px solid #666;
+            border-radius: 8px;
+            padding: 30px;
+            min-width: 300px;
+            text-align: center;
+        }
+
+        .discard-modal-content p {
+            color: #fff;
+            font-size: 16px;
+            margin: 0 0 20px 0;
+        }
+
+        .discard-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .discard-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .discard-cancel {
+            background: #666;
+            color: #fff;
+        }
+
+        .discard-cancel:hover {
+            background: #777;
+        }
+
+        .discard-confirm {
+            background: #d32f2f;
+            color: #fff;
+        }
+
+        .discard-confirm:hover {
+            background: #b71c1c;
+        }
+
+        /* BUILD MENU STYLES */
+        .build-menu-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            padding-left: 50px;
+        }
+
+        .build-menu-panel {
+            background: #2a2a2a;
+            border: 3px solid #444;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+        }
+
+        .build-menu-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #FF9800;
+        }
+
+        .build-menu-header h2 {
+            margin: 0;
+            color: #FF9800;
+            font-family: Arial, sans-serif;
+            font-size: 24px;
+        }
+
+        .build-menu-close-btn {
+            background: #d32f2f;
+            color: white;
+            border: none;
+            width: 30px;
+            height: 30px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            margin: 0;
+        }
+
+        .build-menu-close-btn:hover {
+            background: #b71c1c;
+        }
+
+        .build-menu-grid-container {
+            position: relative;
+            width: fit-content;
+        }
+
+        .build-menu-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 60px);
+            grid-template-rows: repeat(10, 60px);
+            gap: 2px;
+            background: #1a1a1a;
+            padding: 2px;
+            border: 2px solid #555;
+        }
+
+        .build-menu-slot {
+            width: 60px;
+            height: 60px;
+            background: #333;
+            border: 1px solid #555;
+            box-sizing: border-box;
+        }
+
+        .build-menu-slot:hover {
+            background: #3a3a3a;
+            border-color: #777;
+        }
+
+        .build-menu-structures {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            pointer-events: none;
+        }
+
+        .build-menu-structure-wrapper {
+            position: absolute;
+            pointer-events: all;
+            cursor: pointer;
+        }
+
+        .build-menu-structure-wrapper:hover {
+            filter: brightness(1.2);
+        }
+
+        .build-menu-structure {
+            position: relative;
+            display: block;
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+
+        /* BUILD MENU TOOLTIP */
+        .build-menu-tooltip {
+            position: fixed;
+            background: rgba(20, 20, 20, 0.95);
+            border: 2px solid #FF9800;
+            border-radius: 6px;
+            padding: 10px 12px;
+            pointer-events: none;
+            z-index: 2000;
+            font-family: Arial, sans-serif;
+            min-width: 150px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.8);
+        }
+
+        .build-menu-tooltip .tooltip-title {
+            color: #FF9800;
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 6px;
+        }
+
+        /* BACKPACK CONTAINER */
+        .backpack-container {
+            flex-shrink: 0;
+        }
+
+        /* BACKPACK SECTION HEADER */
+        .backpack-section-header {
+            margin-bottom: 15px;
+        }
+
+        .backpack-section-header h3 {
+            color: #2196F3;
+            margin: 0;
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        /* CONSTRUCTION SECTION (integrated into backpack) */
+        .construction-section {
+            margin-left: 20px;
+            padding-left: 20px;
+            border-left: 3px solid #4CAF50;
+            transition: all 0.3s ease;
+            min-width: 350px;
+            max-width: 450px;
+            flex-shrink: 0;
+        }
+
+        .construction-section-header {
+            margin-bottom: 10px;
+        }
+
+        .construction-section-header h3 {
+            color: #4CAF50;
+            margin: 0;
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        .construction-building-info {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: rgba(76, 175, 80, 0.2);
+            border-radius: 4px;
+            border-left: 4px solid #4CAF50;
+        }
+
+        .construction-building-info h3,
+        .construction-building-info h4 {
+            color: #fff;
+            font-size: 16px;
+            margin: 0;
+        }
+
+        .construction-building-info span {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+
+        .construction-requirements {
+            margin-bottom: 20px;
+        }
+
+        .construction-requirements h3,
+        .construction-requirements h4 {
+            color: #4CAF50;
+            font-size: 16px;
+            margin-bottom: 10px;
+            margin-top: 0;
+        }
+
+        #constructionRequirements {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .construction-slots-container {
+            margin-bottom: 20px;
+        }
+
+        .construction-slots {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 4px;
+            min-height: 80px;
+        }
+
+        .construction-slot {
+            width: 60px;
+            height: 60px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid #555;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .construction-slot.filled {
+            border-color: #4CAF50;
+            background: rgba(76, 175, 80, 0.2);
+        }
+
+        .construction-slot-label {
+            position: absolute;
+            bottom: -20px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 10px;
+            color: #aaa;
+        }
+
+        .construction-build-btn {
+            width: 100%;
+            padding: 12px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .construction-build-btn:hover:not(:disabled) {
+            background: #45a049;
+        }
+
+        .construction-build-btn:disabled {
+            background: #555;
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        /* CRATE SECTION (integrated into backpack) */
+        .crate-section {
+            margin-left: 20px;
+            padding-left: 20px;
+            border-left: 3px solid #FF9800;
+            transition: all 0.3s ease;
+            flex-shrink: 0;
+        }
+
+        .crate-section-header {
+            margin-bottom: 15px;
+        }
+
+        .crate-section-header h3 {
+            color: #FF9800;
+            margin: 0;
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        .crate-grid-container {
+            position: relative;
+            width: fit-content;
+            flex-shrink: 0;
+        }
+
+        .crate-grid {
+            display: grid;
+            /* Grid template set dynamically via JS based on window size */
+            background: #1a1a1a;
+            padding: 2px;
+            border-radius: 4px;
+            overflow-y: auto;
+        }
+
+        .crate-slot {
+            /* Size set dynamically via JS based on window size */
+            background: #2a2a2a;
+            border: 1px solid #444;
+            border-radius: 2px;
+        }
+
+        .crate-slot:hover {
+            background: #3a3a3a;
+            border-color: #777;
+        }
+
+        .crate-items {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            pointer-events: none;
+        }
+
+        .crate-item {
+            position: absolute;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            pointer-events: auto;
+            cursor: grab;
+            border: 2px solid transparent;
+            border-radius: 2px;
+            box-sizing: border-box;
+        }
+
+        .crate-item:hover {
+            border-color: #FF9800;
+        }
+
+        .crate-item.dragging {
+            opacity: 0.5;
+            cursor: grabbing;
+        }
+    </style>
+
     <script type="importmap">
         {
           "imports": {
@@ -109,7 +952,6 @@
           }
         }
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/dat.gui/build/dat.gui.min.js"></script>
     <script type="module" src="./game.js"></script>
 </body>
 </html>

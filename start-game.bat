@@ -28,8 +28,7 @@ echo.
 echo Waiting for servers to start...
 timeout /t 3 /nobreak > nul
 
-echo Opening game in browser...
-start http://localhost:8000/public/client.html
+
 
 echo.
 echo Game servers started! You can close this window.

@@ -1,0 +1,182 @@
+{
+  "players": [
+    {
+      "id": "client_gll4kl6908"
+    }
+  ],
+  "objectChanges": [
+    {
+      "action": "add",
+      "id": "construction_1761166286782_wd1twicod",
+      "name": "construction",
+      "position": [
+        -1,
+        1.6177590581568877,
+        0
+      ],
+      "quality": null,
+      "scale": 0.017,
+      "chunkId": "chunk_-1,0",
+      "totalResources": null,
+      "remainingResources": null,
+      "harvestedBy": null,
+      "harvestStartTime": null,
+      "isConstructionSite": true,
+      "targetStructure": "outpost",
+      "rotation": 150,
+      "requiredMaterials": {
+        "oakplank": 1
+      },
+      "materials": {},
+      "finalFoundationY": 2
+    },
+    {
+      "action": "remove",
+      "id": "construction_1761166286782_wd1twicod",
+      "chunkId": "chunk_-1,0"
+    },
+    {
+      "action": "remove",
+      "id": "outpost_1761166317587_wf69w0etx",
+      "name": "outpost",
+      "position": [
+        -1,
+        2,
+        0
+      ],
+      "quality": 50,
+      "scale": 0.5,
+      "chunkId": "chunk_-1,0"
+    },
+    {
+      "action": "add",
+      "id": "construction_1761166876673_hw4ho3avj",
+      "name": "construction",
+      "position": [
+        -1.5,
+        1.644219311636592,
+        0
+      ],
+      "quality": null,
+      "scale": 0.017,
+      "chunkId": "chunk_-1,0",
+      "totalResources": null,
+      "remainingResources": null,
+      "harvestedBy": null,
+      "harvestStartTime": null,
+      "isConstructionSite": true,
+      "targetStructure": "outpost",
+      "rotation": 30,
+      "requiredMaterials": {
+        "oakplank": 1
+      },
+      "materials": {},
+      "finalFoundationY": 2
+    },
+    {
+      "action": "remove",
+      "id": "construction_1761166876673_hw4ho3avj",
+      "chunkId": "chunk_-1,0"
+    },
+    {
+      "action": "remove",
+      "id": "outpost_1761166889400_ttt0osncx",
+      "name": "outpost",
+      "position": [
+        -1.5,
+        2,
+        0
+      ],
+      "quality": 50,
+      "scale": 0.5,
+      "chunkId": "chunk_-1,0"
+    },
+    {
+      "action": "add",
+      "id": "construction_1761211820965_gl46xizo9",
+      "name": "construction",
+      "position": [
+        -5,
+        1.7066630047444453,
+        0
+      ],
+      "quality": null,
+      "scale": 0.017,
+      "chunkId": "chunk_-1,0",
+      "totalResources": null,
+      "remainingResources": null,
+      "harvestedBy": null,
+      "harvestStartTime": null,
+      "isConstructionSite": true,
+      "targetStructure": "foundationroundcorner",
+      "rotation": 0,
+      "requiredMaterials": {
+        "chiseledlimestone": 1
+      },
+      "materials": {},
+      "finalFoundationY": 1
+    },
+    {
+      "action": "remove",
+      "id": "construction_1761211820965_gl46xizo9",
+      "chunkId": "chunk_-1,0"
+    },
+    {
+      "action": "remove",
+      "id": "foundationroundcorner_1761211842844_z37025bj5",
+      "name": "foundationroundcorner",
+      "position": [
+        -5,
+        1,
+        0
+      ],
+      "quality": 50,
+      "scale": 0.5,
+      "chunkId": "chunk_-1,0"
+    },
+    {
+      "action": "add",
+      "id": "construction_1761235612189_ijx7aaxf2",
+      "name": "construction",
+      "position": [
+        -1,
+        1.6573173979894409,
+        2.5
+      ],
+      "quality": null,
+      "scale": 0.017,
+      "chunkId": "chunk_-1,0",
+      "totalResources": null,
+      "remainingResources": null,
+      "harvestedBy": null,
+      "harvestStartTime": null,
+      "isConstructionSite": true,
+      "targetStructure": "tent",
+      "rotation": -75,
+      "requiredMaterials": {
+        "oakplank": 1
+      },
+      "materials": {},
+      "finalFoundationY": 2
+    },
+    {
+      "action": "remove",
+      "id": "construction_1761235612189_ijx7aaxf2",
+      "chunkId": "chunk_-1,0"
+    },
+    {
+      "action": "remove",
+      "id": "tent_1761235672468_7482khz5n",
+      "name": "tent",
+      "position": [
+        -1,
+        2,
+        2.5
+      ],
+      "quality": 50,
+      "scale": 0.5,
+      "chunkId": "chunk_-1,0"
+    }
+  ],
+  "seed": 12345
+}

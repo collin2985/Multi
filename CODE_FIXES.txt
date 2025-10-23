@@ -1,0 +1,122 @@
+CRITICAL FIXES SUMMARY
+======================
+
+FIX #1: Add Dead Player Check to Ownership (MOST CRITICAL)
+Location: game.js lines 5295-5313
+
+Change from:
+  const playerDistances = [];
+  playerDistances.push({ clientId: this.clientId, distance: localDist, isLocal: true });
+  this.networkManager.avatars.forEach((avatar, peerId) => {
+    playerDistances.push({ clientId: peerId, distance: peerDist, isLocal: false });
+  });
+
+Change to:
+  const playerDistances = [];
+  if (!this.isDead) {  // ADD THIS CHECK
+    playerDistances.push({ clientId: this.clientId, distance: localDist, isLocal: true });
+  }
+  this.networkManager.avatars.forEach((avatar, peerId) => {
+    if (!avatar.userData.isDead) {  // ADD THIS CHECK
+      playerDistances.push({ clientId: peerId, distance: peerDist, isLocal: false });
+    }
+  });
+
+Also add after line 5322 (after sort):
+  if (playerDistances.length === 0) {
+    console.warn('No active players for AI ownership');
+    return;
+  }
+
+
+FIX #2: Add AI Reference Method to NetworkManager
+Location: game.js, NetworkManager class (line ~365)
+
+Add this method:
+  setAIEnemy(aiEnemy) {
+    this.aiEnemy = aiEnemy;
+  }
+
+Add property in constructor (line ~353):
+  this.aiEnemy = null;
+
+
+FIX #3: Call setAIEnemy After Setup
+Location: game.js, line ~1276
+
+Change from:
+  this.setupPlayerModel();
+  this.setupAIEnemy();
+  this.initializeInventory();
+
+Change to:
+  this.setupPlayerModel();
+  this.setupAIEnemy();
+  this.networkManager.setAIEnemy(this.aiEnemy);  // ADD THIS
+  this.initializeInventory();
+
+
+FIX #4: Update setupDataChannel to Use GameState Reference
+Location: game.js line 509
+
+Change from:
+  if (this.aiEnemy) {
+
+Change to:
+  if (this.gameState && this.gameState.aiEnemy) {
+
+And change references:
+  this.gameState.aiEnemy.position.toArray()
+  this.gameState.aiEnemyMoving
+
+
+FIX #5 (Optional): Move AI Spawn Broadcast
+Location: game.js
+
+Remove from setupAIEnemy() (lines 1504-1511):
+  this.networkManager.broadcastP2P({
+    type: 'ai_enemy_spawn',
+    payload: { ... }
+  });
+
+Add to setupDataChannel (after player_sync, line ~520):
+  if (this.gameState && this.gameState.aiEnemy) {
+    const aiSpawnMessage = {
+      type: 'ai_enemy_spawn',
+      payload: {
+        position: this.gameState.aiEnemy.position.toArray(),
+        moving: this.gameState.aiEnemyMoving
+      }
+    };
+    dataChannel.send(JSON.stringify(aiSpawnMessage));
+  }
+
+
+WHY THESE FIXES WORK:
+=====================
+
+Fix #1: Dead players stay at death position (distance 0)
+  - Without check, closest dead player gets ownership
+  - With check, only living players included in calculation
+  - Prevents handoff to inactive players
+
+Fix #2 & #3: NetworkManager needs AI reference
+  - Current code checks this.aiEnemy which is always undefined
+  - setupDataChannel can't send initial AI position
+  - Peer initialization depends on this fallback
+
+Fix #4: Use gameState reference alternative
+  - If not using setAIEnemy(), access via gameState reference
+  - Either approach works, but setAIEnemy() is cleaner
+
+Fix #5: Timing issue
+  - Broadcast at T=0 when no peers ready = message lost
+  - Send on dataChannel.onopen = guaranteed to work
+  - New peers get explicit spawn before update stream
+
+
+IMPLEMENTATION PRIORITY:
+1. Fix #1 (dead player filter) - CRITICAL
+2. Fix #2 & #3 (AI reference) - CRITICAL
+3. Fix #4 (fallback reference) - if not doing #2&#3
+4. Fix #5 (broadcast timing) - OPTIONAL, nice to have
