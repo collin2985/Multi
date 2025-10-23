@@ -31,7 +31,8 @@ export class AIEnemy {
         this.moving = false;
         this.speed = 0.0003; // Slightly slower than player
         this.rotationSpeed = 0.003;
-        this.stopDistance = 2.5;
+        this.pursuitRange = 15; // Only pursue within this range
+        this.stopDistance = 9; // Stop and shoot at this distance
         this.lastRotationUpdateTime = 0;
         this.rotationUpdateInterval = 1000;
         this.targetRotation = 0;
@@ -313,8 +314,8 @@ export class AIEnemy {
         const shootingRange = this.calculateShootingRange(this.enemy.position.y, this.target.y);
         const withinShootingRange = distance <= shootingRange;
 
-        // Set combat stance if within 15 units
-        this.inCombatStance = distance <= 15;
+        // Set combat stance if within pursuit range
+        this.inCombatStance = distance <= this.pursuitRange;
 
         // Check if currently in shooting pause
         const inShootingPause = currentTime < this.shootingPauseEndTime;
@@ -322,7 +323,8 @@ export class AIEnemy {
         // Track previous moving state for P2P sync
         const wasMoving = this.moving;
 
-        if (distance > this.stopDistance && !inShootingPause) {
+        // Only move if within pursuit range, beyond stop distance, and not in shooting pause
+        if (distance <= this.pursuitRange && distance > this.stopDistance && !inShootingPause) {
             // Move towards target
             const moveX = (dx / distance) * this.speed * deltaTime;
             const moveZ = (dz / distance) * this.speed * deltaTime;
