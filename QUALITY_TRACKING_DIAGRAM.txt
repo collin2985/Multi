@@ -1,0 +1,209 @@
+QUALITY TRACKING VISUAL DIAGRAMS
+=================================
+
+DIAGRAM 1: Where Quality Goes in Material Addition
+===================================================
+
+Player drags limestone (quality 95) to construction site
+                    |
+                    v
+_tryDropOnConstruction() called
+                    |
+        +-----------+-----------+
+        |                       |
+        v                       v
+    QUANTITY TRACKING      QUALITY TRACKING
+    (line 990-991)         (line 994-998)
+        |                       |
+        v                       v
+    materials                materialItems
+    {limestone: 1}         [{type: 'limestone', quality: 95}]
+        |                       |
+        +-------+-------+-------+
+                |
+                v
+            RE-RENDER UI
+                |
+                v
+        CLIENT-SIDE ONLY
+        (NOT SENT TO SERVER)
+
+
+DIAGRAM 2: The Communication Problem
+=====================================
+
+CLIENT                              SERVER
+
+Captures quality                    [waiting for data]
+        |
+        v
+Stores in materialItems
+        |
+        v
+Sends update_construction_materials
+message (LINE 271 BuildingSystem.js)
+        |
+        |    payload: {materials: {limestone: 1}}
+        |    NOTE: no quality!
+        |
+        +--------->  [ERROR] Unknown message type!
+                     
+                     No handler exists (server.js 44-124)
+                     No case for 'update_construction_materials'
+                     Message is ignored
+                     
+                     Quality data is LOST
+                     |
+                     v
+                     Uses hardcoded quality = 50
+
+
+DIAGRAM 3: Quality Calculation Bug
+===================================
+
+Input materials:   limestone x3 (quality: 95, 75, 60)
+
+Server calculation (line 287-292):
+  for each material:
+    totalQuality += 50 * quantity
+    
+  totalQuality = 50 * 3 = 150
+  structureQuality = 150 / 3 = 50
+
+Should be:  (95 + 75 + 60) / 3 = 76.67
+Actually:   (50 + 50 + 50) / 3 = 50
+Error:      -26.67 points lost
+
+
+DIAGRAM 4: File Dependencies
+==============================
+
+server.js
+  |
+  +---> No case for 'update_construction_materials'
+        (lines 44-124 in switch statement)
+  
+server/MessageHandlers.js
+  |
+  +---> handlePlaceConstructionSite() - line 131
+  |     Creates materials: {} (qty only)
+  |
+  +---> handleBuildConstruction() - line 258
+        Uses hardcoded quality at line 288
+        
+public/ui/InventoryUI.js
+  |
+  +---> _tryDropOnConstruction() - line 948
+  |     Captures quality at line 997
+  |     Only sends quantity to server
+  
+public/systems/BuildingSystem.js
+  |
+  +---> addMaterialToConstruction() - line 245
+        Tries to sync at line 271 but no handler
+
+
+DIAGRAM 5: Data Structure Problem
+==================================
+
+CURRENT (Server):
+  materials: {
+    limestone: 5,        <-- just a number!
+    oakplank: 2
+  }
+
+NEEDED (Server):
+  materials: {
+    limestone: {
+      quantity: 5,
+      totalQuality: 415  <-- or qualityAverage: 83
+    },
+    oakplank: {
+      quantity: 2,
+      totalQuality: 98
+    }
+  }
+
+TEMPORARY (Client only):
+  materialItems: {
+    limestone: [
+      {type: 'limestone', quality: 95},
+      {type: 'limestone', quality: 75},
+      {type: 'limestone', quality: 75},
+      {type: 'limestone', quality: 65},
+      {type: 'limestone', quality: 70}
+    ]
+  }
+  NOTE: This is NEVER sent to server!
+
+
+DIAGRAM 6: Complete Message Flow
+=================================
+
+CLIENT SIDE:
+  Player adds limestone
+       |
+       v
+  Capture: {type: 'limestone', quality: 95}
+       |
+       v
+  Store in: userData.materialItems['limestone'].push(...)
+       |
+       v
+  Update count: userData.materials['limestone'] = 5
+       |
+       v
+  Attempt sync:
+  networkManager.sendMessage('update_construction_materials', {
+    constructionId: '...',
+    materials: {limestone: 5}  <-- NO QUALITY!
+  })
+       |
+       v
+SERVER SIDE:
+  Receive message
+       |
+       v
+  [ERROR] Unknown message type
+       |
+       v
+  Message logged and ignored
+       |
+       v
+  When construction completes:
+  
+  Read: materials = {limestone: 5}
+       |
+       v
+  Calculate: totalQuality = 50 * 5 = 250
+             structureQuality = 50
+       |
+       v
+  [WRONG] Actual quality was average of 83, but we got 50
+
+
+DIAGRAM 7: Fix Locations (What to Change)
+===========================================
+
+FILE 1: server.js (lines 44-124)
+  ACTION: Add case for 'update_construction_materials'
+  EXAMPLE:
+    case 'update_construction_materials':
+        messageHandlers.handleUpdateConstructionMaterials(payload);
+        break;
+
+FILE 2: server/MessageHandlers.js (line 227)
+  ACTION: Change materials structure from {qty} to {qty, quality}
+  FROM: materials: {}
+  TO:   materials: {}  (with quality data inside)
+
+FILE 3: server/MessageHandlers.js (line 288)
+  ACTION: Replace hardcoded 50 with actual quality
+  FROM: totalQuality += 50 * quantity;
+  TO:   totalQuality += materialQuality * quantity;
+
+FILE 4: public/systems/BuildingSystem.js (line 274)
+  ACTION: Include quality data in update message
+  FROM: materials: current
+  TO:   materials: current, materialItems: currentItems
+

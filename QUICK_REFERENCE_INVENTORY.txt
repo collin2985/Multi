@@ -1,0 +1,258 @@
+QUICK REFERENCE - INVENTORY SYSTEM
+===================================
+
+FILE LOCATIONS
+==============
+
+Client-side Inventory:
+  Core Logic: public/player/PlayerInventory.js (232 lines)
+  UI Display: public/ui/InventoryUI.js (1468 lines)
+  UI Helpers: public/ui/GridUIHelpers.js
+  Message Handling: public/network/MessageRouter.js
+
+Server-side Inventory:
+  Message Handlers: server/MessageHandlers.js
+  Persistence: server/ChunkManager.js
+  Data Storage: ./public/chunk_X,Y.JSON
+
+Configuration:
+  public/config.js:
+    - INVENTORY (lines 31-51)
+    - CONSTRUCTION.STRUCTURE_PROPERTIES (lines 354-372)
+
+DATA STRUCTURES
+===============
+
+Item Format:
+{
+    id: "type_timestamp_random",
+    type: "limestone",
+    x: 0, y: 0,              // grid position
+    width: 1, height: 1,     // grid size
+    rotation: 0,             // 0 or 90
+    quality: 75,             // 0-100
+    durability: 100          // tools only
+}
+
+Inventory Format:
+{
+    rows: 10,
+    cols: 5,
+    items: [...],
+    slotSize: 60,
+    gap: 2
+}
+
+Chunk Storage Format (server):
+{
+    "objectChanges": [
+        {
+            "action": "add",
+            "id": "crate_123",
+            "inventory": {
+                "rows": 10,
+                "cols": 10,
+                "items": [...]
+            }
+        }
+    ]
+}
+
+INVENTORY SIZES
+===============
+Backpack: 10 rows x 5 cols = 50 slots
+Crate: 10 x 10 = 100 slots
+House: 10 x 10 = 100 slots
+Garden: 2 x 2 = 4 slots
+Market: 10 x 10 = 100 slots
+
+KEY FUNCTIONS
+==============
+
+PlayerInventory.js:
+  addItem(item) - Add to grid
+  removeItem(itemId) - Remove by ID
+  isPositionFree(x, y, w, h) - Check collision
+  serialize() / deserialize() - Save/load
+
+InventoryUI.js:
+  renderInventory() - Draw backpack
+  renderCrateInventory() - Draw storage
+  renderBackpackItem(item, container) - Render single item
+  onMouseUp(event) - Handle item placement
+  _handleCrateModePlacement(item, source) - Transfer between inventories
+  showTooltip(event, item) - Display item info
+
+GridUIHelpers.js:
+  calculateGridSize(rows) - Compute slot pixel size
+  gridToPixel(x, y, slotSize, gap) - Convert grid to pixels
+  pixelToGrid(x, y, slotSize, gap) - Convert pixels to grid
+  calculateItemSize(w, h, slotSize, gap) - Item display size
+
+NETWORK MESSAGES
+================
+
+Client sends:
+  get_crate_inventory {crateId, chunkId}
+  save_crate_inventory {crateId, chunkId, inventory}
+
+Server responds:
+  crate_inventory_response {crateId, inventory}
+  crate_inventory_updated {crateId, inventory}
+
+Server handlers:
+  server/MessageHandlers.js:
+    handleGetCrateInventory(ws, payload)
+    handleSaveCrateInventory(payload)
+
+Client handlers:
+  public/network/MessageRouter.js:
+    handleCrateInventoryResponse(payload)
+    handleCrateInventoryUpdated(payload)
+
+ITEM TYPES & SIZES
+==================
+
+1x1 Items:
+  limestone, sandstone
+  chiseledlimestone, chiseledsandstone
+  hammer, chisel
+
+1x2 Items:
+  axe, saw, pickaxe
+
+1x4 Items:
+  oakfirewood, pinefirewood, firfirewood, cypressfirewood
+
+2x4 Items:
+  oakplank, pineplank, firplank, cypressplank
+
+Consumables (size varies):
+  seeds, apple, vegetables
+
+ITEM QUALITY & DURABILITY
+==========================
+
+Quality (0-100):
+  Affects durability loss
+  Higher quality = less durability loss
+  Formula: durabilityLoss = Math.ceil(100 / quality)
+
+Durability (tools only):
+  Starts at 100
+  Decreases per use:
+    - Axe: -10
+    - Saw: -10
+    - Pickaxe: -10
+    - Hammer: -5
+    - Chisel: -Math.ceil(100/stoneQuality)
+
+COLOR CODING:
+  Green (>= 80): Good quality
+  Yellow (>= 40): Medium quality
+  Red (< 40): Poor quality
+
+DRAG & DROP MECHANICS
+=====================
+
+Start: onItemMouseDown()
+  - Save original position
+  - Store mouse position
+  - Setup global listeners
+
+During: onMouseMove()
+  - Update mouse coordinates
+  - Determine target (backpack or crate)
+  - Update ghost item position
+  - Re-render inventory
+
+Rotation: Press 'R'
+  - Toggle rotation 0 <-> 90
+  - Update image (use Rtype.png for rotated)
+
+End: onMouseUp()
+  - Validate new position
+  - If valid: update item x/y
+  - If invalid: restore position
+  - Mark crate dirty if moved
+  - Clean up listeners
+  - Re-render
+
+PERSISTENCE
+============
+
+Client-side:
+  Backpack: gameState.inventory (in-memory only)
+  Crate: crate.userData.inventory (cached after load)
+
+Server-side:
+  Format: ./public/chunk_X,Y.JSON
+  Memory cache: ChunkManager.chunkCache (Map)
+  Load/Save: ChunkManager.loadChunk() / saveChunk()
+
+Auto-save: When player closes inventory (dirty flag)
+
+MARKET SYSTEM STATUS
+====================
+
+What Already Works:
+  - 10x10 inventory grid
+  - Proximity detection (5 units)
+  - UI rendering ("Market" title)
+  - Network messages (get/save)
+  - Persistence to disk
+  - Same as houses and crates
+
+What's Missing for Trading:
+  - buy_item message
+  - sell_item message
+  - Price system
+  - Currency tracking
+  - Transaction handlers
+  - NPC concept
+
+To Implement Trading:
+  1. Add currency to gameState
+  2. Add prices to config.js
+  3. Create buy/sell messages
+  4. Add server handlers
+  5. Add UI panel
+  6. Implement validation
+
+PROXIMITY DETECTION
+===================
+
+Range: CONFIG.PLAYER.CRATE_RANGE = 5 units
+Tracked by: gameState.nearestCrate
+Updated by: checkProximityToObjects() in game.js
+
+Used for:
+  - Show/hide crate inventory section
+  - Enable/disable item transfer
+  - Construction site interaction
+
+TESTING CHECKLIST
+=================
+
+Backpack:
+  [ ] Add item via drag
+  [ ] Move item via drag
+  [ ] Rotate item with 'R'
+  [ ] Discard item with X button
+  [ ] Item persists (in-memory)
+
+Crate:
+  [ ] Approach crate within 5 units
+  [ ] Inventory loads from server
+  [ ] Drag item from backpack to crate
+  [ ] Drag item from crate to backpack
+  [ ] Close inventory, reopen - items still there
+  [ ] Another player sees updated crate inventory
+
+Market:
+  [ ] Approach market within 5 units
+  [ ] Market inventory loads (same as crate)
+  [ ] Can view/add/remove items like crate
+  [ ] Title shows "Market"
+  [ ] Inventory saves on close
+

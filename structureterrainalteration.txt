@@ -1,0 +1,673 @@
+==================================================================
+STRUCTURE TERRAIN ALTERATION SYSTEM - DESIGN DOCUMENT
+==================================================================
+
+Author: Claude
+Date: November 2025
+Version: 1.0
+
+==================================================================
+EXECUTIVE SUMMARY
+==================================================================
+
+This document outlines a comprehensive design for implementing automatic terrain alteration around placed structures. When a structure is placed, the terrain within a defined radius will smoothly morph to create a flat foundation at the structure's base level, with gradient transitions back to natural terrain.
+
+Key Goals:
+- Automatic terrain flattening under structures
+- Smooth gradient transitions from flat area to natural terrain
+- Handle overlapping structure zones
+- Maintain performance with dynamic mesh updates
+- Ensure client-server synchronization
+
+==================================================================
+CURRENT ARCHITECTURE ANALYSIS
+==================================================================
+
+TERRAIN SYSTEM OVERVIEW
+----------------------
+- Location: public/terrain.js
+- Generation: Purely client-side using Perlin noise
+- Height Calculation: On-demand via HeightCalculator.calculateHeight()
+- Caching: Uses Map with 20,000 entry limit
+- Mesh: Generated per chunk (50x50 units, 100x100 segments)
+- THREE SYNCHRONIZED LOCATIONS:
+  1. terrain.js HeightCalculator (main thread)
+  2. terrain.js worker calculateHeight (web worker)
+  3. WaterRenderer.js calculateTerrainHeight (GPU shader)
+
+SERVER RESPONSIBILITIES
+-----------------------
+- Location: server/MessageHandlers.js, server/ChunkManager.js
+- Stores: Object changes only (add/remove actions)
+- Does NOT store: Terrain height data
+- Chunk files: JSON with players[] and objectChanges[]
+- Structure placement: Validates and broadcasts to clients
+
+CLIENT RESPONSIBILITIES
+-----------------------
+- Terrain generation from seed
+- Structure rendering and preview
+- Physics collision detection
+- Height calculations for placement
+- Visual mesh updates
+
+PHYSICS SYSTEM
+--------------
+- Engine: Rapier3D
+- Location: public/core/PhysicsManager.js
+- Collision shapes: Cylinders (trees/rocks), Cuboids (structures)
+- Groups: STRUCTURE, NATURAL, PLACED, PLAYER, etc.
+- Update radius: CONFIG.CHUNKS.PHYSICS_RADIUS (1 = 3x3 chunks)
+
+STRUCTURE SYSTEM
+----------------
+- Manager: public/world/StructureManager.js
+- Dimensions: CONFIG.CONSTRUCTION.GRID_DIMENSIONS
+- Interactive zone: Typically 1 unit from bounding box
+- Placement snapping: 0.25 unit grid
+- Height calculation: Average of 4 corners
+
+==================================================================
+PROPOSED TERRAIN ALTERATION SYSTEM
+==================================================================
+
+CORE CONCEPT
+------------
+When a structure is placed, the terrain mesh vertices within the alteration zone are modified to create:
+1. FLAT ZONE: Structure footprint area (exact dimensions)
+2. BLEND ZONE: 1-unit radius gradient from footprint edge
+3. NATURAL ZONE: Unmodified terrain beyond blend zone
+
+Example for 1x1 structure at Y=2.0:
+- 0-0.5 units from center: Y=2.0 (flat)
+- 0.5-1.5 units from center: Blend from Y=2.0 to natural height
+- >1.5 units from center: Natural terrain
+
+IMPLEMENTATION APPROACH
+-----------------------
+
+1. TERRAIN MODIFICATION REGISTRY
+   ```javascript
+   class TerrainModificationRegistry {
+     modifications = new Map(); // "x,z" -> {targetHeight, radius, strength}
+
+     addModification(x, z, height, radius, structureId) {
+       const key = `${Math.floor(x)},${Math.floor(z)}`;
+       this.modifications.set(structureId, {
+         center: {x, z},
+         targetHeight: height,
+         innerRadius: radius,      // Flat zone
+         outerRadius: radius + 1.0, // Blend zone ends
+         strength: 1.0
+       });
+     }
+
+     getModifiedHeight(x, z, naturalHeight) {
+       let finalHeight = naturalHeight;
+       let totalWeight = 0;
+
+       // Check all modifications
+       for (const mod of this.modifications.values()) {
+         const dist = Math.sqrt(
+           (x - mod.center.x) ** 2 +
+           (z - mod.center.z) ** 2
+         );
+
+         if (dist <= mod.outerRadius) {
+           let weight;
+           if (dist <= mod.innerRadius) {
+             // Full flattening
+             weight = 1.0;
+           } else {
+             // Gradient blend using smoothstep
+             const t = (dist - mod.innerRadius) /
+                      (mod.outerRadius - mod.innerRadius);
+             weight = 1.0 - (t * t * (3 - 2 * t));
+           }
+
+           // Accumulate weighted heights for overlaps
+           finalHeight = finalHeight * (1 - weight) +
+                        mod.targetHeight * weight;
+           totalWeight += weight;
+         }
+       }
+
+       return finalHeight;
+     }
+   }
+   ```
+
+2. HEIGHT CALCULATOR INTEGRATION
+   Modify HeightCalculator.calculateHeight():
+   ```javascript
+   calculateHeight(x, z) {
+     // ... existing noise calculation ...
+     let naturalHeight = /* current calculation */;
+
+     // Apply terrain modifications
+     if (this.terrainModRegistry) {
+       return this.terrainModRegistry.getModifiedHeight(x, z, naturalHeight);
+     }
+
+     return naturalHeight;
+   }
+   ```
+
+3. CHUNK MESH UPDATE SYSTEM
+   ```javascript
+   class ChunkTerrainUpdater {
+     updateChunkTerrain(chunkKey, affectedBounds) {
+       const chunk = this.terrainRenderer.chunkMap.get(chunkKey);
+       if (!chunk) return;
+
+       const geometry = chunk.geometry;
+       const positions = geometry.attributes.position;
+       const normals = geometry.attributes.normal;
+
+       // Update affected vertices
+       for (let i = 0; i < positions.count; i++) {
+         const x = positions.getX(i) + chunk.position.x;
+         const z = positions.getZ(i) + chunk.position.z;
+
+         // Skip if outside affected bounds
+         if (!this.isInBounds(x, z, affectedBounds)) continue;
+
+         // Recalculate height with modifications
+         const newY = this.heightCalculator.calculateHeight(x, z);
+         positions.setY(i, newY);
+       }
+
+       // Recalculate normals
+       geometry.computeVertexNormals();
+
+       // Mark for GPU update
+       positions.needsUpdate = true;
+       normals.needsUpdate = true;
+
+       // Update physics mesh if needed
+       this.updatePhysicsMesh(chunkKey);
+     }
+   }
+   ```
+
+==================================================================
+OVERLAPPING STRUCTURES HANDLING
+==================================================================
+
+PROBLEM SCENARIOS
+-----------------
+1. Structure A at Y=2.0, Structure B at Y=2.5 with overlapping zones
+2. Structure placed, removed, then new structure in same area
+3. Multiple structures in close proximity with different heights
+
+SOLUTION: PRIORITY-BASED BLENDING
+----------------------------------
+
+Approach 1: LATEST WINS
+- New structures override portions of previous alterations
+- Simple but can create discontinuities
+
+Approach 2: WEIGHTED AVERAGE (RECOMMENDED)
+- Blend multiple alteration zones using distance-based weights
+- Smooth transitions between different structure heights
+- Formula:
+  ```
+  height = Σ(targetHeight[i] * weight[i]) / Σ(weight[i])
+  where weight = smoothstep(distance_to_structure)
+  ```
+
+Approach 3: MAXIMUM HEIGHT
+- Take the highest required terrain height
+- Good for ensuring all structures sit on solid ground
+- May create unnatural elevated areas
+
+IMPLEMENTATION FOR WEIGHTED AVERAGE
+------------------------------------
+```javascript
+getModifiedHeight(x, z, naturalHeight) {
+  const influences = [];
+
+  // Collect all structure influences at this point
+  for (const [structureId, mod] of this.modifications) {
+    const dist = Math.sqrt(
+      (x - mod.center.x) ** 2 +
+      (z - mod.center.z) ** 2
+    );
+
+    if (dist <= mod.outerRadius) {
+      let influence;
+      if (dist <= mod.innerRadius) {
+        influence = 1.0;
+      } else {
+        const t = (dist - mod.innerRadius) /
+                 (mod.outerRadius - mod.innerRadius);
+        influence = 1.0 - (t * t * (3 - 2 * t));
+      }
+
+      influences.push({
+        height: mod.targetHeight,
+        weight: influence * mod.strength
+      });
+    }
+  }
+
+  if (influences.length === 0) {
+    return naturalHeight;
+  }
+
+  // Weighted average of all influences
+  let totalHeight = naturalHeight * 0.1; // Small natural influence
+  let totalWeight = 0.1;
+
+  for (const inf of influences) {
+    totalHeight += inf.height * inf.weight;
+    totalWeight += inf.weight;
+  }
+
+  return totalHeight / totalWeight;
+}
+```
+
+==================================================================
+LARGE STRUCTURES HANDLING
+==================================================================
+
+For structures larger than 1x1:
+
+MARKET (2x8):
+- Flat zone: 2x8 units
+- Blend zone: Extends 1 unit beyond all edges
+- Total affected area: 4x10 units
+
+DOCK (1x10):
+- Flat zone: 1x10 units
+- Blend zone: Extends 1 unit beyond
+- Total affected area: 3x12 units
+
+CALCULATION METHOD:
+```javascript
+getStructureAlteration(structure) {
+  const dims = CONFIG.CONSTRUCTION.GRID_DIMENSIONS[structure.type];
+
+  // Account for rotation
+  const rotatedDims = this.getRotatedDimensions(dims, structure.rotation);
+
+  return {
+    innerRadiusX: rotatedDims.width / 2,
+    innerRadiusZ: rotatedDims.depth / 2,
+    outerRadiusX: rotatedDims.width / 2 + 1.0,
+    outerRadiusZ: rotatedDims.depth / 2 + 1.0,
+    targetHeight: structure.position.y
+  };
+}
+
+// For rectangular blend zones
+getModifiedHeightRect(x, z, naturalHeight) {
+  for (const mod of this.modifications.values()) {
+    const dx = Math.abs(x - mod.center.x);
+    const dz = Math.abs(z - mod.center.z);
+
+    // Check if in outer bounds
+    if (dx <= mod.outerRadiusX && dz <= mod.outerRadiusZ) {
+      // Calculate blend factors for each axis
+      let blendX = 1.0, blendZ = 1.0;
+
+      if (dx > mod.innerRadiusX) {
+        const t = (dx - mod.innerRadiusX) /
+                 (mod.outerRadiusX - mod.innerRadiusX);
+        blendX = 1.0 - smoothstep(t);
+      }
+
+      if (dz > mod.innerRadiusZ) {
+        const t = (dz - mod.innerRadiusZ) /
+                 (mod.outerRadiusZ - mod.innerRadiusZ);
+        blendZ = 1.0 - smoothstep(t);
+      }
+
+      // Combined blend factor
+      const blend = blendX * blendZ;
+
+      // Apply modification
+      finalHeight = lerp(naturalHeight, mod.targetHeight, blend);
+    }
+  }
+}
+```
+
+==================================================================
+CRITICAL: STRUCTURE HEIGHT PLACEMENT CHANGES
+==================================================================
+
+PROBLEM WITH CURRENT SYSTEM
+---------------------------
+Currently, structure placement (StructureManager.js:113):
+```javascript
+// Snap to 0.25 grid - add 0.25 offset then round UP
+let snappedHeight = Math.ceil((averageHeight + 0.25) / 0.25) * 0.25;
+```
+
+This creates a CASCADING HEIGHT PROBLEM when combined with terrain alteration:
+1. Structure A placed at Y=2.0 (rounds up from 1.8)
+2. Terrain altered to 2.0 around Structure A
+3. Structure B placed nearby samples altered terrain (2.0)
+4. Structure B rounds UP to Y=2.25
+5. Terrain altered to 2.25 around Structure B
+6. Structure C rounds UP to Y=2.5
+7. Creates unnatural "staircase" settlements climbing infinitely
+
+SOLUTION: NATURAL HEIGHT PLACEMENT
+-----------------------------------
+Since the terrain alteration system will morph terrain to meet structures:
+
+1. REMOVE upward bias in height calculation:
+   ```javascript
+   // Simply round to nearest 0.25 (no artificial elevation)
+   let snappedHeight = Math.round(averageHeight / 0.25) * 0.25;
+   ```
+
+2. ALLOW mutual influence between structures:
+   - Structure A flattens area to Y=2.0
+   - Structure B samples modified terrain
+   - Places at average of modified heights
+   - Creates naturally terraced settlement areas
+
+3. BENEFITS of this approach:
+   - Structures naturally cluster at similar heights
+   - Creates realistic settlement terracing
+   - No artificial elevation climbing
+   - Terrain morphs smoothly between structures
+
+INTERACTION FLOW
+----------------
+Example: Building a village
+
+Step 1: First house placed
+- Natural terrain varies 1.7-2.3
+- Average: 2.0
+- House placed at Y=2.0 (rounded to nearest 0.25)
+- Terrain flattens to 2.0 in 1x1 area
+- Blend zone extends 1 unit beyond
+
+Step 2: Second house placed 2 units away
+- Samples partially modified terrain
+- Gets blend of: 2.0 (from first house) and 2.4 (natural)
+- Average: ~2.1
+- House placed at Y=2.0 (rounds to nearest 0.25)
+- Both houses end up at same level naturally
+
+Step 3: Market placed 3 units away
+- Outside first house blend zone
+- Samples natural terrain: 2.6
+- Market placed at Y=2.5 (rounded to nearest)
+- Creates second terrace level
+
+RESULT: Natural settlement with coherent terracing rather than random heights
+
+SPECIAL CASES
+-------------
+1. WATER PROTECTION remains:
+   ```javascript
+   if (snappedHeight < 1.02) {
+     snappedHeight = 1.5; // Minimum buildable height
+   }
+   ```
+
+2. STEEP SLOPES:
+   - Large height variance in corners
+   - Structure creates more dramatic flattening
+   - Larger visual impact but same mechanics
+
+3. PLAYER CHOICE (future enhancement):
+   ```javascript
+   // Could add placement modes
+   PlacementMode = {
+     NATURAL: "Use natural terrain only",
+     INFLUENCED: "Align with nearby structures",
+     MANUAL: "Player adjusts height with scroll"
+   }
+   ```
+
+==================================================================
+CLIENT-SERVER SYNCHRONIZATION
+==================================================================
+
+CHALLENGE: Terrain is client-side only, modifications must persist
+
+SOLUTION 1: STORE MODIFICATIONS SERVER-SIDE
+--------------------------------------------
+Extend chunk data structure:
+```json
+{
+  "players": [],
+  "objectChanges": [],
+  "terrainModifications": [
+    {
+      "structureId": "house_123",
+      "centerX": 10.5,
+      "centerZ": 20.5,
+      "targetHeight": 2.0,
+      "innerRadiusX": 0.5,
+      "innerRadiusZ": 0.5,
+      "outerRadiusX": 1.5,
+      "outerRadiusZ": 1.5
+    }
+  ]
+}
+```
+
+SOLUTION 2: DERIVE FROM STRUCTURES (RECOMMENDED)
+-------------------------------------------------
+- Don't store separately - calculate from existing structure data
+- When structure added: Apply terrain modification
+- When structure removed: Remove terrain modification
+- On chunk load: Rebuild modifications from all structures
+
+```javascript
+rebuildTerrainModifications(chunkData) {
+  this.terrainModRegistry.clear();
+
+  for (const change of chunkData.objectChanges) {
+    if (change.action === 'add' && this.isStructure(change.name)) {
+      const structureConfig = CONFIG.CONSTRUCTION.GRID_DIMENSIONS[change.name];
+      if (structureConfig) {
+        this.terrainModRegistry.addModification(
+          change.position[0],
+          change.position[2],
+          change.position[1], // Y height
+          structureConfig,
+          change.id
+        );
+      }
+    } else if (change.action === 'remove') {
+      this.terrainModRegistry.removeModification(change.id);
+    }
+  }
+}
+```
+
+==================================================================
+PERFORMANCE CONSIDERATIONS
+==================================================================
+
+OPTIMIZATIONS NEEDED:
+--------------------
+
+1. DIRTY CHUNK TRACKING
+   - Only update chunks affected by structure placement
+   - Track which chunks need mesh updates
+
+2. VERTEX UPDATE BATCHING
+   - Collect all modifications before updating mesh
+   - Update multiple chunks in single frame if needed
+
+3. LOD SYSTEM INTEGRATION
+   - Full resolution updates for nearby chunks
+   - Simplified updates for distant chunks
+   - Skip updates for chunks outside render distance
+
+4. PHYSICS MESH UPDATES
+   - Only update physics for chunks in PHYSICS_RADIUS
+   - Use simplified collision mesh (lower resolution)
+
+5. CACHING STRATEGY
+   ```javascript
+   class ModificationCache {
+     cache = new Map(); // "x,z" -> modified height
+
+     invalidateArea(centerX, centerZ, radius) {
+       // Clear cache entries in affected area
+       for (const [key, entry] of this.cache) {
+         const [x, z] = key.split(',').map(Number);
+         const dist = Math.sqrt(
+           (x - centerX) ** 2 +
+           (z - centerZ) ** 2
+         );
+         if (dist <= radius) {
+           this.cache.delete(key);
+         }
+       }
+     }
+   }
+   ```
+
+==================================================================
+IMPLEMENTATION PHASES
+==================================================================
+
+PHASE 0: PREREQUISITE FIX (Immediate)
+--------------------------------------
+- [ ] Fix structure height placement to use Math.round instead of Math.ceil
+- [ ] Remove the +0.25 upward bias
+- [ ] Test that structures don't cascade upward
+- [ ] Verify water protection still works
+
+PHASE 1: CORE SYSTEM (Week 1)
+------------------------------
+- [ ] Create TerrainModificationRegistry class
+- [ ] Integrate with HeightCalculator
+- [ ] Test with single 1x1 structure
+- [ ] Verify height calculations
+
+PHASE 2: MESH UPDATES (Week 2)
+-------------------------------
+- [ ] Implement ChunkTerrainUpdater
+- [ ] Update affected chunk meshes
+- [ ] Recalculate normals
+- [ ] Test visual appearance
+
+PHASE 3: PHYSICS INTEGRATION (Week 3)
+--------------------------------------
+- [ ] Update physics terrain mesh
+- [ ] Ensure character controllers follow new terrain
+- [ ] Test collision detection
+
+PHASE 4: OVERLAPPING STRUCTURES (Week 4)
+-----------------------------------------
+- [ ] Implement weighted blending
+- [ ] Handle structure removal
+- [ ] Test multiple structure scenarios
+
+PHASE 5: LARGE STRUCTURES (Week 5)
+-----------------------------------
+- [ ] Implement rectangular blend zones
+- [ ] Test with market (2x8) and dock (1x10)
+- [ ] Handle rotated structures
+
+PHASE 6: OPTIMIZATION (Week 6)
+-------------------------------
+- [ ] Implement dirty chunk tracking
+- [ ] Add modification caching
+- [ ] Profile and optimize performance
+
+PHASE 7: SYNCHRONIZATION (Week 7)
+----------------------------------
+- [ ] Derive modifications from structure data
+- [ ] Test chunk loading/unloading
+- [ ] Ensure persistence across sessions
+
+==================================================================
+POTENTIAL ISSUES AND SOLUTIONS
+==================================================================
+
+ISSUE 1: VISUAL SEAMS AT CHUNK BOUNDARIES
+-------------------------------------------
+Problem: Modifications spanning chunks may create visible seams
+Solution:
+- Ensure all affected chunks update together
+- Share vertex data at boundaries
+- Use consistent calculation across boundaries
+
+ISSUE 2: PERFORMANCE WITH MANY STRUCTURES
+------------------------------------------
+Problem: 100+ structures could slow height calculations
+Solution:
+- Spatial partitioning (quadtree/octree)
+- Cache computed heights aggressively
+- Limit modification check radius
+
+ISSUE 3: FLOATING/BURIED OBJECTS
+---------------------------------
+Problem: Trees/rocks in modified areas may float or sink
+Solution:
+- Reposition natural objects after terrain modification
+- Remove objects that would be severely affected
+- Add "settlement clearing" logic
+
+ISSUE 4: WATER INTERACTION
+--------------------------
+Problem: Terrain raised from underwater looks unnatural
+Solution:
+- Prevent structure placement in deep water
+- Add "fill" material visuals (dirt/sand)
+- Create shore/embankment geometry
+
+ISSUE 5: UNDO/REDO COMPLEXITY
+------------------------------
+Problem: Removing structures should restore original terrain
+Solution:
+- Never modify original height calculation
+- Modifications as overlay only
+- Clean removal by deleting modification entry
+
+==================================================================
+ALTERNATIVE APPROACHES CONSIDERED
+==================================================================
+
+1. VOXEL-BASED TERRAIN
+   - Pros: Easier modification, minecraft-like
+   - Cons: Major rewrite, different aesthetic
+
+2. HEIGHTMAP TEXTURE MODIFICATION
+   - Pros: GPU-accelerated, smooth
+   - Cons: Limited resolution, texture memory
+
+3. MESH DISPLACEMENT MAPS
+   - Pros: Efficient, shader-based
+   - Cons: Complex implementation, GPU dependent
+
+4. PRE-CALCULATED FLAT SPOTS
+   - Pros: No runtime cost, guaranteed flat
+   - Cons: Limits placement freedom, repetitive
+
+5. DECORATIVE ONLY (NO COLLISION)
+   - Pros: Simple, purely visual
+   - Cons: Physics mismatch, walking issues
+
+==================================================================
+CONCLUSION
+==================================================================
+
+The proposed terrain alteration system provides a robust solution for automatic terrain modification around structures. By modifying the height calculation pipeline and updating affected chunk meshes, we can create smooth, natural-looking terrain transitions while maintaining performance and synchronization.
+
+Key success factors:
+- Clean integration with existing HeightCalculator
+- Efficient mesh update system
+- Proper handling of overlapping modifications
+- Performance optimization through caching
+- Derivation from existing structure data (no new server state)
+
+This system will significantly enhance the game's building experience by eliminating floating structures and creating more realistic settlements.
+
+==================================================================
+END OF DOCUMENT
+==================================================================

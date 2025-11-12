@@ -1,0 +1,85 @@
+================================================================================
+                    HORSES GAME - CODEBASE DOCUMENTATION
+================================================================================
+Generated: 2025-11-11
+
+================================================================================
+PROJECT STRUCTURE
+================================================================================
+
+horses/
+│
+├── public/
+│   ├── core/
+│   │   ├── 116 - CameraController.js - Game code file
+│   │   ├── 116 - GameLoop.js - Game code file
+│   │   ├── 210 - GameState.js - Central game state management
+│   │   ├── 211 - InputManager.js - Game code file
+│   │   ├── 581 - PhysicsManager.js - Game code file
+│   │   └── 308 - SceneManager.js - Game code file
+│   ├── entity/
+│   │   ├── 266 - AIEnemyManager.js - Game code file
+│   │   ├── 296 - AvatarManager.js - Game code file
+│   │   └── 96 - DeathSystem.js - Game code file
+│   ├── items/
+│   ├── models/
+│   ├── network/
+│   │   ├── 56 - EventEmitter.js - Game code file
+│   │   ├── 387 - GameStateManager.js - Game code file
+│   │   ├── 70 - MessageQueue.js - Game code file
+│   │   ├── 712 - MessageRouter.js - Client-side WebSocket message routing
+│   │   ├── 320 - NetworkManager.js - Game code file
+│   │   ├── 283 - P2PTransport.js - Game code file
+│   │   └── 211 - WebSocketTransport.js - Game code file
+│   ├── player/
+│   │   ├── 388 - PlayerActions.js - Game code file
+│   │   ├── 402 - PlayerCombat.js - Game code file
+│   │   ├── 281 - PlayerController.js - Player input, movement, and camera
+│   │   ├── 250 - PlayerHunger.js - Game code file
+│   │   └── 327 - PlayerInventory.js - Game code file
+│   ├── sounds/
+│   ├── structures/
+│   ├── systems/
+│   │   ├── 121 - AnimationSystem.js - Game code file
+│   │   ├── 371 - BuildingSystem.js - Game code file
+│   │   ├── 234 - CraftingSystem.js - Game code file
+│   │   └── 739 - ResourceManager.js - Game code file
+│   ├── terrain/
+│   ├── textures/
+│   │   └── skybox/
+│   ├── ui/
+│   │   ├── 756 - BuildMenu.js - Construction UI and building placement
+│   │   ├── 124 - GridUIHelpers.js - Game code file
+│   │   ├── 2,412 - InventoryUI.js - Inventory interface rendering
+│   │   └── 310 - RotationControls.js - Game code file
+│   ├── world/
+│   │   ├── 297 - ChunkManager.js - Game code file
+│   │   ├── 421 - SkyboxManager.js - Game code file
+│   │   └── 347 - StructureManager.js - Structure placement and validation
+│   ├── 618 - ai-enemy.js - AI enemy spawning utilities
+│   ├── 267 - audio.js - Audio system for sounds and music
+│   ├── 375 - blobshadow.js - Circular blob shadows for objects
+│   ├── 1,314 - client.html - Main HTML entry point
+│   ├── 574 - config.js - Game constants and configuration parameters
+│   ├── 1,651 - game.js - Main client game loop and Three.js scene setup
+│   ├── 805 - objects.js - 3D model loading and object placement
+│   ├── 2,278 - terrain.js - Procedural terrain generation with Perlin noise
+│   ├── 357 - ui.js - Main UI controller for HUD and status displays
+│   └── 1,875 - WaterRenderer.js - Water rendering with waves and foam
+├── server/
+│   ├── 196 - ChunkManager.js - Manages world chunks and persistence
+│   ├── 29 - config.js - Game code file
+│   ├── 1,045 - MessageHandlers.js - Processes client messages and game state
+│   └── 159 - MessageRouter.js - Game code file
+├── 212 - generate-docs.js - Documentation generation script
+├── 177 - server.js - Main server entry point, WebSocket connections
+└── 38 - start-game.bat - Windows launcher batch script
+
+================================================================================
+SUMMARY
+================================================================================
+Total Files: 49
+Total Lines of Code: 23,989
+Server Files: 5 (1,606 lines)
+Client Files: 42 (22,133 lines)
+================================================================================

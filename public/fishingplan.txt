@@ -1,0 +1,39 @@
+FISHING SYSTEM PLAN
+====================
+
+FISHING NET ITEM:
+- 2x2 size within backpack inventory
+- Texture files: net.png and Rnet.png (to be added)
+
+FISHING MECHANICS:
+- Trigger: Player within 0.75 units of terrain with height below 1.02 (water level)
+- Action: Shows "Fishing" button in UI
+- Animation: Uses existing pickaxe animation (used for most actions)
+- Duration: 10 seconds with progress bar (existing action progress bar system)
+- Result: Chance to add fish to inventory (if room available)
+
+FISH PROPERTIES:
+- Quality: Random value
+- Base Durability: 30
+- Final Durability: Base * (Quality/100), rounded to whole number
+  Example: 50 quality fish = 30 * 0.50 = 15 durability
+
+OPEN QUESTIONS:
+1. Fishing Net Durability:
+   - Should the net have durability/uses before breaking?
+
+2. Fishing Net Usage:
+   - 2x2 in backpack or can it be equipped/used from hotbar?
+   - Deploy net in water or use while standing near?
+   - If deployed: passive collection over time or active 10-second action?
+   - Should there be a visual net object in the world?
+
+3. Fish Item Details:
+   - What size in inventory? (1x1, 1x2, 2x1?)
+   - Can fish stack or individual slots due to unique quality/durability?
+   - Purpose of durability: spoilage over time or food value?
+
+4. Action Trigger:
+   - Use same proximity detection as other actions (trees, rocks)?
+   - Show "Fishing Net" button when near water?
+   - Shallow water ok or needs deeper water?

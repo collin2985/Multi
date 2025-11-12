@@ -1,0 +1,173 @@
+DETAILED CODE-LEVEL PERFORMANCE ANALYSIS
+
+FILE: game.js (Line References)
+===============================
+
+Line 557: Frustum Culling Disabled
+Problem: child.frustumCulled = false
+Fix: Change to true
+Impact: 5-10% FPS
+
+Lines 1135-1137: Physics Queries Every 3 Frames  
+Problem: if (this.gameLoop.frameCount % 3 === 0) checkProximityToObjects()
+Fix: Increase to 4 frames or cache results
+Impact: 2-5% FPS
+
+Lines 1198-1240: Animation Mixer Every Frame
+Problem: Updates even when not moving
+Fix: Only update when animation is playing
+Impact: 1-2% FPS
+
+Lines 1266-1268: Terrain Vertex Updates
+Problem: processVertexUpdateQueue() called unconditionally
+Fix: Batch updates - max 10 per frame
+Impact: 10-15% FPS
+
+Lines 1465-1469: Object Lookup in Proximity
+Problem: scene.traverse() for each collider
+Code: this.scene.traverse((object) => { ... })
+Fix: Use Map<objectId, object> for O(1) lookup
+Impact: 5-8% FPS
+
+Lines 1498-1500: Distance Calculation
+Problem: Math.sqrt(dx*dx + dz*dz) called 500+ times
+Fix: Use squared distances for comparison
+Impact: 1-2% FPS
+
+---
+
+FILE: WaterRenderer.js (Line References)
+========================================
+
+Lines 41-101: Perlin Noise in Vertex Shader
+Problem: Full Perlin calculation per-vertex
+Fix: Use texture-based waves instead
+Impact: 5-8% FPS
+
+Lines 123-277: Terrain Algorithm in Shader
+Problem: DUPLICATED from terrain.js
+Fix: Use pre-computed height texture
+Impact: 3-5% FPS
+
+Lines 11-350: Overall Shader Complexity
+Problems:
+- Multiple texture samples
+- Complex math per-pixel
+- Ocean and river generation in shader
+
+Fix Options:
+- Reduce mesh resolution 100x100 -> 50x50
+- Reduce Perlin octaves 4 -> 2
+- Use height texture instead of algorithm
+
+Impact: 8-15% FPS total
+
+
+FILE: terrain.js (Line References)
+==================================
+
+Lines 158-346: HeightCalculator.calculateHeight()
+Problem: DUPLICATED in 4 places
+Locations:
+1. terrain.js line 158 (CPU)
+2. terrain.js line 833+ (Worker)
+3. WaterRenderer.js line 123 (Vertex shader)
+4. WaterRenderer.js line 278 (Fragment shader)
+
+Risk: Any change to one breaks others
+Fix: Single source - pre-computed height texture
+Impact: 1-2% FPS + stability
+
+Lines 348-362: Normal Calculation
+Problem: Creates objects per-vertex
+Fix: Use object pool
+Impact: 1-2% FPS
+
+Lines 750-801: Texture Loading
+Problem: Multiple loaders, high anisotropy (16)
+Fix: Batch loading, reduce anisotropy to 8
+Impact: 0.5-1% FPS
+
+
+FILE: objects.js
+================
+
+Throughout: No GPU Instancing
+Problem: Each tree/rock = separate draw call
+Example: 500 oaks + 300 pines + 200 rocks = 1000 draw calls
+Fix: Use InstancedMesh per type
+Impact: 5-10% FPS
+
+Note: Blob shadows (blobshadow.js) CORRECTLY use InstancedMesh
+
+
+FILE: NetworkManager.js
+======================
+
+Line 125: processMessageQueue()
+Problem: Processes ALL queued messages per frame
+Fix: Max 15 messages per frame
+Impact: 1-2% FPS
+
+
+FILE: PhysicsManager.js
+======================
+
+Missing: Object Registry
+Problem: game.js must do O(n) search for objects
+Fix: Add Map in PhysicsManager
+  this.objectRegistry = new Map()
+  objectRegistry.set(objectId, object3D)
+
+Impact: 5-8% FPS savings in game.js:1465
+
+
+IMPLEMENTATION ORDER
+====================
+
+DO FIRST (2 hours total):
+1. game.js line 557 - frustum culling (5 min)
+2. game.js lines 1498 - squared distance (15 min)
+3. PhysicsManager + game.js - object registry (30 min)
+4. NetworkManager - message budget (20 min)
+5. WaterRenderer - mesh resolution (20 min)
+
+Gain: 25% FPS improvement
+
+DO SECOND (4-6 hours):
+1. terrain.js - batch vertex updates
+2. Multiple files - object pooling
+3. objects.js - GPU instancing
+4. terrain.js + WaterRenderer - algorithm unification
+5. PhysicsManager - LOD system
+
+Gain: 30-50% additional improvement
+
+CRITICAL FINDINGS
+=================
+
+1. Terrain algorithm DUPLICATED in 4 places
+   - Creates desync risk
+   - 500+ lines of code duplication
+   - Comment in code warns about synchronization risk
+
+2. Scene traversal for object lookup
+   - O(n) lookup in hot path
+   - Called 50-200 times per frame
+   - 50,000-200,000 comparisons per frame
+
+3. Vertex updates every frame
+   - GPU bandwidth waste
+   - No batching
+   - Multiple chunks updating simultaneously
+
+4. Water shader too complex
+   - Perlin noise per-vertex (expensive)
+   - Terrain algorithm in shader (duplication)
+   - 11 texture samples per pixel
+
+5. Frustum culling disabled globally
+   - One-line fix (true/false)
+   - 5-10% FPS gain
+   - Why was it disabled?
+

@@ -1,0 +1,187 @@
+# SENSOR INTERACTION BUG - INVESTIGATION & FIX
+================================================================================
+
+## PROBLEM SUMMARY
+Sensor boxes/cylinders exist on structures and natural objects (visible with V key),
+but they DO NOT trigger player interactions like:
+- Cutting down trees
+- Mining rocks
+- Building construction sites
+- Opening structure menus (market, crate, etc.)
+
+## ROOT CAUSE IDENTIFIED
+The Rapier event queue is NEVER explicitly created in PhysicsManager.
+Without the event queue, sensor collision events are never captured.
+
+Result: game.js checkProximityToObjects() gets null event queue and exits early.
+No sensor events processed → No proximity detection → No UI buttons → No interactions.
+
+================================================================================
+## COMPLETE INTERACTION FLOW (What SHOULD Happen)
+================================================================================
+
+1. SENSOR CREATION (objects.js:661, MessageRouter.js:322)
+   ├─ createInteractionSensor(objectId, modelType, position, rotation)
+   ├─ Sets: setSensor(true), setActiveEvents(COLLISION_EVENTS)
+   └─ Stores: instance.userData.sensorHandle
+
+2. PHYSICS STEP (game.js:1088-1089)
+   ├─ physicsManager.step(deltaTime)
+   └─ Rapier updates collision detection
+
+3. EVENT QUEUE CHECK (game.js:1409-1410) ❌ BREAKS HERE
+   ├─ eventQueue = physicsManager.world.eventQueue
+   └─ if (!eventQueue) return;  ← RETURNS NULL, EXITS EARLY
+
+4. ❌ NEVER REACHED: Process Events (game.js:1413)
+   ├─ processInteractionEvents(eventQueue)
+   ├─ drainCollisionEvents() iterates sensor contacts
+   └─ Returns {entered, exited} maps
+
+5. ❌ NEVER REACHED: Update Proximity (game.js:1415-1439)
+   ├─ activeProximityObjects.delete(exitedId)
+   ├─ activeProximityObjects.set(enteredId, sceneObject)
+   └─ Console: "[COLLISION] Entered/Exited SENSOR zone"
+
+6. ❌ NEVER REACHED: Find Nearest (game.js:1441-1478)
+   ├─ Categorize by type (tree/rock/structure/construction)
+   ├─ Calculate distances
+   └─ Set nearestObject, nearestStructure, nearestConstructionSite
+
+7. ❌ NEVER REACHED: Update UI (game.js:1549-1572)
+   ├─ ui.updateNearestObject()
+   └─ ui.updateButtonStates() ← NO BUTTONS SHOWN
+
+================================================================================
+## REQUIRED CODE CHANGES
+================================================================================
+
+### CHANGE 1: PhysicsManager.js - Create Event Queue
+--------------------------------------------------------------------------------
+FILE: C:\Users\colli\Desktop\test horses\horses\public\core\PhysicsManager.js
+LOCATION: After line 50 (after world creation)
+
+BEFORE:
+```javascript
+const gravity = new RAPIER.Vector3(0.0, 0.0, 0.0);
+this.world = new RAPIER.World(gravity);
+
+this.initialized = true;
+```
+
+AFTER:
+```javascript
+const gravity = new RAPIER.Vector3(0.0, 0.0, 0.0);
+this.world = new RAPIER.World(gravity);
+
+// Create event queue for sensor collision events
+this.eventQueue = new RAPIER.EventQueue(true);
+
+this.initialized = true;
+```
+
+### CHANGE 2: PhysicsManager.js - Pass Event Queue to Step
+--------------------------------------------------------------------------------
+FILE: C:\Users\colli\Desktop\test horses\horses\public\core\PhysicsManager.js
+LOCATION: Line 68 (inside step method)
+
+BEFORE:
+```javascript
+step(deltaTime = 1/60) {
+    if (!this.initialized || !this.world) return;
+
+    this.world.step();
+}
+```
+
+AFTER:
+```javascript
+step(deltaTime = 1/60) {
+    if (!this.initialized || !this.world) return;
+
+    this.world.step(this.eventQueue);
+}
+```
+
+### CHANGE 3: game.js - Access Event Queue Correctly
+--------------------------------------------------------------------------------
+FILE: C:\Users\colli\Desktop\test horses\horses\public\game.js
+LOCATION: Line 1409
+
+BEFORE:
+```javascript
+const eventQueue = this.physicsManager.world.eventQueue;
+if (!eventQueue) return;
+```
+
+AFTER:
+```javascript
+const eventQueue = this.physicsManager.eventQueue;
+if (!eventQueue) return;
+```
+
+================================================================================
+## EXPECTED BEHAVIOR AFTER FIX
+================================================================================
+
+1. ✅ Event queue properly captures sensor collision events
+2. ✅ Console logs appear: "[COLLISION] Entered SENSOR zone: oak (tree_123)"
+3. ✅ activeProximityObjects populates with nearby objects
+4. ✅ nearestObject and nearestStructure update correctly
+5. ✅ UI buttons appear: "Chop Tree", "Mine Limestone", "Crate", etc.
+6. ✅ Clicking buttons triggers actions (chopping, mining, opening menus)
+7. ✅ Actions complete and harvest resources
+
+================================================================================
+## VERIFICATION CHECKLIST
+================================================================================
+
+### Things That Are Already Working:
+✅ Sensors are created with proper collision event flags (PhysicsManager:565)
+✅ Sensors have correct collision groups (passive, no filter)
+✅ Proximity checking is called every frame (game.js:1102)
+✅ Console logs exist for sensor entry/exit (game.js:1420, 1436)
+✅ UI buttons are properly wired to show on proximity (ui.js:104-210)
+✅ Action systems are ready to handle interactions
+
+### Things That Are Currently Broken:
+❌ Event queue is never created in PhysicsManager
+❌ world.eventQueue returns null/undefined
+❌ processInteractionEvents() never processes events
+❌ Sensor entry/exit console logs NEVER fire
+❌ activeProximityObjects stays empty
+❌ No interaction buttons appear
+
+================================================================================
+## ADDITIONAL CONTEXT
+================================================================================
+
+### Why Was Event Queue Missing?
+The PhysicsManager was created based on older Rapier examples that didn't
+explicitly show event queue initialization. In newer Rapier versions (0.14+),
+the event queue must be explicitly created and passed to world.step().
+
+### Other Recent Changes Made:
+1. Upgraded Rapier from 0.11.2 to 0.14.0 (fixed EXCLUDE_SENSORS bug)
+2. Added sensor creation to objects.js for natural objects (trees/rocks)
+   - This made sensors visible in debug view (V key)
+   - But didn't fix interaction triggering (event queue still missing)
+
+### Files Involved in Interaction System:
+- PhysicsManager.js: Physics engine wrapper, sensor creation
+- game.js: Main game loop, proximity checking
+- ui.js: Button display logic
+- ResourceManager.js: Action handling (chop, mine, etc.)
+- MessageRouter.js: Network message handling, object creation
+
+================================================================================
+## CONFIDENCE LEVEL
+================================================================================
+
+99% - This is the classic Rapier sensor event queue initialization issue.
+The event queue is required for collision event processing, and without it,
+sensor events are never captured or processed.
+
+This is a well-documented issue in Rapier documentation and community forums.
+
+================================================================================

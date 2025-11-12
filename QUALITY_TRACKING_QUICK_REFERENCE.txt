@@ -1,0 +1,209 @@
+================================================================================
+QUALITY TRACKING - QUICK REFERENCE GUIDE
+================================================================================
+
+KEY FINDING IN ONE LINE:
+Quality IS tracked on client but NEVER sent to server, so it's ALWAYS lost.
+
+================================================================================
+ANSWER TO YOUR 4 QUESTIONS:
+================================================================================
+
+Q1: When a player adds materials, how is quality tracked?
+A1: Quality is captured in materialItems array on client (line 997 InventoryUI.js)
+    Format: materialItems[itemType][index] = {type, quality}
+    Example: materialItems['limestone'][0] = {type: 'limestone', quality: 95}
+
+Q2: Does materials store {limestone: 5} or {limestone: {quantity: 5, totalQuality: 400}}?
+A2: Currently stores ONLY quantities: {limestone: 5}
+    The structure created at server/MessageHandlers.js:227 has:
+    - materials: {} (just quantities, no quality)
+    - materialItems: never sent to server
+
+Q3: Where is the code that adds materials?
+A3: PRIMARY: public/ui/InventoryUI.js, _tryDropOnConstruction() method, lines 948-1021
+    SECONDARY: public/systems/BuildingSystem.js, addMaterialToConstruction(), lines 245-278
+    (Secondary method has broken server sync)
+
+Q4: Is quality being tracked and summed when added?
+A4: PARTIALLY:
+    YES: Individual quality captured (line 997)
+    NO: Not summed/averaged at addition time
+    NO: Not sent to server (no handler for update_construction_materials)
+    NO: Not used in final calculation (hardcoded to 50 at line 288)
+
+================================================================================
+THE PROBLEM IN A NUTSHELL:
+================================================================================
+
+CLIENT                              SERVER                        RESULT
+------                              ------                        ------
+Quality captured (line 997)     ↓   No handler exists         ↓   Quality lost
+materialItems stored locally    ↓   Message ignored           ↓   Hardcoded to 50
+(never sent)                    ↓   Uses quality = 50         ↓   Wrong result!
+
+EXAMPLE OF THE BUG:
+Player adds 3 limestone: quality 95, 75, 60
+
+What SHOULD happen:
+structureQuality = (95 + 75 + 60) / 3 = 76.67
+
+What ACTUALLY happens:
+structureQuality = (50 + 50 + 50) / 3 = 50
+
+LOSS: 26.67 quality points (35% worse than it should be)
+
+================================================================================
+CODE LOCATIONS TO FOCUS ON:
+================================================================================
+
+1. WHERE QUALITY IS CAPTURED:
+   File: public/ui/InventoryUI.js
+   Line: 997
+   Code: quality: item.quality
+
+2. WHERE QUALITY IS LOST:
+   File: public/systems/BuildingSystem.js
+   Line: 274
+   Code: materials: current (no quality included)
+
+3. WHERE QUALITY SHOULD BE SENT:
+   File: server.js
+   Lines: 44-124
+   Problem: No case for 'update_construction_materials'
+
+4. WHERE QUALITY SHOULD BE STORED:
+   File: server/MessageHandlers.js
+   Line: 227
+   Problem: materials object only stores quantities
+
+5. WHERE QUALITY IS HARDCODED:
+   File: server/MessageHandlers.js
+   Line: 288
+   Code: totalQuality += 50 * quantity
+
+================================================================================
+DATA FLOW:
+================================================================================
+
+IDEAL FLOW (what's needed):
+Player drags material
+  ↓
+Quality captured in materialItems
+  ↓
+Quality sent to server in update message
+  ↓
+Server stores quality in materials object
+  ↓
+Quality persisted to chunk file
+  ↓
+Quality used in final calculation
+  ↓
+Structure has correct quality value
+
+ACTUAL FLOW (what happens now):
+Player drags material
+  ↓
+Quality captured in materialItems
+  ↓
+Message sent but has NO quality (only quantities)
+  ↓
+Server has no handler - message ignored
+  ↓
+Quality data lost when client disconnects
+  ↓
+Quality uses hardcoded 50
+  ↓
+Structure always has quality 50
+
+================================================================================
+DATA STRUCTURE COMPARISON:
+================================================================================
+
+WHAT WE HAVE (Server side):
+{
+  materials: {
+    limestone: 5,
+    oakplank: 2
+  }
+}
+(Just quantities, no quality info)
+
+WHAT WE NEED (Server side):
+OPTION A - Extended format:
+{
+  materials: {
+    limestone: {quantity: 5, totalQuality: 415},
+    oakplank: {quantity: 2, totalQuality: 98}
+  }
+}
+
+OPTION B - Separate object:
+{
+  materials: {limestone: 5, oakplank: 2},
+  materialQualities: {limestone: 83, oakplank: 49}
+}
+
+OPTION C - Array format:
+{
+  materials: {
+    limestone: [95, 75, 75, 65, 70],
+    oakplank: [49, 48]
+  }
+}
+
+================================================================================
+FILES CREATED BY THIS INVESTIGATION:
+================================================================================
+
+1. QUALITY_TRACKING_INVESTIGATION_SUMMARY.txt (THIS FILE)
+   Quick reference and summary of findings
+
+2. QUALITY_TRACKING_ANALYSIS.md
+   Full analysis with detailed file paths and recommendations
+
+3. QUALITY_TRACKING_CODE_EXAMPLES.md
+   Code snippets and detailed explanations
+
+4. QUALITY_TRACKING_QUICK_REFERENCE.txt (ANOTHER VERSION)
+   Another format of the summary
+
+================================================================================
+NEXT STEPS TO IMPLEMENT:
+================================================================================
+
+STEP 1: Add server message handler
+  - File: server.js
+  - Add case for 'update_construction_materials' in switch statement
+  - Call new handler method
+
+STEP 2: Create handler in MessageHandlers.js
+  - Method: handleUpdateConstructionMaterials(payload)
+  - Read constructionId and materials from payload
+  - Update construction site in chunk data
+  - Save chunk to disk
+
+STEP 3: Modify construction site data structure
+  - File: server/MessageHandlers.js line 227
+  - Change materials from {type: qty} to {type: {qty, quality}}
+
+STEP 4: Send quality data from client
+  - File: public/systems/BuildingSystem.js line 274
+  - Include materialItems or quality average in message
+
+STEP 5: Use quality in calculation
+  - File: server/MessageHandlers.js line 288
+  - Replace hardcoded 50 with actual material quality values
+
+================================================================================
+FINAL VERDICT:
+================================================================================
+
+Is quality tracking already implemented?
+PARTIALLY - infrastructure exists but is disconnected
+
+Is it being used in final calculation?
+NO - server uses hardcoded quality of 50 regardless
+
+Does it need to be added?
+YES - quality tracking needs to be integrated end-to-end

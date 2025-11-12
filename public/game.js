@@ -1,409 +1,45 @@
+/**
+ * Main Game Engine
+ *
+ * Handles game initialization, player controls, networking (WebSocket + WebRTC P2P),
+ * chunk management, inventory, building, and combat systems.
+ *
+ * Configuration: All game constants in './config.js'
+ */
+
 import * as THREE from 'three';
 import { ui } from './ui.js';
 import { WaterRenderer } from './WaterRenderer.js';
-import { SimpleTerrainRenderer, CONFIG, roundCoord } from './terrain.js';
-import { objectPlacer } from './objects.js';
-
-// ==========================================
-// GAME STATE MANAGEMENT
-// ==========================================
-
-class GameState {
-    constructor() {
-        this.clientId = 'client_' + Math.random().toString(36).substr(2, 12);
-        this.isInChunk = false;
-        this.currentPlayerChunkX = 0;
-        this.currentPlayerChunkZ = 0;
-        this.lastChunkX = null;
-        this.lastChunkZ = null;
-
-        // Movement state
-        this.isMoving = false;
-        this.playerTargetPosition = new THREE.Vector3();
-        this.cameraTargetPosition = new THREE.Vector3();
-
-        // Object tracking
-        this.nearestObject = null;
-        this.nearestObjectDistance = Infinity;
-        this.removedObjectsCache = new Map(); // Key: chunkKey, Value: Set of removed objectIds
-
-        // Timing
-        this.lastChunkUpdateTime = 0;
-        this.lastProximityCheckTime = 0;
-        this.lastPeerCheckTime = 0;
-        this.lastFrameTime = performance.now();
-    }
-
-    updateChunkPosition(newX, newZ) {
-        this.lastChunkX = this.currentPlayerChunkX;
-        this.lastChunkZ = this.currentPlayerChunkZ;
-        this.currentPlayerChunkX = newX;
-        this.currentPlayerChunkZ = newZ;
-    }
-}
-
-// ==========================================
-// NETWORK MANAGER
-// ==========================================
-
-class NetworkManager {
-    constructor(gameState, onMessageCallback) {
-        this.gameState = gameState;
-        this.onMessageCallback = onMessageCallback;
-        this.ws = null;
-        this.wsRetryAttempts = 0;
-        this.wsMaxRetries = 10;
-        this.wsRetryInterval = 5000;
-
-        // P2P state
-        this.peers = new Map();
-        this.avatars = new Map();
-    }
-
-connect(online = true) {
-    const url = online ? 'wss://multiplayer-game-dcwy.onrender.com' : 'ws://localhost:8080';
-    
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        this.ws.close();
-    }
-
-    this.ws = new WebSocket(url);
-    this.setupWebSocketHandlers();
-}
-
-    setupWebSocketHandlers() {
-        this.ws.onopen = () => {
-            ui.updateStatus("✅ Connected to server");
-            ui.updateConnectionStatus('connected', '✅ Server Connected');
-            this.wsRetryAttempts = 0;
-            this.onMessageCallback('server_connected', {});
-        };
-
-        this.ws.onclose = (event) => {
-            ui.updateStatus(`❌ Server disconnected (${event.code})`);
-            ui.updateConnectionStatus('disconnected', '❌ Server Disconnected');
-            this.gameState.isInChunk = false;
-            ui.updateButtonStates(false, null);
-            this.attemptReconnect();
-        };
-
-        this.ws.onerror = (error) => {
-            ui.updateStatus(`❌ Server error: ${error.message || 'Unknown error'}`);
-            ui.updateConnectionStatus('disconnected', '❌ Server Error');
-        };
-
-        this.ws.onmessage = async (event) => {
-            const messageData = event.data instanceof Blob ?
-                await event.data.text() : event.data;
-
-            try {
-                const data = JSON.parse(messageData);
-                console.log('RAW MESSAGE RECEIVED:', data);
-                ui.updateStatus(`📥 Server: ${data.type}`);
-                this.onMessageCallback(data.type, data.payload);
-            } catch (error) {
-                ui.updateStatus(`❌ Invalid server message: ${error.message}`);
-            }
-        };
-    }
-
-    attemptReconnect() {
-        if (this.wsRetryAttempts < this.wsMaxRetries) {
-            this.wsRetryAttempts++;
-            ui.updateStatus(`Attempting reconnection ${this.wsRetryAttempts} of ${this.wsMaxRetries}...`);
-            setTimeout(() => this.connect(), this.wsRetryInterval);
-        } else {
-            ui.updateStatus(`❌ Max reconnection attempts reached. Please refresh.`);
-            ui.updateConnectionStatus('disconnected', '❌ Disconnected');
-        }
-    }
-
-    sendMessage(type, payload) {
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify({ type, payload }));
-            ui.updateStatus(`📤 Sent ${type} to server`);
-            return true;
-        }
-        ui.updateStatus(`❌ Failed to send ${type}: No server connection`);
-        return false;
-    }
-
-    // --- P2P Methods ---
-    createPeerConnection(peerId, isInitiator = false) {
-        const config = {
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' }
-            ]
-        };
-
-        const connection = new RTCPeerConnection(config);
-        const peerState = {
-            connection,
-            dataChannel: null,
-            state: 'connecting',
-            isInitiator,
-            targetPosition: null,
-            moveStartTime: null
-        };
-
-        this.peers.set(peerId, peerState);
-
-        connection.onicecandidate = (event) => {
-            if (event.candidate) {
-                this.sendMessage('webrtc_ice_candidate', {
-                    recipientId: peerId,
-                    senderId: this.gameState.clientId,
-                    candidate: event.candidate
-                });
-            }
-        };
-
-        connection.onconnectionstatechange = () => {
-            peerState.state = connection.connectionState;
-            ui.updateStatus(`P2P ${peerId}: ${connection.connectionState}`);
-            ui.updatePeerInfo(this.peers, this.avatars);
-        };
-
-        if (isInitiator) {
-            const dataChannel = connection.createDataChannel('game', { ordered: true });
-            this.setupDataChannel(dataChannel, peerId);
-            peerState.dataChannel = dataChannel;
-        } else {
-            connection.ondatachannel = (event) => {
-                this.setupDataChannel(event.channel, peerId);
-                peerState.dataChannel = event.channel;
-            };
-        }
-
-        return connection;
-    }
-
-    setupDataChannel(dataChannel, peerId) {
-        dataChannel.onopen = () => {
-            ui.updateStatus(`P2P data channel opened with ${peerId}`);
-            ui.updatePeerInfo(this.peers, this.avatars);
-        };
-
-        dataChannel.onclose = () => {
-            ui.updateStatus(`P2P data channel closed with ${peerId}`);
-            ui.updatePeerInfo(this.peers, this.avatars);
-        };
-
-        dataChannel.onmessage = (event) => {
-            try {
-                const message = JSON.parse(event.data);
-                this.handleP2PMessage(message, peerId);
-            } catch (error) {
-                ui.updateStatus(`❌ Invalid P2P message from ${peerId}: ${error.message}`);
-            }
-        };
-    }
-
-    handleP2PMessage(message, fromPeer) {
-        const peer = this.peers.get(fromPeer);
-        const avatar = this.avatars.get(fromPeer);
-
-        if (!peer || !avatar) return;
-
-        switch (message.type) {
-            case 'player_move':
-                avatar.position.fromArray(message.payload.start);
-                peer.targetPosition = new THREE.Vector3().fromArray(message.payload.target);
-                peer.moveStartTime = performance.now();
-                break;
-
-            case 'player_sync':
-                avatar.position.fromArray(message.payload.position);
-                if (message.payload.target) {
-                    peer.targetPosition = new THREE.Vector3().fromArray(message.payload.target);
-                    peer.moveStartTime = performance.now();
-                }
-                break;
-        }
-    }
-
-    broadcastP2P(message) {
-        let sentCount = 0;
-        this.peers.forEach((peer) => {
-            if (peer.dataChannel && peer.dataChannel.readyState === 'open') {
-                try {
-                    peer.dataChannel.send(JSON.stringify(message));
-                    sentCount++;
-                } catch (error) {
-                    console.error('Failed to send P2P message:', error);
-                }
-            }
-        });
-        return sentCount;
-    }
-
-    cleanupPeer(peerId, scene) {
-        const peer = this.peers.get(peerId);
-        if (peer) {
-            if (peer.dataChannel) peer.dataChannel.close();
-            if (peer.connection) peer.connection.close();
-            this.peers.delete(peerId);
-        }
-
-        const avatar = this.avatars.get(peerId);
-        if (avatar) {
-            scene.remove(avatar);
-            if (avatar.geometry) avatar.geometry.dispose();
-            if (avatar.material) avatar.material.dispose();
-            this.avatars.delete(peerId);
-        }
-
-        ui.updatePeerInfo(this.peers, this.avatars);
-    }
-}
-
-// ==========================================
-// CHUNK MANAGER
-// ==========================================
-
-class ChunkManager {
-    constructor(gameState, terrainRenderer, scene) {
-        this.gameState = gameState;
-        this.terrainRenderer = terrainRenderer;
-        this.scene = scene;
-        this.loadRadius = CONFIG.TERRAIN.renderDistance;
-        this.chunkSize = CONFIG.TERRAIN.chunkSize;
-    }
-
-    updatePlayerChunk(playerX, playerZ) {
-        const newChunkX = Math.floor(roundCoord(playerX) / this.chunkSize);
-        const newChunkZ = Math.floor(roundCoord(playerZ) / this.chunkSize);
-
-        if (newChunkX === this.gameState.currentPlayerChunkX &&
-            newChunkZ === this.gameState.currentPlayerChunkZ) {
-            return false; // No change
-        }
-
-        this.gameState.updateChunkPosition(newChunkX, newChunkZ);
-        this.updateChunksAroundPlayer(newChunkX, newChunkZ);
-        return true;
-    }
-
-    updateChunksAroundPlayer(chunkX, chunkZ) {
-        const chunksToKeep = new Set();
-
-        for (let x = -this.loadRadius; x <= this.loadRadius; x++) {
-            for (let z = -this.loadRadius; z <= this.loadRadius; z++) {
-                const gridX = chunkX + x;
-                const gridZ = chunkZ + z;
-                const key = `${gridX},${gridZ}`;
-                chunksToKeep.add(key);
-
-                if (!this.terrainRenderer.chunkMap.has(key)) {
-                    this.createChunk(gridX, gridZ);
-                }
-            }
-        }
-
-        Array.from(this.terrainRenderer.chunkMap.keys()).forEach(key => {
-            if (!chunksToKeep.has(key)) {
-                this.disposeChunk(key);
-            }
-        });
-    }
-
-createChunk(gridX, gridZ) {
-    const worldX = gridX * this.chunkSize;
-    const worldZ = gridZ * this.chunkSize;
-    const chunkKey = `${gridX},${gridZ}`;
-
-    // Get cached removals for this chunk
-    const removedIds = this.gameState.removedObjectsCache.get(chunkKey);
-    
-    // Pass removals to terrain renderer
-    this.terrainRenderer.createChunk(worldX, worldZ, removedIds);
-
-    console.log(`Created chunk ${chunkKey} with removals applied.`);
-}
-
-    applyChunkRemovals(chunkKey) {
-    const objects = this.terrainRenderer.chunkTrees.get(chunkKey);
-    if (!objects) {
-        console.log(`No objects to process for chunk ${chunkKey}.`);
-        return;
-    }
-
-    const removedIds = this.gameState.removedObjectsCache.get(chunkKey);
-    if (!removedIds || removedIds.size === 0) {
-        console.log(`No removals to apply for chunk ${chunkKey}.`);
-        return;
-    }
-
-    // Remove objects that are in the removal list
-    objects.forEach(obj => {
-        const objectId = obj.userData.objectId;
-        if (removedIds.has(objectId)) {
-            this.scene.remove(obj);
-            this.disposeObject(obj);
-        }
-    });
-
-    // Filter out the removed objects from the tracked array
-    const keptObjects = objects.filter(obj => !removedIds.has(obj.userData.objectId));
-    this.terrainRenderer.chunkTrees.set(chunkKey, keptObjects);
-
-    console.log(`Applied ${removedIds.size} removals to chunk ${chunkKey}.`);
-}
-
-    disposeChunk(key) {
-    this.terrainRenderer.disposeChunk(key);
-}
-
-    removeObject(objectId) {
-        const object = objectPlacer.findObjectById(this.scene, objectId);
-        if (object && object.userData.chunkKey) {
-            const chunkKey = object.userData.chunkKey;
-
-            // Add to cache
-            if (!this.gameState.removedObjectsCache.has(chunkKey)) {
-                this.gameState.removedObjectsCache.set(chunkKey, new Set());
-            }
-            this.gameState.removedObjectsCache.get(chunkKey).add(objectId);
-
-            // Remove from scene
-            this.scene.remove(object);
-            this.disposeObject(object);
-            // Remove from chunkTrees array
-        const trees = this.terrainRenderer.chunkTrees.get(chunkKey);
-        if (trees) {
-            const filteredTrees = trees.filter(obj => obj.userData.objectId !== objectId);
-            this.terrainRenderer.chunkTrees.set(chunkKey, filteredTrees);
-        }
-
-            // Update nearest object if this was it
-            if (this.gameState.nearestObject && this.gameState.nearestObject.id === objectId) {
-                this.gameState.nearestObject = null;
-                this.gameState.nearestObjectDistance = Infinity;
-                ui.updateNearestObject(null);
-                ui.updateButtonStates(this.gameState.isInChunk, null);
-            }
-            return true;
-        }
-        return false;
-    }
-
-    disposeObject(object) {
-        object.traverse((child) => {
-            if (child instanceof THREE.Mesh) {
-                if (child.geometry) child.geometry.dispose();
-                if (child.material) {
-                    if (Array.isArray(child.material)) {
-                        child.material.forEach(mat => mat.dispose());
-                    } else {
-                        child.material.dispose();
-                    }
-                }
-            }
-        });
-    }
-}
-
+import { CONFIG, COMPUTED } from './config.js';
+import { SimpleTerrainRenderer } from './terrain.js';
+import { objectPlacer, modelManager } from './objects.js';
+import { BlobShadow } from './blobshadow.js';
+import { AudioManager } from './audio.js';
+import { AIEnemy } from './ai-enemy.js';
+import { NetworkManager } from './network/NetworkManager.js';
+import { GameState } from './core/GameState.js';
+import { GameLoop } from './core/GameLoop.js';
+import { SceneManager } from './core/SceneManager.js';
+import { CameraController } from './core/CameraController.js';
+import { InputManager } from './core/InputManager.js';
+import { PlayerController } from './player/PlayerController.js';
+import { PlayerInventory } from './player/PlayerInventory.js';
+import { PlayerActions } from './player/PlayerActions.js';
+import { PlayerCombat } from './player/PlayerCombat.js';
+import { PlayerHunger } from './player/PlayerHunger.js';
+import { ChunkManager } from './world/ChunkManager.js';
+import { StructureManager } from './world/StructureManager.js';
+import { AvatarManager } from './entity/AvatarManager.js';
+import { AIEnemyManager } from './entity/AIEnemyManager.js';
+import { DeathSystem } from './entity/DeathSystem.js';
+import { InventoryUI } from './ui/InventoryUI.js';
+import { BuildMenu } from './ui/BuildMenu.js';
+import { CraftingSystem } from './systems/CraftingSystem.js';
+import { ResourceManager } from './systems/ResourceManager.js';
+import { BuildingSystem } from './systems/BuildingSystem.js';
+import { AnimationSystem } from './systems/AnimationSystem.js';
+import { MessageRouter } from './network/MessageRouter.js';
+import { PhysicsManager, COLLISION_GROUPS } from './core/PhysicsManager.js';
 
 // ==========================================
 // MAIN GAME CLASS
@@ -412,73 +48,202 @@ createChunk(gridX, gridZ) {
 class MultiplayerGame {
     constructor() {
         this.gameState = new GameState();
+
+        // Sensor-based proximity tracking (objectId -> THREE.Object3D)
+        this.activeProximityObjects = new Map();
+
+        // Bounding box collision tracking (for debug logging)
+        this.activeBoundingBoxCollisions = new Set();
+
+        // Initialize core systems
+        this.sceneManager = new SceneManager();
+        this.sceneManager.initialize();
+        this.scene = this.sceneManager.getScene();
+        this.camera = this.sceneManager.getCamera();
+        this.renderer = this.sceneManager.getRenderer();
+
+        // Initialize game loop
+        this.gameLoop = new GameLoop();
+
+        // Initialize camera controller
+        this.cameraController = new CameraController(this.camera);
+
+        // Initialize input manager
+        this.inputManager = new InputManager(this.camera);
+
+        // Initialize physics manager (will be initialized async)
+        this.physicsManager = new PhysicsManager(this.scene);
+
+        // Foundation validation now handled by BuildMenu module
+        // Kept for backward compatibility if needed
+        this.validationThrottleTimeout = null;
+
+        // Initialize AI enemy properties (will be managed by aiEnemyManager)
+        this.tentAIEnemies = null;
+        this.aiEnemyController = null;
+        this.aiEnemy = null;
+
+        // Initialize game (async) and store promise
+        this.initPromise = this.init();
+    }
+
+    async init() {
+        // Initialize physics
+        await this.physicsManager.initialize();
+
+        // Set physics manager on objectPlacer for collider registration
+        objectPlacer.setPhysicsManager(this.physicsManager);
+
+        // Continue with rest of setup
         this.setupScene();
+        this.setupPlayer();
         this.setupRenderers();
         this.setupNetworking();
         this.setupInput();
         this.setupUI();
-
-        // Animation constants
-        this.playerSpeed = 0.02;  // Reduced by 80% from 0.1
-        this.stopThreshold = 0.01;
-        this.chunkUpdateInterval = 1000;
-        this.proximityCheckInterval = 2000;
-        this.peerCheckInterval = 5000;
+        this.setupGameLoop();
     }
 
     setupScene() {
-        this.scene = new THREE.Scene();
-        this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        this.renderer = new THREE.WebGLRenderer({ antialias: true });
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.setClearColor(0x000011);
-        this.renderer.shadowMap.enabled = true;
-        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-        document.body.appendChild(this.renderer.domElement);
+        // Scene, camera, renderer, and lighting are now handled by SceneManager
+        // This method now only handles player-specific initialization
 
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-        this.scene.add(ambientLight);
-
-        this.directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
-        this.directionalLight.position.set(15, 20, 0);
-        this.directionalLight.castShadow = true;
-        this.directionalLight.shadow.mapSize.set(2048, 2048);
-        this.directionalLight.shadow.camera.near = 0.5;
-        this.directionalLight.shadow.camera.far = 100;
-        this.directionalLight.shadow.camera.left = -50;
-        this.directionalLight.shadow.camera.right = 50;
-        this.directionalLight.shadow.camera.top = 50;
-        this.directionalLight.shadow.camera.bottom = -50;
-        this.directionalLight.shadow.bias = -0.001;
-        this.scene.add(this.directionalLight);
-
-        this.directionalLight.target = new THREE.Object3D();
-        this.scene.add(this.directionalLight.target);
-
-        this.playerObject = new THREE.Mesh(
-            new THREE.SphereGeometry(1, 32, 32),
-            new THREE.MeshBasicMaterial({ color: 0x0000ff })
-        );
-        this.playerObject.position.set(0, 5, 0);
+        // Create player object (will be replaced with man model after loading)
+        this.playerObject = new THREE.Group();
+        // Set player spawn position
+        this.playerObject.position.set(5.04, 1.37, 14.29);
         this.scene.add(this.playerObject);
 
-        this.raycaster = new THREE.Raycaster();
-        this.pointer = new THREE.Vector2();
+        // Set player metadata early for physics system
+        this.playerObject.userData.objectId = 'player_' + this.gameState.clientId;
+        this.playerObject.userData.modelType = 'player';
+
+        // Player scale
+        this.playerScale = 0.0325; // 30% bigger than 0.025
+
+        // Animation support
+        this.animationMixer = null;
+        this.animationAction = null;
+        this.shootAction = null;
+
+        // AI Enemy will be initialized after models load
+        this.aiEnemy = null;
+
+        // Death state tracking
+        this.isDead = false;
+        this.deathStartTime = 0;
+        this.deathRotationProgress = 0;
+        this.fallDirection = 1;
+
+        // Player shooting state (managed by PlayerCombat)
+        this.playerShootTarget = null;
+        this.playerLastShootTime = 0;
+        this.playerShootInterval = 6000; // 6 seconds between shots
+        this.playerLastTargetCheckTime = 0;
+
+        // Raycaster and pointer now handled by InputManager
+
+        // Initialize audio manager
+        this.audioManager = new AudioManager(this.camera);
+        this.audioManager.loadSounds();
+    }
+
+    setupPlayer() {
+        // Initialize player inventory
+        this.playerInventory = new PlayerInventory(
+            this.gameState.inventory.rows,
+            this.gameState.inventory.cols
+        );
+
+        // Point PlayerInventory to use gameState.inventory.items
+        this.playerInventory.itemsRef = this.gameState.inventory.items;
+
+        // Initialize player actions
+        this.playerActions = new PlayerActions(
+            this.playerInventory,
+            this.audioManager,
+            this.animationMixer
+        );
+
+        // Initialize player combat
+        this.playerCombat = new PlayerCombat(
+            this.playerObject,
+            this.audioManager
+        );
+
+
+        // Initialize death system
+        this.deathSystem = new DeathSystem();
+
+        // Note: PlayerController initialized in setupRenderers after terrainRenderer exists
     }
 
     setupRenderers() {
-        this.terrainRenderer = new SimpleTerrainRenderer(this.scene);
-        this.waterRenderer = new WaterRenderer(this.scene, 1.02, this.terrainRenderer);
+        this.terrainRenderer = new SimpleTerrainRenderer(this.scene, null, this.gameState);
+        this.waterRenderer = new WaterRenderer(this.scene, CONFIG.WATER.LEVEL, this.terrainRenderer, this.sceneManager);
         this.terrainRenderer.setWaterRenderer(this.waterRenderer);
 
         this.chunkManager = new ChunkManager(
             this.gameState,
             this.terrainRenderer,
-            this.scene
+            this.scene,
+            this
         );
 
-        requestAnimationFrame(() => {
-            this.terrainRenderer.updateShadowUniforms(this.directionalLight);
+        // Initialize StructureManager for building placement
+        this.structureManager = new StructureManager(this.scene, this.terrainRenderer, this.physicsManager);
+
+        // Initialize PlayerController after terrainRenderer is created
+        this.playerController = new PlayerController(this.playerObject, this.terrainRenderer, this.physicsManager);
+
+        // Create physics character controller for player
+        if (this.physicsManager && this.physicsManager.initialized) {
+            const playerObjectId = this.playerObject.userData.objectId || 'player';
+            const playerPosition = this.playerObject.position;
+
+            // Create character controller (radius: 0.1, height: 0.3)
+            this.physicsManager.createCharacterController(
+                playerObjectId,
+                0.1,  // Capsule radius (1/3 of original 0.3)
+                0.3,  // Capsule height (1/3 of original 1.0)
+                playerPosition
+            );
+
+            console.log(`[PHYSICS] Created character controller for player at (${playerPosition.x.toFixed(2)}, ${playerPosition.y.toFixed(2)}, ${playerPosition.z.toFixed(2)})`);
+        }
+
+        // Set up arrival callback
+        this.playerController.setOnArriveCallback(() => {
+            // IMPORTANT: Set isMoving to false BEFORE checking proximity
+            // Otherwise buttons won't appear because they check !isMoving
+            this.gameState.isMoving = false;
+
+            if (this.gameState.inventoryOpen) {
+                this.inventoryUI.updateConstructionSection();
+                this.inventoryUI.updateCrateSection();
+            }
+            this.checkProximityToObjects();
+        });
+
+        // Set up blocked callback
+        this.playerController.setOnBlockedCallback((position) => {
+            // Set isMoving to false when blocked
+            this.gameState.isMoving = false;
+
+            this.networkManager.broadcastP2P({
+                type: 'player_sync',
+                payload: { position: position.toArray(), target: null }
+            });
+            if (this.gameState.inventoryOpen) {
+                this.inventoryUI.updateConstructionSection();
+                this.inventoryUI.updateCrateSection();
+            }
+            const hasAxe = this.hasToolWithDurability('axe');
+            const hasSaw = this.hasToolWithDurability('saw');
+            const hasHammer = this.hasToolWithDurability('hammer');
+            const hasFishingNet = this.hasToolWithDurability('fishingnet');
+            const isOnCooldown = this.gameState.harvestCooldown && this.gameState.harvestCooldown.endTime > Date.now();
+            ui.updateButtonStates(this.gameState.isInChunk, this.gameState.nearestObject, hasAxe, hasSaw, isOnCooldown, this.gameState.nearestConstructionSite, this.gameState.isMoving, this.gameState.nearestStructure, hasHammer, this.gameState.nearWater, hasFishingNet);
         });
     }
 
@@ -487,10 +252,119 @@ class MultiplayerGame {
             this.gameState,
             this.handleServerMessage.bind(this)
         );
+
+        // Set game reference for creating peer AI enemies
+        this.networkManager.setGame(this);
+
+        // Set scene reference for adding peer AI enemies
+        this.networkManager.setScene(this.scene);
+
+        // Set audio manager reference in NetworkManager for P2P sounds
+        this.networkManager.setAudioManager(this.audioManager);
+
+        // Initialize AvatarManager for peer player avatars
+        this.avatarManager = new AvatarManager(
+            this.scene,
+            this.networkManager,
+            this.structureManager,
+            this.terrainRenderer,
+            modelManager,
+            this.playerScale
+        );
+
+        // Initialize AIEnemyManager for AI enemies
+        this.aiEnemyManager = new AIEnemyManager(
+            this.scene,
+            this.networkManager,
+            this.structureManager,
+            this.terrainRenderer
+        );
+        this.aiEnemyManager.setGameReference(this);
+
+        // Set up property references for backward compatibility
+        this.tentAIEnemies = this.aiEnemyManager.tentAIEnemies;
+        this.aiEnemyController = this.aiEnemyManager.aiEnemyController;
+        this.aiEnemy = this.aiEnemyManager.aiEnemy;
+
+        // Subscribe to game state events (optional - for future extensibility)
+        // Example: this.networkManager.on('player_sync', (data) => { ... });
+        // Example: this.networkManager.on('ai_death', (data) => { ... });
     }
 
     setupInput() {
-        window.addEventListener('pointerdown', this.onPointerDown.bind(this));
+        // Use InputManager for mouse/pointer events
+        this.inputManager.onPointerDown(this.onPointerDown.bind(this));
+        this.inputManager.onPointerMove(this.onPointerMove.bind(this));
+
+        // Use InputManager for keyboard events
+        this.inputManager.onKeyDown((event) => {
+            if (event.key === 'i' || event.key === 'I') {
+                this.inventoryUI.toggleInventory();
+            }
+            if (event.key === 'b' || event.key === 'B') {
+                // Delegate to BuildMenu
+                if (this.buildMenu) {
+                    this.buildMenu.toggleBuildMenu();
+                }
+            }
+            // Q key rotates structure left during placement
+            if ((event.key === 'q' || event.key === 'Q') && this.buildMenu && this.buildMenu.isPlacementActive()) {
+                if (this.buildMenu.rotationControls) {
+                    this.buildMenu.rotationControls.rotateLeft();
+                }
+            }
+
+            // E key rotates structure right during placement
+            if ((event.key === 'e' || event.key === 'E') && this.buildMenu && this.buildMenu.isPlacementActive()) {
+                if (this.buildMenu.rotationControls) {
+                    this.buildMenu.rotationControls.rotateRight();
+                }
+            }
+
+            // Space key confirms structure placement during rotation phase
+            if (event.key === ' ' && this.buildMenu && this.buildMenu.isPlacementActive()) {
+                if (this.buildMenu.structurePlacement && this.buildMenu.structurePlacement.phase === 'rotation') {
+                    if (this.buildMenu.rotationControls) {
+                        this.buildMenu.rotationControls.confirm();
+                    }
+                }
+            }
+
+            // ESC key cancels structure placement
+            if (event.key === 'Escape' && this.buildMenu && this.buildMenu.isPlacementActive()) {
+                this.buildMenu.cancelStructurePlacement();
+                ui.updateStatusLine1('Placement cancelled', 3000);
+            }
+
+            // ESC key cancels demolish action
+            if (event.key === 'Escape' && this.gameState.activeAction) {
+                this.cancelChoppingAction();
+            }
+
+            // V key toggles physics debug visualization
+            if (event.key === 'v' || event.key === 'V') {
+                if (this.physicsManager) {
+                    const visible = this.physicsManager.toggleDebug();
+                    ui.updateStatusLine1(`Physics debug: ${visible ? 'ON' : 'OFF'}`, 3000);
+                }
+            }
+        });
+
+        // Zoom controls - use CameraController
+        const zoomInBtn = document.getElementById('zoomInBtn');
+        const zoomOutBtn = document.getElementById('zoomOutBtn');
+
+        if (zoomInBtn) {
+            zoomInBtn.addEventListener('click', () => {
+                this.cameraController.zoomIn();
+            });
+        }
+
+        if (zoomOutBtn) {
+            zoomOutBtn.addEventListener('click', () => {
+                this.cameraController.zoomOut();
+            });
+        }
     }
 
     setupUI() {
@@ -500,233 +374,676 @@ class MultiplayerGame {
             getCurrentChunkX: () => this.gameState.currentPlayerChunkX,
             getCurrentChunkZ: () => this.gameState.currentPlayerChunkZ,
             getNearestObject: () => this.gameState.nearestObject,
+            getNearestStructure: () => this.gameState.nearestStructure,
+            hasToolWithDurability: (toolType) => this.hasToolWithDurability(toolType),
             onRemoveObject: (object) => {
                 if (object) {
-                    this.networkManager.sendMessage('remove_object_request', {
-                        chunkId: `chunk_${object.chunkKey}`,
-                        objectId: object.id,
-                        name: object.name,
-                        position: object.position.toArray()
-                    });
+                    // Normalize structure objects (THREE.js objects with userData) to match natural object format
+                    let normalizedObject = object;
+                    if (object.userData && object.userData.modelType) {
+                        // This is a structure from nearestStructure - normalize it
+                        normalizedObject = {
+                            id: object.userData.objectId,
+                            name: object.userData.modelType,
+                            position: object.position.clone(),
+                            chunkKey: object.userData.chunkKey,
+                            quality: object.userData.quality,
+                            scale: object.userData.originalScale || object.scale
+                        };
+                    }
+
+                    // Check if it's a log - if so, treat as firewood harvest
+                    const isLog = normalizedObject.name.endsWith('_log') || normalizedObject.name === 'log';
+                    const isRock = normalizedObject.name === 'limestone' || normalizedObject.name === 'sandstone' || normalizedObject.name === 'clay';
+
+                    if (isLog) {
+                        this.startHarvestAction(normalizedObject, 'firewood');
+                    } else if (isRock) {
+                        this.startHarvestAction(normalizedObject, 'stone');
+                    } else {
+                        // Start the removal action for trees/structures (includes timer, animation, sound)
+                        this.startRemovalAction(normalizedObject);
+                    }
                 }
             },
-            onResize: this.onResize.bind(this)
+            onHarvestLog: (object, harvestType) => {
+                if (object) {
+                    this.startHarvestAction(object, harvestType);
+                }
+            },
+            onStartFishing: () => {
+                if (this.resourceManager && this.gameState.nearWater && !this.gameState.activeAction && !this.gameState.isMoving) {
+                    this.resourceManager.startFishingAction();
+                }
+            },
+            onResize: this.onResize.bind(this),
+            resumeAudio: () => {
+                if (this.audioManager) {
+                    this.audioManager.resumeContext();
+                }
+            },
+            toggleInventory: () => this.inventoryUI.toggleInventory(),
+            toggleBuildMenu: () => {
+                // Will be available after initialization
+                if (this.buildMenu) {
+                    this.buildMenu.toggleBuildMenu();
+                }
+            },
+            toggleConstructionInventory: () => {
+                // Delegate to BuildingSystem once initialized
+                if (this.buildingSystem) {
+                    this.buildingSystem.toggleConstructionInventory();
+                }
+            },
+            onBuildConstruction: () => {
+                // Delegate to BuildingSystem once initialized
+                if (this.buildingSystem) {
+                    this.buildingSystem.startBuildAction();
+                }
+            }
         });
         window.addEventListener('resize', this.onResize.bind(this));
     }
 
-    start() {
+    async start() {
         ui.updateStatus("🎮 Game initialized");
         ui.updateConnectionStatus('connecting', '🔄 Connecting...');
-        this.networkManager.connect();
-        this.animate();
+
+        // Wait for models to load before setting up player
+        ui.updateStatus("⏳ Loading player model...");
+        await modelManager.loadAllModels();
+        ui.updateStatus("✅ Models loaded");
+
+        // Load and setup player model
+        this.setupPlayerModel();
+
+        // Initialize InventoryUI with all dependencies
+        this.inventoryUI = new InventoryUI(this.gameState, this);
+
+        // Initialize PlayerHunger system (starts at spawn)
+        this.playerHunger = new PlayerHunger(this.playerInventory, ui, this.inventoryUI, this);
+        console.log('[Game] PlayerHunger system initialized');
+
+        // Initialize CraftingSystem
+        this.craftingSystem = new CraftingSystem(
+            this.gameState,
+            this.networkManager,
+            this.audioManager,
+            this.inventoryUI
+        );
+        this.craftingSystem.setGameReference(this);
+
+        // Initialize ResourceManager
+        this.resourceManager = new ResourceManager(
+            this.gameState,
+            this.networkManager,
+            this.audioManager,
+            this.inventoryUI
+        );
+        this.resourceManager.setGameReference(this);
+
+        // Initialize BuildingSystem
+        this.buildingSystem = new BuildingSystem(
+            this.gameState,
+            this.networkManager,
+            this.audioManager,
+            this.inventoryUI
+        );
+        this.buildingSystem.setGameReference(this);
+
+        // Initialize AnimationSystem
+        this.animationSystem = new AnimationSystem(this.scene);
+
+        // Set up callbacks for InventoryUI
+        this.inventoryUI.onChiselingStart = this.craftingSystem.startChiselingAction.bind(this.craftingSystem);
+        this.inventoryUI.onProximityCheck = this.checkProximityToObjects.bind(this);
+        this.inventoryUI.onInventoryClosed = () => {
+            // Callback when inventory closes - can be used for future needs
+        };
+
+        // Initialize inventory UI
+        this.inventoryUI.initialize();
+
+        // Initialize build menu UI
+        this.buildMenu = new BuildMenu({
+            gameState: this.gameState,
+            scene: this.scene,
+            terrainRenderer: this.terrainRenderer,
+            structureManager: this.structureManager,
+            networkManager: this.networkManager,
+            inventoryUI: this.inventoryUI,
+            playerObject: this.playerObject
+        });
+
+        // Initialize message router for handling all server messages
+        this.messageRouter = new MessageRouter(this);
+        // Initialize grid slots
+        const grid = document.getElementById('buildMenuGrid');
+        for (let row = 0; row < this.buildMenu.buildMenu.rows; row++) {
+            for (let col = 0; col < this.buildMenu.buildMenu.cols; col++) {
+                const slot = document.createElement('div');
+                slot.className = 'build-menu-slot';
+                slot.dataset.row = row;
+                slot.dataset.col = col;
+                grid.appendChild(slot);
+            }
+        }
+
+        this.networkManager.connect(CONFIG.NETWORKING.USE_ONLINE_SERVER);
+
+        // Note: Physics colliders are now registered automatically when objects are created
+        // No need for manual registration like the old collision system
+
+        this.gameLoop.start();
+
     }
+
+    setupPlayerModel() {
+        const manGLTF = modelManager.getGLTF('man');
+
+        if (!manGLTF) {
+            console.error('Man model not loaded');
+            return;
+        }
+
+        // CRITICAL FIX: Use original scene directly - cloning breaks skeleton binding for SkinnedMesh
+        const playerMesh = manGLTF.scene;
+        playerMesh.scale.set(this.playerScale, this.playerScale, this.playerScale);
+
+        // Setup materials and proper lighting
+        playerMesh.traverse((child) => {
+            if (child.isMesh || child.isSkinnedMesh) {
+                child.visible = true; // Ensure visibility
+                child.frustumCulled = false; // Disable frustum culling (CPU overhead)
+                child.renderOrder = 1; // Render after terrain
+
+                // Fix dark materials - ensure they respond to lighting
+                if (child.material) {
+                    // Re-enable depth testing (need this for proper rendering)
+                    child.material.depthWrite = true;
+                    child.material.depthTest = true;
+
+                    // MeshStandardMaterial should already work with lights
+                    // But make sure it's not too dark
+                    if (child.material.type === 'MeshStandardMaterial') {
+                        // Don't override color, but ensure it receives light properly
+                        child.material.needsUpdate = true;
+                    }
+                }
+            }
+        });
+
+        // Add to player object
+        this.playerObject.add(playerMesh);
+
+        // Calculate bounding box to find model's dimensions
+        const box = new THREE.Box3().setFromObject(playerMesh);
+        const center = box.getCenter(new THREE.Vector3());
+        const size = new THREE.Vector3();
+        box.getSize(size);
+
+        // Store the Z offset needed to align feet with click position
+        this.playerModelOffset = center.z;
+
+        // Store actual model height for terrain following
+        this.playerModelHeight = size.y;
+
+
+        // Setup animation
+        if (manGLTF.animations && manGLTF.animations.length > 0) {
+            this.animationMixer = new THREE.AnimationMixer(playerMesh);
+
+            // Update PlayerActions with the animation mixer
+            if (this.playerActions) {
+                this.playerActions.setAnimationMixer(this.animationMixer);
+            }
+
+            // Search for walk animation by name
+            const walkAnimation = manGLTF.animations.find(anim =>
+                anim.name.toLowerCase().includes('walk')
+            );
+
+            if (walkAnimation) {
+                this.animationAction = this.animationMixer.clipAction(walkAnimation);
+                this.animationAction.play();
+            }
+
+            // Search for pickaxe animation (the only action animation in man.glb)
+            // Try various possible names
+            let choppingAnimation = manGLTF.animations.find(anim => {
+                const name = anim.name.toLowerCase();
+                // Check for exact matches first
+                if (name === 'pickaxe' || name === 'pickaxe.001' || name === 'armature|pickaxe') {
+                    return true;
+                }
+                // Then check for partial matches
+                return name.includes('pickaxe') || name.includes('pick') ||
+                       name.includes('axe') || name.includes('action');
+            });
+
+            if (choppingAnimation) {
+                this.choppingAction = this.animationMixer.clipAction(choppingAnimation);
+                this.choppingAction.loop = THREE.LoopRepeat;
+            } else {
+                // Use walk animation as fallback for chopping
+                if (walkAnimation) {
+                    this.choppingAction = this.animationMixer.clipAction(walkAnimation);
+                    this.choppingAction.loop = THREE.LoopRepeat;
+                }
+            }
+
+            // Update PlayerActions with chopping animation
+            if (this.playerActions && this.choppingAction) {
+                this.playerActions.setChoppingAnimation(this.choppingAction);
+            }
+
+            // Update CraftingSystem with animation references
+            if (this.craftingSystem) {
+                this.craftingSystem.setAnimationReferences(this.animationMixer, this.choppingAction);
+                this.craftingSystem.setInventoryToggleCallback(this.toggleInventory.bind(this));
+            }
+
+            // Update ResourceManager with animation references
+            if (this.resourceManager) {
+                this.resourceManager.setAnimationReferences(this.animationMixer, this.choppingAction);
+            }
+
+            // Update BuildingSystem with animation references
+            if (this.buildingSystem) {
+                this.buildingSystem.setAnimationReferences(this.animationMixer, this.choppingAction);
+            }
+
+            // Search for shooting animation
+            const shootAnimation = manGLTF.animations.find(anim => {
+                const name = anim.name.toLowerCase();
+                return name.includes('shoot') || name.includes('fire') ||
+                       name.includes('rifle') || name.includes('gun') ||
+                       name.includes('aim');
+            });
+
+            if (shootAnimation) {
+                this.shootAction = this.animationMixer.clipAction(shootAnimation);
+                this.shootAction.loop = THREE.LoopOnce; // Play once per trigger
+                this.shootAction.clampWhenFinished = true; // Hold last frame
+
+                // Update PlayerCombat with shoot animation
+                if (this.playerCombat) {
+                    this.playerCombat.setShootAnimation(this.shootAction);
+                }
+            }
+        }
+
+        // Set player object reference in NetworkManager for P2P state sync
+        this.networkManager.setPlayerObject(this.playerObject);
+
+        // Note: Player metadata is now set earlier in setupScene() for physics system
+    }
+
 
     // --- Server Message Handlers ---
 
     handleServerMessage(type, payload) {
-        switch (type) {
-            case 'server_connected':
-                this.handleServerConnected();
-                break;
-            case 'webrtc_offer':
-                this.handleWebRTCOffer(payload);
-                break;
-            case 'webrtc_answer':
-                this.handleWebRTCAnswer(payload);
-                break;
-            case 'webrtc_ice_candidate':
-                this.handleWebRTCIceCandidate(payload);
-                break;
-            case 'proximity_update':
-                this.handleProximityUpdate(payload);
-                break;
-            case 'object_removed':
-                this.handleObjectRemoved(payload);
-                break;
-            case 'chunk_objects_state':
-                this.handleChunkObjectsState(payload);
-                break;
+        // Delegate all message handling to MessageRouter
+        if (this.messageRouter) {
+            this.messageRouter.handleMessage(type, payload);
         }
     }
 
-    handleServerConnected() {
-    const { chunkSize } = CONFIG.TERRAIN;
-    const initialChunkX = Math.floor(this.playerObject.position.x / chunkSize);
-    const initialChunkZ = Math.floor(this.playerObject.position.z / chunkSize);
-    const chunkId = `chunk_${initialChunkX},${initialChunkZ}`;
+    // ==========================================
+    // ACTION METHODS - Called from UI and game loop
+    // ==========================================
 
-    const success = this.networkManager.sendMessage('join_chunk', {
-        chunkId,
-        clientId: this.gameState.clientId
-    });
+    startRemovalAction(object) {
+        const treeTypes = ['oak', 'fir', 'pine', 'cypress'];
+        const structureTypes = ['construction', 'foundation', 'foundationcorner', 'foundationroundcorner',
+            'crate', 'tent', 'house', 'garden', 'market', 'outpost', 'ship', 'dock'];
+        const isTree = treeTypes.includes(object.name);
+        const isStructure = structureTypes.includes(object.name);
 
-    if (success) {
-        this.gameState.isInChunk = true;
-        this.gameState.updateChunkPosition(initialChunkX, initialChunkZ);
-        ui.updateButtonStates(true, null);
-    }
+        // Face the target object
+        if (object.position) {
+            const targetAngle = Math.atan2(
+                object.position.x - this.playerObject.position.x,
+                object.position.z - this.playerObject.position.z
+            );
+            this.playerObject.rotation.y = targetAngle;
+        }
 
-    // Don't create chunks yet - wait for server state
-}
+        // Start removal action
+        this.gameState.activeAction = {
+            object: object,
+            startTime: Date.now(),
+            duration: isStructure ? CONFIG.ACTIONS.CHOP_STRUCTURE_DURATION : CONFIG.ACTIONS.CHOP_TREE_DURATION,
+            actionType: isStructure ? 'demolish' : 'chop'
+        };
 
-    handleChunkObjectsState(payload) {
-    const { objectChanges } = payload;
-    if (!objectChanges || !Array.isArray(objectChanges)) return;
+        // Play appropriate sound
+        if (isTree && this.audioManager) {
+            const sound = this.audioManager.playAxeSound();
+            this.gameState.activeAction.sound = sound;
+        } else if (isStructure && this.audioManager) {
+            const sound = this.audioManager.playHammerSound();
+            this.gameState.activeAction.sound = sound;
+        }
 
-    // Group changes by chunk
-    const changesByChunk = new Map();
-    
-    objectChanges.forEach(change => {
-        if (change.action === 'remove') {
-            const chunkKey = change.chunkId.replace('chunk_', '');
-            
-            // Add to cache
-            if (!this.gameState.removedObjectsCache.has(chunkKey)) {
-                this.gameState.removedObjectsCache.set(chunkKey, new Set());
+        // Start removal animation and stop walking
+        if (this.animationMixer && this.choppingAction) {
+            // Stop walking animation if playing
+            if (this.animationAction) {
+                this.animationAction.stop();
             }
-            this.gameState.removedObjectsCache.get(chunkKey).add(change.id);
-            
-            // Track which chunks need removal applied
-            changesByChunk.set(chunkKey, true);
+            // Start chopping animation
+            this.choppingAction.reset();
+            this.choppingAction.play();
         }
-    });
 
-    // Apply removals to existing chunks
-    changesByChunk.forEach((_, chunkKey) => {
-        this.chunkManager.applyChunkRemovals(chunkKey);
-    });
-
-    // If this is the first chunk state after connecting, create the initial chunks
-if (this.terrainRenderer.chunkMap.size === 0) {
-    this.chunkManager.updateChunksAroundPlayer(
-        this.gameState.currentPlayerChunkX, 
-        this.gameState.currentPlayerChunkZ
-    );
-}
-}
-
-    handleObjectRemoved(payload) {
-        if (this.chunkManager.removeObject(payload.objectId)) {
-    ui.updateStatus(`Removed object ${payload.objectId} from scene`);
-} else {
-    console.warn(`Object ${payload.objectId} not found in current chunks.`);
-}
-    }
-
-    handleProximityUpdate(payload) {
-        const { players } = payload;
-        ui.updateStatus(`📍 Proximity update: ${players.length} players`);
-
-        const currentPeerIds = new Set(players.map(p => p.id));
-        this.networkManager.peers.forEach((_, peerId) => {
-            if (!currentPeerIds.has(peerId) && peerId !== this.gameState.clientId) {
-                this.networkManager.cleanupPeer(peerId, this.scene);
-            }
-        });
-
-        const newPlayers = players.filter(
-            p => p.id !== this.gameState.clientId && !this.networkManager.peers.has(p.id)
-        );
-
-        if (newPlayers.length > 0) {
-            this.staggerP2PInitiations(newPlayers);
-        }
-        ui.updatePeerInfo(this.networkManager.peers, this.networkManager.avatars);
-    }
-
-    async handleWebRTCOffer(payload) {
-        if (payload.recipientId !== this.gameState.clientId) return;
-        const peerId = payload.senderId;
-        const connection = this.networkManager.createPeerConnection(peerId, false);
-        try {
-            await connection.setRemoteDescription(new RTCSessionDescription(payload.offer));
-            const answer = await connection.createAnswer();
-            await connection.setLocalDescription(answer);
-            this.networkManager.sendMessage('webrtc_answer', {
-                recipientId: peerId,
-                senderId: this.gameState.clientId,
-                answer
+        // Broadcast sound to peers
+        if (isTree) {
+            this.networkManager.broadcastP2P({
+                type: 'player_sound',
+                payload: {
+                    soundType: 'axe',
+                    startTime: Date.now()
+                }
             });
-        } catch (error) {
-            ui.updateStatus(`❌ Failed to handle offer from ${peerId}: ${error}`);
+        } else if (isStructure) {
+            this.networkManager.broadcastP2P({
+                type: 'player_sound',
+                payload: {
+                    soundType: 'hammer',
+                    startTime: Date.now()
+                }
+            });
         }
     }
 
-    async handleWebRTCAnswer(payload) {
-        if (payload.recipientId !== this.gameState.clientId) return;
-        const peer = this.networkManager.peers.get(payload.senderId);
-        if (peer?.connection) {
-            try {
-                await peer.connection.setRemoteDescription(new RTCSessionDescription(payload.answer));
-            } catch (error) {
-                ui.updateStatus(`❌ Failed to handle answer from ${payload.senderId}: ${error}`);
-            }
+    startHarvestAction(object, harvestType) {
+        // Delegate to ResourceManager
+        this.resourceManager.startHarvestAction(object, harvestType);
+    }
+
+    updateChoppingAction() {
+        if (!this.gameState.activeAction) return;
+
+        const now = Date.now();
+        const elapsed = now - this.gameState.activeAction.startTime;
+        const progress = Math.min(elapsed / this.gameState.activeAction.duration, 1);
+
+        // Throttle UI updates (configurable interval), but always update on completion
+        const shouldUpdateUI = (now - this.gameState.lastChoppingProgressUpdate >= CONFIG.GAME_LOOP.ACTION_PROGRESS_UPDATE_INTERVAL) || progress >= 1;
+
+        if (shouldUpdateUI) {
+            ui.updateChoppingProgress(progress);
+            this.gameState.lastChoppingProgressUpdate = now;
+        }
+
+        // Check if action is complete (checked every frame for responsiveness)
+        if (progress >= 1) {
+            this.completeActiveAction();
         }
     }
 
-    async handleWebRTCIceCandidate(payload) {
-        if (payload.recipientId !== this.gameState.clientId) return;
-        const peer = this.networkManager.peers.get(payload.senderId);
-        if (peer?.connection) {
-            try {
-                await peer.connection.addIceCandidate(new RTCIceCandidate(payload.candidate));
-            } catch (error) {
-                ui.updateStatus(`❌ Failed to add ICE candidate from ${payload.senderId}: ${error}`);
-            }
+    cancelChoppingAction() {
+        if (!this.gameState.activeAction) return;
+
+        // Get action type before clearing
+        const actionType = this.gameState.activeAction.actionType;
+
+        // Stop sound
+        if (this.gameState.activeAction.sound) {
+            this.gameState.activeAction.sound.stop();
+        }
+
+        // Stop chopping animation
+        if (this.choppingAction) {
+            this.choppingAction.stop();
+        }
+
+        // Clear active action
+        this.gameState.activeAction = null;
+        ui.updateChoppingProgress(0);
+
+        // Show cancellation message based on action type
+        if (actionType === 'demolish') {
+            ui.updateStatusLine1('❌ Demolish cancelled', 2000);
+        } else if (actionType === 'chop') {
+            ui.updateStatusLine1('❌ Chopping cancelled', 2000);
+        } else if (actionType === 'build') {
+            ui.updateStatusLine1('❌ Building cancelled', 2000);
+        } else {
+            ui.updateStatusLine1('❌ Action cancelled', 2000);
         }
     }
+
+    completeActiveAction() {
+        if (!this.gameState.activeAction) return;
+
+        const object = this.gameState.activeAction.object;
+        const harvestType = this.gameState.activeAction.harvestType;
+        const actionType = this.gameState.activeAction.actionType;
+
+        // Stop sound
+        if (this.gameState.activeAction.sound) {
+            this.gameState.activeAction.sound.stop();
+        }
+
+        // Stop action animation
+        if (this.animationMixer && this.choppingAction) {
+            this.choppingAction.stop();
+        }
+
+        // Handle build completion
+        if (actionType === 'build') {
+            // Delegate to BuildingSystem
+            this.buildingSystem.completeBuildAction(this.gameState.activeAction);
+            return;
+        }
+
+        // Handle chiseling completion
+        if (actionType === 'chiseling') {
+            // Delegate to CraftingSystem
+            this.craftingSystem.completeChiselingAction(this.gameState.activeAction);
+            return;
+        }
+
+        // Handle fishing completion
+        if (actionType === 'fishing') {
+            // Delegate to ResourceManager
+            this.resourceManager.completeFishingAction();
+
+            // Clear active action
+            this.gameState.activeAction = null;
+            ui.updateChoppingProgress(0);
+
+            // Resume walk animation if moving
+            if (this.gameState.isMoving && this.animationAction) {
+                this.animationAction.play();
+            }
+
+            // Update proximity to refresh buttons
+            this.checkProximityToObjects();
+            return;
+        }
+
+        // Check if this is a harvest action (log harvesting)
+        if (harvestType) {
+            // Delegate to ResourceManager
+            this.resourceManager.completeHarvestAction(this.gameState.activeAction);
+        } else {
+            // Standard tree/structure removal
+            console.log('[completeActiveAction] Sending remove_object_request for:', object.id, 'chunkKey:', object.chunkKey);
+            this.networkManager.sendMessage('remove_object_request', {
+                chunkId: `chunk_${object.chunkKey}`,
+                objectId: object.id,
+                name: object.name,
+                position: object.position.toArray(),
+                quality: object.quality,
+                scale: object.scale,
+                objectData: {
+                    name: object.name,
+                    position: object.position.toArray(),
+                    quality: object.quality,
+                    scale: object.scale,
+                    totalResources: object.totalResources,
+                    remainingResources: object.remainingResources
+                }
+            });
+
+            // Request log spawn for trees - delegate to ResourceManager
+            this.resourceManager.requestLogSpawn(object);
+        }
+
+        // Clear active action
+        this.gameState.activeAction = null;
+        ui.updateChoppingProgress(0);
+
+        // Update proximity to refresh buttons
+        this.checkProximityToObjects();
+    }
+
+    // ==========================================
+    // P2P CONNECTION METHODS
+    // ==========================================
 
     staggerP2PInitiations(newPlayers) {
-        newPlayers.forEach((player, index) => {
-            setTimeout(() => {
-                if (this.gameState.clientId < player.id) {
-                    this.initiateP2PConnection(player.id);
-                }
-                const avatar = new THREE.Mesh(
-                    new THREE.SphereGeometry(1, 32, 32),
-                    new THREE.MeshBasicMaterial({ color: Math.random() * 0xffffff })
-                );
+        // Delegate to NetworkManager with callback to create avatars
+        this.networkManager.staggerP2PInitiations(newPlayers, (peerId, index) => {
+            // Create avatar from man model
+            const avatar = this.avatarManager.createAvatar();
+            if (avatar) {
                 this.scene.add(avatar);
-                this.networkManager.avatars.set(player.id, avatar);
-            }, index * 750);
+                this.networkManager.avatars.set(peerId, avatar);
+
+                // Set peer metadata for identification
+                avatar.userData.objectId = 'peer_' + peerId;
+                avatar.userData.modelType = 'peer';
+
+                // Create physics character controller for peer
+                this.avatarManager.createAvatarPhysics(avatar, peerId);
+            }
+
+            // Note: AI enemy creation is handled by network sync messages (ai_enemy_update)
+            // This ensures they spawn at the correct position relative to their owner player
+            // rather than at the origin (0, 0, 0)
         });
     }
 
-    async initiateP2PConnection(peerId) {
-        const connection = this.networkManager.createPeerConnection(peerId, true);
-        try {
-            const offer = await connection.createOffer();
-            await connection.setLocalDescription(offer);
-            this.networkManager.sendMessage('webrtc_offer', {
-                recipientId: peerId,
-                senderId: this.gameState.clientId,
-                offer
-            });
-        } catch (error) {
-            ui.updateStatus(`❌ Failed to create offer for ${peerId}: ${error}`);
-        }
+    createPeerAIEnemy() {
+        return AIEnemy.createPeerAIEnemy();
     }
+
+    cancelPickup() {
+        // Delegate to InventoryUI
+        this.inventoryUI.cancelInventoryDrag();
+    }
+
 
     // --- Input and Resizing ---
 
-    onPointerDown(event) {
-        if (event.target.tagName !== 'CANVAS') return;
+    onPointerMove(event, pointer, raycaster) {
+        // InputManager already filters for CANVAS target
 
-        this.pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
-        this.pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        // Delegate to BuildMenu if placement is active
+        if (!this.buildMenu || !this.buildMenu.isPlacementActive()) return;
 
-        this.raycaster.setFromCamera(this.pointer, this.camera);
+        // Raycast to find terrain intersection - use raycaster from InputManager
         const terrainObjects = Array.from(this.terrainRenderer.chunkMap.values()).map(c => c.mesh);
         const waterObjects = this.waterRenderer.getWaterChunks();
         const allObjects = [...terrainObjects, ...waterObjects];
-        const intersects = this.raycaster.intersectObjects(allObjects, true);
+        const intersects = raycaster.intersectObjects(allObjects, true);
 
         if (intersects.length > 0) {
             const { point } = intersects[0];
-            this.gameState.playerTargetPosition.set(point.x, point.y + 1, point.z);
+            // Delegate to BuildMenu for preview update
+            this.buildMenu.updateStructurePreview(point.x, point.z, event.clientY);
+        }
+    }
+
+    onPointerDown(event, pointer, raycaster) {
+        // InputManager already filters for CANVAS target, so no need to check
+
+        // Prevent any action if player is dead
+        if (this.isDead) {
+            return;
+        }
+
+        // Prevent movement during shooting pause
+        if (this.playerCombat.isInShootingPause()) {
+            return;
+        }
+
+        // Resume AudioContext on first user interaction (browser requirement)
+        if (this.audioManager) {
+            this.audioManager.resumeContext();
+        }
+
+        // Handle structure placement if active - delegate to BuildMenu
+        if (this.buildMenu && this.buildMenu.isPlacementActive()) {
+            this.buildMenu.advanceStructurePlacementPhase(event.clientY);
+            return;
+        }
+
+        // Prevent movement during chopping/harvesting
+        if (this.gameState.activeAction) {
+            return;
+        }
+
+        // Prevent movement when inventory is open (forces player to close menu first)
+        if (this.gameState.inventoryOpen) {
+            return;
+        }
+
+        // Use raycaster from InputManager
+        const terrainObjects = Array.from(this.terrainRenderer.chunkMap.values()).map(c => c.mesh);
+        const waterObjects = this.waterRenderer.getWaterChunks();
+
+        // Collect walkable foundation objects for raycast (allows clicking on foundations)
+        const foundationObjects = [];
+        for (const objects of this.terrainRenderer.chunkObjects.values()) {
+            for (const obj of objects) {
+                // Only include walkable foundations (not construction sites)
+                if (obj.userData.modelType === 'foundation' ||
+                    obj.userData.modelType === 'foundationcorner' ||
+                    obj.userData.modelType === 'foundationroundcorner') {
+                    foundationObjects.push(obj);
+                }
+            }
+        }
+
+        const allObjects = [...terrainObjects, ...waterObjects, ...foundationObjects];
+        const intersects = raycaster.intersectObjects(allObjects, true);
+
+        if (intersects.length > 0) {
+            const { point } = intersects[0];
+
+            // Check if the clicked position is in water (terrain below water level)
+            const terrainHeight = this.terrainRenderer.getHeightFast(point.x, point.z);
+            if (terrainHeight < CONFIG.WATER.MIN_WALKABLE_HEIGHT) {
+                // Clicked on water - show feedback and reject movement
+                ui.updateStatus("Cannot enter water");
+                ui.updateStatusLine1("Cannot enter water", 3000);
+                return; // Don't move
+            }
+
+            // Use clicked position (X, Y, Z) - if clicking on foundation, Y will be foundation surface
+            this.gameState.playerTargetPosition.set(point.x, point.y, point.z);
+            this.playerController.setTargetPosition(this.gameState.playerTargetPosition);
             this.gameState.isMoving = true;
             ui.updateStatus(`🚀 Moving to clicked position...`);
+
+            // Hide construction/crate sections when player starts moving
+            if (this.gameState.inventoryOpen) {
+                this.inventoryUI.updateConstructionSection();
+                this.inventoryUI.updateCrateSection();
+            }
+
+            // Update button states immediately when starting movement
+            const hasAxe = this.hasToolWithDurability('axe');
+            const hasSaw = this.hasToolWithDurability('saw');
+            const hasHammer = this.hasToolWithDurability('hammer');
+            const hasFishingNet = this.hasToolWithDurability('fishingnet');
+            const isOnCooldown = this.gameState.harvestCooldown && this.gameState.harvestCooldown.endTime > Date.now();
+            ui.updateButtonStates(this.gameState.isInChunk, this.gameState.nearestObject, hasAxe, hasSaw, isOnCooldown, this.gameState.nearestConstructionSite, this.gameState.isMoving, this.gameState.nearestStructure, hasHammer, this.gameState.nearWater, hasFishingNet);
 
             this.networkManager.broadcastP2P({
                 type: 'player_move',
@@ -742,82 +1059,256 @@ if (this.terrainRenderer.chunkMap.size === 0) {
         this.camera.aspect = window.innerWidth / window.innerHeight;
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(window.innerWidth, window.innerHeight);
-    }
 
+        // Recalculate inventory sizes if inventory is open
+        if (this.gameState.inventoryOpen) {
+            this.inventoryUI.calculateInventorySize();
+            this.inventoryUI.renderInventory();
+            // Also update structure inventory if it's showing
+            if (this.gameState.nearestStructure) {
+                this.inventoryUI.renderCrateInventory();
+            }
+        }
 
-    // --- Animation Loop and Updates ---
-
-    animate() {
-        requestAnimationFrame(this.animate.bind(this));
-        const now = performance.now();
-        const deltaTime = now - this.gameState.lastFrameTime;
-
-        this.updatePlayerMovement(deltaTime);
-        this.updateAvatarMovement(deltaTime);
-        this.updateCameraAndLighting();
-        this.runPeriodicChecks(now);
-
-        this.waterRenderer.update(now);
-        this.renderer.render(this.scene, this.camera);
-        this.gameState.lastFrameTime = now;
-    }
-
-    updatePlayerMovement(deltaTime) {
-        if (!this.gameState.isMoving) return;
-        const { position } = this.playerObject;
-        const { playerTargetPosition } = this.gameState;
-        const distance = position.distanceTo(playerTargetPosition);
-
-        if (distance <= this.stopThreshold) {
-    position.copy(playerTargetPosition);
-    this.gameState.isMoving = false;
-    ui.updateStatus("🛑 Arrived at destination.");
-    this.checkProximityToObjects(); // Check proximity when arriving
-} else {
-            const moveStep = this.playerSpeed * deltaTime;
-            const alpha = Math.min(1, moveStep / distance);
-            position.lerp(playerTargetPosition, alpha);
+        // Recalculate build menu sizes if build menu is open - delegate to BuildMenu
+        if (this.buildMenu && this.buildMenu.isOpen()) {
+            this.buildMenu.onResize();
         }
     }
 
-    updateAvatarMovement(deltaTime) {
-        this.networkManager.avatars.forEach((avatar, peerId) => {
-            const peer = this.networkManager.peers.get(peerId);
-            if (peer?.targetPosition) {
-                const distance = avatar.position.distanceTo(peer.targetPosition);
-                if (distance <= this.stopThreshold) {
-                    avatar.position.copy(peer.targetPosition);
-                    peer.targetPosition = null;
-                } else {
-                    const moveStep = this.playerSpeed * deltaTime;
-                    const alpha = Math.min(1, moveStep / distance);
-                    avatar.position.lerp(peer.targetPosition, alpha);
+    // --- Inventory Management ---
+    tryAddItemToInventory(item) {
+        // Delegate to PlayerInventory static utility method
+        return PlayerInventory.tryAddItemToInventory(this.gameState.inventory, item);
+    }
+
+    isPositionFree(x, y, width, height, existingItems) {
+        // Delegate to PlayerInventory static utility method
+        return PlayerInventory.isPositionFree(x, y, width, height, existingItems);
+    }
+
+    /**
+     * Check if any AI enemies or peers are currently moving
+     * Used to determine if dynamic entity bounding boxes need updating
+     * @returns {boolean} True if any AI or peers are potentially moving
+     */
+    hasMovingAI() {
+        // Check if any tent AI enemies are in motion states
+        let hasMovingTentAI = false;
+        if (this.aiEnemyManager?.tentAIEnemies) {
+            for (const [tentId, aiData] of this.aiEnemyManager.tentAIEnemies) {
+                if (!aiData.isDead && aiData.controller) {
+                    const state = aiData.controller.state;
+                    if (state === 'chasing' || state === 'approaching') {
+                        hasMovingTentAI = true;
+                        break;
+                    }
                 }
             }
+        }
+
+        // Assume peers can move at any time (network controlled)
+        const hasPeers = this.gameState.peers?.size > 0;
+
+        return hasMovingTentAI || hasPeers;
+    }
+
+    setupGameLoop() {
+        // Setup update callback
+        this.gameLoop.onUpdate((deltaTime, now) => {
+            // Step physics simulation
+            if (this.physicsManager && this.physicsManager.initialized) {
+                this.physicsManager.step(deltaTime);
+            }
+
+            // Process queued network messages
+            this.networkManager.processMessageQueue();
+
+            // Update player movement using PlayerController
+            this.gameState.isMoving = this.playerController.updateMovement(deltaTime, this.isDead);
+
+            this.avatarManager.updateAvatarMovement(deltaTime);
+            this.aiEnemyManager.updatePeerAIEnemies(deltaTime);
+
+            // Check proximity every 3 frames (20 FPS) to reduce physics overhead
+            // Processing 500-700 sensors every frame was causing 10-20 FPS loss
+            if (this.gameLoop.frameCount % 3 === 0) {
+                this.checkProximityToObjects();
+            }
+
+            // Update all tent AI enemies
+            this.aiEnemyManager.updateTentAIEnemies(deltaTime, now);
+
+            // Periodically check for new tent spawns (every 3 seconds at 60fps)
+            if (this.gameLoop.frameCount % 180 === 0) {
+                this.aiEnemyManager.trySpawnAI(this.playerObject, this.isDead);
+            }
+
+            // Update player combat/shooting - delegate to PlayerCombat
+            this.playerCombat.updateShooting(
+                this.aiEnemy,
+                this.aiEnemyController,
+                this.networkManager.peerGameData,
+                (target, isHit, playerPos) => {
+                    // Broadcast player shoot event to other players
+                    this.networkManager.broadcastP2P({
+                        type: 'player_shoot',
+                        payload: {
+                            position: playerPos.toArray(),
+                            targetIsLocalAI: target.isLocal,
+                            targetPeerId: target.peerId,
+                            isHit: isHit
+                        }
+                    });
+
+                    // Apply hit if successful
+                    if (isHit) {
+                        if (target.isLocal) {
+                            if (this.aiEnemyController) {
+                                this.aiEnemyController.kill();
+                            }
+                        }
+                        // If target is peer's AI, they will handle the death from the broadcast
+                    }
+                },
+                () => {
+                    this.gameState.isMoving = false;
+                    this.playerController.stopMovement();
+                }
+            );
+            this.updateChoppingAction();
+
+            // Update animated objects (ships, etc.)
+            this.animationSystem.update(deltaTime);
+
+            // Update player animation
+            if (this.isDead) {
+                this.deathSystem.updateDeathAnimation(this.playerObject, this.deathStartTime, deltaTime, this.fallDirection, true);
+            } else if (this.animationMixer) {
+                const isShootPlaying = this.shootAction && this.shootAction.isRunning();
+
+                if (this.gameState.activeAction) {
+                    // Ensure walk animation is stopped and chopping is playing
+                    if (this.animationAction && this.animationAction.isRunning()) {
+                        this.animationAction.stop();
+                    }
+                    if (this.choppingAction && !this.choppingAction.isRunning()) {
+                        this.choppingAction.play();
+                    }
+                    this.animationMixer.update((deltaTime / 1000) * 1.5);
+                } else if (isShootPlaying) {
+                    this.animationMixer.update((deltaTime / 1000) * 3);
+                } else if (this.playerCombat.getInCombatStance()) {
+                    if (this.shootAction) {
+                        this.shootAction.paused = false;
+                        this.shootAction.time = 0;
+                        this.shootAction.weight = 1.0;
+                        if (!this.shootAction.isRunning()) {
+                            this.shootAction.play();
+                        }
+                        this.shootAction.paused = true;
+                    }
+
+                    if (this.gameState.isMoving) {
+                        // Make sure walk animation is playing
+                        if (this.animationAction && !this.animationAction.isRunning()) {
+                            this.animationAction.play();
+                        }
+                        this.animationMixer.update((deltaTime / 1000) * 2.5);
+                    } else {
+                        this.animationMixer.update(0);
+                    }
+                } else {
+                    // Ensure chopping animation is stopped in normal state
+                    if (this.choppingAction && this.choppingAction.isRunning()) {
+                        this.choppingAction.stop();
+                    }
+                    if (this.shootAction && this.shootAction.paused) {
+                        this.shootAction.stop();
+                        this.shootAction.reset();
+                    }
+
+                    if (this.gameState.isMoving) {
+                        // Make sure walk animation is playing
+                        if (this.animationAction && !this.animationAction.isRunning()) {
+                            this.animationAction.play();
+                        }
+                        this.animationMixer.update((deltaTime / 1000) * 2.5);
+                    } else {
+                        this.animationMixer.setTime(0);
+                    }
+                }
+            }
+
+            // Update peer avatar death animations
+            this.avatarManager.updateAvatarDeathAnimations(deltaTime, this.deathSystem.updateDeathAnimation.bind(this.deathSystem));
+
+            // Update peer AI death animations
+            this.networkManager.peerGameData.forEach((peer, peerId) => {
+                if (peer.aiEnemy && peer.aiEnemy.userData.isDead) {
+                    this.deathSystem.updateDeathAnimation(peer.aiEnemy, peer.aiEnemy.userData.deathStartTime, deltaTime, peer.aiEnemy.userData.fallDirection || 1, false);
+                }
+            });
+
+            // Update camera to follow player
+            this.cameraController.setTarget(this.playerObject);
+            this.cameraController.update(deltaTime);
+
+            this.runPeriodicChecks(now);
+
+            // Process chunk creation queue (only if work pending)
+            if (this.chunkManager.pendingChunkCreations.length > 0) {
+                this.chunkManager.processChunkQueue();
+            }
+
+            // Process vertex updates (only if work pending)
+            const playerPos = this.playerObject ? this.playerObject.position : null;
+            if (this.terrainRenderer.pendingVertexUpdates.length > 0) {
+                this.terrainRenderer.processVertexUpdateQueue(playerPos);
+            }
+
+            // Process object generation queue (only if work pending)
+            if (this.terrainRenderer.pendingObjectGeneration.length > 0) {
+                this.terrainRenderer.processObjectGenerationQueue();
+            }
+
+            // Cull blob shadows beyond 50 units (check every 10 frames to save CPU)
+            if (this.gameLoop.frameCount % 10 === 0 && playerPos) {
+                this.cullDistantShadows(playerPos);
+            }
+
+            // Emergency disposal if queue gets too large
+            if (this.chunkManager.pendingChunkDisposals.length > 20) {
+                this.chunkManager.processDisposalQueue();
+            }
+
+
+            this.waterRenderer.update(now, this.camera);
+        });
+
+        // Setup render callback
+        this.gameLoop.onRender(() => {
+            // Render physics debug visualization
+            if (this.physicsManager && this.physicsManager.debugEnabled) {
+                this.physicsManager.renderDebug();
+            }
+
+            this.sceneManager.render(this.waterRenderer);
+        });
+
+        // Setup FPS update callback
+        this.gameLoop.onFPSUpdate((fps) => {
+            ui.updateFPS(fps);
+            // Physics stats display disabled
+            // if (this.physicsManager) {
+            //     ui.updatePhysicsStats(this.physicsManager.getStats());
+            // }
         });
     }
 
-    updateCameraAndLighting() {
-        // Update lighting to follow player
-        const shadowCameraOffset = new THREE.Vector3(15, 20, 0);
-        this.directionalLight.position.copy(this.playerObject.position).add(shadowCameraOffset);
-        this.directionalLight.target.position.copy(this.playerObject.position);
-        this.directionalLight.target.updateMatrixWorld();
-
-        // Update terrain shader with new light position
-        if (this.terrainRenderer) {
-            this.terrainRenderer.updateShadowUniforms(this.directionalLight);
-        }
-
-        // Update camera to follow player
-        const cameraOffset = new THREE.Vector3(0, 12, 8);  // Lowered by 20% from 15 to zoom in
-        this.gameState.cameraTargetPosition.copy(this.playerObject.position).add(cameraOffset);
-        this.camera.position.lerp(this.gameState.cameraTargetPosition, 0.8);  // Much more rigid camera (was 0.1)
-        this.camera.lookAt(this.playerObject.position);
-    }
 
     runPeriodicChecks(now) {
-        if (now - this.gameState.lastChunkUpdateTime > this.chunkUpdateInterval) {
+        if (now - this.gameState.lastChunkUpdateTime > CONFIG.GAME_LOOP.CHUNK_UPDATE_INTERVAL) {
             if (this.chunkManager.updatePlayerChunk(this.playerObject.position.x, this.playerObject.position.z)) {
                 // If chunk changed, notify server
                 const { clientId, currentPlayerChunkX, currentPlayerChunkZ, lastChunkX, lastChunkZ } = this.gameState;
@@ -832,77 +1323,327 @@ if (this.terrainRenderer.chunkMap.size === 0) {
             this.gameState.lastChunkUpdateTime = now;
         }
 
-        
 
-        if (now - this.gameState.lastPeerCheckTime > this.peerCheckInterval) {
-            this.checkAndReconnectPeers();
+
+        if (now - this.gameState.lastPeerCheckTime > CONFIG.GAME_LOOP.PEER_CHECK_INTERVAL) {
+            this.networkManager.checkAndReconnectPeers();
             this.gameState.lastPeerCheckTime = now;
         }
     }
 
-    checkProximityToObjects() {
-        const { chunkSize } = CONFIG.TERRAIN;
-        const playerChunkX = Math.floor(this.playerObject.position.x / chunkSize);
-        const playerChunkZ = Math.floor(this.playerObject.position.z / chunkSize);
-        let closestObject = null;
-        let closestDistance = Infinity;
+    cullDistantShadows(playerPos) {
+        const maxDistance = 50;
+        const maxDistanceSquared = maxDistance * maxDistance;
 
-        // Check a 3x3 grid of chunks around the player
-        for (let x = playerChunkX - 1; x <= playerChunkX + 1; x++) {
-            for (let z = playerChunkZ - 1; z <= playerChunkZ + 1; z++) {
-                const chunkKey = `${x},${z}`;
-                const objectsInChunk = this.terrainRenderer.chunkTrees.get(chunkKey) || [];
+        // Iterate through all loaded chunks and their objects
+        this.terrainRenderer.chunkObjects.forEach((objects) => {
+            objects.forEach((obj) => {
+                if (obj.userData && obj.userData.blobShadow) {
+                    const dx = obj.position.x - playerPos.x;
+                    const dz = obj.position.z - playerPos.z;
+                    const distanceSquared = dx * dx + dz * dz;
 
-                for (const object of objectsInChunk) {
-                    if (object.visible) { // Only check visible objects
-                        const distance = this.playerObject.position.distanceTo(object.position);
-                        if (distance < closestDistance) {
-                            closestDistance = distance;
-                            closestObject = object;
-                        }
+                    // Hide shadow if beyond max distance, show if within
+                    obj.userData.blobShadow.setVisible(distanceSquared <= maxDistanceSquared);
+                }
+            });
+        });
+    }
+
+    // Check if player has required tool in inventory
+    hasRequiredTool(objectType) {
+        // Delegate to ResourceManager
+        return this.resourceManager.hasRequiredTool(objectType);
+    }
+
+    hasToolWithDurability(toolType) {
+        // Delegate to ResourceManager
+        return this.resourceManager.hasToolWithDurability(toolType);
+    }
+
+    killEntity(entity, isAI = false, isPeer = false) {
+        // Use DeathSystem to mark entity as dead and get death data
+        const deathData = this.deathSystem.markEntityDead(entity, isPeer);
+
+        // Mark entity as dead
+        if (isAI) {
+            if (isPeer) {
+                // Already marked by deathSystem.markEntityDead
+            } else {
+                this.aiEnemyIsDead = true;
+                this.aiEnemyDeathStartTime = deathData.deathStartTime;
+                this.aiEnemyDeathRotationProgress = deathData.deathRotationProgress;
+                this.aiEnemyFallDirection = deathData.fallDirection;
+
+                // Check if this AI belongs to a tent and mark tent as "dead AI" (no respawn)
+                for (const [tentId, aiData] of this.tentAIEnemies.entries()) {
+                    if (aiData.controller.enemy === entity) {
+                        aiData.isDead = true;
+                        this.deadTentAIs.add(tentId);
+                        break;
                     }
                 }
             }
+        } else {
+            if (isPeer) {
+                // Already marked by deathSystem.markEntityDead
+            } else {
+                this.isDead = true;
+                this.deathStartTime = deathData.deathStartTime;
+                this.deathRotationProgress = deathData.deathRotationProgress;
+                this.fallDirection = deathData.fallDirection;
+                this.gameState.isMoving = false;
+                this.playerController.stopMovement();
+            }
         }
 
-        if (closestObject && closestDistance <= 2.5) { // Interaction radius
+        // Stop any ongoing animations using DeathSystem
+        let mixer = null;
+        if (isPeer) {
+            mixer = entity.userData.mixer;
+        } else if (isAI && !isPeer) {
+            mixer = this.aiEnemyAnimationMixer;
+        } else if (!isAI && !isPeer) {
+            mixer = this.animationMixer;
+        }
+
+        this.deathSystem.stopAnimations(mixer);
+
+        // Broadcast death to all peers if this is a local entity (not a peer entity)
+        if (!isPeer) {
+            if (isAI) {
+                // Local AI died - broadcast to all peers
+                this.networkManager.broadcastP2P({
+                    type: 'ai_enemy_death',
+                    payload: {
+                        position: this.aiEnemy.position.toArray()
+                    }
+                });
+            } else {
+                // Local player died - broadcast to all peers
+                this.networkManager.broadcastP2P({
+                    type: 'player_death',
+                    payload: {
+                        position: this.playerObject.position.toArray()
+                    }
+                });
+            }
+        }
+    }
+
+    getGroundHeightAt(x, z) {
+        return this.terrainRenderer.getHeightFast(x, z);
+    }
+
+    checkProximityToObjects() {
+        // Query nearby objects using spatial query (reliable, level-triggered)
+        if (!this.physicsManager || !this.physicsManager.initialized || !this.physicsManager.world) {
+            return;
+        }
+
+        // Use spatial query to find all bounding boxes within interaction radius
+        const interactionRadius = 0.75; // Tight interaction range - player must be very close
+        const collisionMask = COLLISION_GROUPS.NATURAL | COLLISION_GROUPS.PLACED | COLLISION_GROUPS.STRUCTURE;
+
+        const nearbyColliders = this.physicsManager.querySphere(
+            this.playerObject.position,
+            interactionRadius,
+            collisionMask
+        );
+
+        // Update active proximity objects based on spatial query results
+        // Clear and rebuild the map to ensure stale entries are removed
+        this.activeProximityObjects.clear();
+
+        nearbyColliders.forEach(colliderHandle => {
+            // Get object ID from collider handle
+            const objectId = this.physicsManager.getObjectIdFromCollider(colliderHandle);
+            if (!objectId) return;
+
+            // Find the actual THREE.js object in the scene
+            let sceneObject = null;
+            this.scene.traverse((object) => {
+                if (object.userData && !object.userData.isBoundingBox && object.userData.objectId === objectId) {
+                    sceneObject = object;
+                }
+            });
+
+            if (sceneObject) {
+                this.activeProximityObjects.set(objectId, sceneObject);
+            }
+        });
+
+        // Find nearest objects by type from active proximity objects
+        const treeTypes = ['oak', 'oak2', 'pine', 'pine2', 'fir', 'cypress'];
+        const rockTypes = ['limestone', 'sandstone', 'clay'];
+        const structureTypes = ['crate', 'tent', 'house', 'garden', 'market', 'outpost', 'ship', 'dock'];
+
+        let nearestNaturalObject = null;
+        let nearestNaturalDistance = Infinity;
+        let nearestConstructionSite = null;
+        let nearestConstructionDistance = Infinity;
+        let nearestStructure = null;
+        let nearestStructureDistance = Infinity;
+
+        // Calculate distances to all active proximity objects
+        this.activeProximityObjects.forEach((object, objectId) => {
+            // Safety check: ensure object still exists in scene
+            if (!object.parent) {
+                // Object has been removed from scene, clean up tracking
+                this.activeProximityObjects.delete(objectId);
+                return;
+            }
+
+            const modelType = object.userData.modelType;
+            const dx = this.playerObject.position.x - object.position.x;
+            const dz = this.playerObject.position.z - object.position.z;
+            const distance = Math.sqrt(dx * dx + dz * dz);
+
+            // Categorize and track nearest of each type
+            if (object.userData.isConstructionSite) {
+                if (distance < nearestConstructionDistance) {
+                    nearestConstructionDistance = distance;
+                    nearestConstructionSite = object;
+                }
+            } else if (structureTypes.includes(modelType)) {
+                if (distance < nearestStructureDistance) {
+                    nearestStructureDistance = distance;
+                    nearestStructure = object;
+                }
+            } else if (treeTypes.includes(modelType) || rockTypes.includes(modelType) ||
+                       modelType === 'log' || modelType.endsWith('_log')) {
+                if (distance < nearestNaturalDistance) {
+                    nearestNaturalDistance = distance;
+                    nearestNaturalObject = object;
+                }
+            }
+        });
+
+        // Update game state - natural objects (trees/rocks/logs)
+        if (nearestNaturalObject) {
             this.gameState.nearestObject = {
-                id: closestObject.userData.objectId,
-                name: closestObject.userData.modelType,
-                position: closestObject.position.clone(),
-                chunkKey: closestObject.userData.chunkKey
+                id: nearestNaturalObject.userData.objectId,
+                name: nearestNaturalObject.userData.modelType,
+                position: nearestNaturalObject.position.clone(),
+                chunkKey: nearestNaturalObject.userData.chunkKey,
+                quality: nearestNaturalObject.userData.quality,
+                scale: nearestNaturalObject.userData.originalScale || nearestNaturalObject.scale,
+                remainingResources: nearestNaturalObject.userData.remainingResources,
+                totalResources: nearestNaturalObject.userData.totalResources,
+                toolCheck: this.hasRequiredTool(nearestNaturalObject.userData.modelType)
             };
-            this.gameState.nearestObjectDistance = closestDistance;
+            this.gameState.nearestObjectDistance = nearestNaturalDistance;
         } else {
             this.gameState.nearestObject = null;
             this.gameState.nearestObjectDistance = Infinity;
         }
 
-        ui.updateNearestObject(this.gameState.nearestObject ? this.gameState.nearestObject.name : null);
-        ui.updateButtonStates(this.gameState.isInChunk, this.gameState.nearestObject);
-    }
+        // Update game state - construction sites
+        if (nearestConstructionSite) {
+            this.gameState.nearestConstructionSite = nearestConstructionSite;
+            this.gameState.nearestConstructionSiteDistance = nearestConstructionDistance;
+        } else {
+            this.gameState.nearestConstructionSite = null;
+            this.gameState.nearestConstructionSiteDistance = Infinity;
+        }
 
-    checkAndReconnectPeers() {
-        this.networkManager.peers.forEach((peer, peerId) => {
-            if (peer.state === 'disconnected' || peer.state === 'failed') {
-                if (this.gameState.clientId < peerId) { // Initiation rule
-                    ui.updateStatus(`Attempting P2P reconnect to ${peerId}...`);
-                    this.initiateP2PConnection(peerId);
+        // Update game state - structures
+        if (nearestStructure) {
+            this.gameState.nearestStructure = nearestStructure;
+            this.gameState.nearestStructureDistance = nearestStructureDistance;
+        } else {
+            this.gameState.nearestStructure = null;
+            this.gameState.nearestStructureDistance = Infinity;
+        }
+
+        // Check for bounding box collisions (physical contact with solid colliders)
+        if (this.physicsManager && this.physicsManager.initialized) {
+            const playerObjectId = this.playerObject.userData.objectId || 'player';
+            const contacts = this.physicsManager.getCharacterContacts(playerObjectId);
+
+            // Track current collisions
+            const currentCollisions = new Set();
+
+            contacts.forEach(contact => {
+                currentCollisions.add(contact.objectId);
+            });
+
+            // Update tracked collisions
+            this.activeBoundingBoxCollisions = currentCollisions;
+        }
+
+        // FISHING: Detect if player is on shore (land adjacent to water)
+        const playerHeight = this.terrainRenderer.getTerrainHeightAt(
+            this.playerObject.position.x,
+            this.playerObject.position.z
+        );
+
+        this.gameState.nearWater = false;
+
+        // Only check for nearby water if player is on land
+        if (playerHeight >= CONFIG.WATER.LEVEL) {
+            // Sample 8 points in circle around player to find water
+            const checkRadius = 0.75; // Same as other interaction radius
+            const numSamples = 8;
+
+            for (let i = 0; i < numSamples; i++) {
+                const angle = (i / numSamples) * Math.PI * 2;
+                const checkX = this.playerObject.position.x + Math.cos(angle) * checkRadius;
+                const checkZ = this.playerObject.position.z + Math.sin(angle) * checkRadius;
+
+                const checkHeight = this.terrainRenderer.getTerrainHeightAt(checkX, checkZ);
+
+                // Found water nearby!
+                if (checkHeight < CONFIG.WATER.LEVEL) {
+                    this.gameState.nearWater = true;
+                    this.gameState.waterDirection = angle; // Store for optional facing
+                    break;
                 }
             }
-        });
+        }
+
+        // Update UI
+        const hasAxe = this.hasToolWithDurability('axe');
+        const hasSaw = this.hasToolWithDurability('saw');
+        const hasHammer = this.hasToolWithDurability('hammer');
+        const hasFishingNet = this.hasToolWithDurability('fishingnet');
+        const isOnCooldown = this.gameState.harvestCooldown && this.gameState.harvestCooldown.endTime > Date.now();
+
+        ui.updateNearestObject(
+            this.gameState.nearestObject ? this.gameState.nearestObject.name : null,
+            this.gameState.nearestObject ? this.gameState.nearestObject.toolCheck : null,
+            this.gameState.nearestObject ? this.gameState.nearestObject.quality : null,
+            this.gameState.nearestObject ? this.gameState.nearestObject.remainingResources : null,
+            this.gameState.nearestObject ? this.gameState.nearestObject.totalResources : null
+        );
+        ui.updateButtonStates(
+            this.gameState.isInChunk,
+            this.gameState.nearestObject,
+            hasAxe,
+            hasSaw,
+            isOnCooldown,
+            this.gameState.nearestConstructionSite,
+            this.gameState.isMoving,
+            this.gameState.nearestStructure,
+            hasHammer,
+            this.gameState.nearWater,
+            hasFishingNet
+        );
     }
 }
 
 // ==========================================
 // INITIALIZATION
 // ==========================================
-import { modelManager } from './objects.js';
 
 // Wait for models to load before starting game
-modelManager.loadAllModels().then(() => {
-    console.log('Models loaded, starting game...');
+modelManager.loadAllModels().then(async () => {
     const game = new MultiplayerGame();
+    window.game = game; // Expose for debugging
+
+    // Wait for game initialization to complete before starting
+    await game.initPromise;
+
     game.start();
 }).catch(error => {
     console.error('Failed to load models:', error);

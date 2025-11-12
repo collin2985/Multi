@@ -1,0 +1,182 @@
+CLAY NATURAL OBJECT IMPLEMENTATION PLAN
+========================================
+
+RESEARCH FINDINGS:
+------------------
+
+Natural objects work through several integrated systems:
+
+1. PHYSICS & COLLISION SYSTEM
+   - Objects with 'radius' in CONFIG.CONSTRUCTION.GRID_DIMENSIONS get cylindrical colliders
+   - Collision group: COLLISION_GROUPS.NATURAL
+   - Physics manager creates static colliders automatically when objects spawn
+   - Spatial queries detect nearby colliders for proximity detection
+
+2. PROXIMITY DETECTION SYSTEM
+   - game.js maintains activeProximityObjects Map populated from physics spatial queries
+   - Calculates distances to player, categorizes objects (trees/rocks/structures)
+   - Sets gameState.nearestObject with object data + toolCheck
+   - rockTypes array (line 1447 in game.js) determines what's considered a rock
+
+3. UI INTERACTION SYSTEM
+   - ui.js reads gameState.nearestObject
+   - rockTypes array (line 163 in ui.js) controls UI button display
+   - Shows "Mine [Rockname]" button when: isInChunk, hasRequiredTool, hasResources, !cooldown, !moving
+
+4. HARVESTING SYSTEM
+   - game.js onRemoveObject callback checks isRock (line 395) to start harvest
+   - Calls startHarvestAction with 'stone' harvestType
+   - ResourceManager.js requires 'pickaxe' tool (line 490)
+   - Creates inventory item matching rock name (limestone -> limestone item)
+
+5. RESOURCE TRACKING
+   - objects.js sets totalResources and remainingResources on spawn (line 593)
+   - Rocks give 1 resource when mined
+   - Resource depletion tracked in userData
+
+6. MARKET SYSTEM
+   - config.js defines buyPrice/sellPrice/min/max quantities (line 487)
+   - server/MessageHandlers.js initializes market inventory with quantities and qualityAverages
+   - Two locations: structureChange.inventory (line 355+376) and addedPayload.inventory (line 443+464)
+
+7. TERRAIN GENERATION
+   - terrain.js has defaultMinDistances for placement restrictions (line 1559)
+   - Prevents placing objects too close to natural features
+
+
+FILES THAT REFERENCE LIMESTONE (need clay added):
+--------------------------------------------------
+
+CLIENT-SIDE:
+1. public/objects.js
+   - Line 102-109: Object definition (path, heightRange, density, etc)
+   - Line 593: Resource initialization for rocks
+
+2. public/config.js
+   - Line 212: ROCK_TYPES array
+   - Line 360: GRID_DIMENSIONS bounding cylinder
+   - Line 487: MARKET_ITEMS pricing
+
+3. public/game.js
+   - Line 395: isRock check in onRemoveObject callback
+   - Line 1447: rockTypes array for proximity categorization
+
+4. public/ui.js
+   - Line 163: rockTypes array for UI button logic
+
+5. public/systems/ResourceManager.js
+   - Line 490: toolRequirements mapping (limestone requires pickaxe)
+
+6. public/terrain.js
+   - Line 1559: defaultMinDistances mapping
+
+SERVER-SIDE:
+7. server/MessageHandlers.js
+   - Line 355: Market quantities initialization (structureChange)
+   - Line 376: Market qualityAverages initialization (structureChange)
+   - Line 443: Market quantities initialization (addedPayload)
+   - Line 464: Market qualityAverages initialization (addedPayload)
+
+
+CLAY SPECIFICATIONS:
+--------------------
+- Bounding cylinder: radius 0.5 (diameter 1.0) [user specified "bounding cylinder of 1"]
+- Frequency: Same as limestone (density 0.3)
+- Elevation: Same as limestone (heightRange 1.04 - 5.0)
+- Model: public/models/clay.glb (already exists per user)
+- Item textures: public/items/clay.png, public/items/Rclay.png (already exist per user)
+- Tool required: pickaxe
+- Harvest type: stone
+- No chiseledclay crafting (user specified no chiseling)
+
+
+IMPLEMENTATION STEPS:
+---------------------
+
+CLIENT-SIDE CHANGES:
+
+1. public/objects.js - Add clay object definition after sandstone (~line 117)
+   clay: {
+       path: './models/clay.glb',
+       heightRange: { min: 1.04, max: 5.0 },  // Same as limestone
+       scaleRange: { min: 1.0, max: 1.0 },
+       density: 0.3,  // Same as limestone
+       minDistance: 2.0,
+       category: 'prop'
+   }
+
+2. public/objects.js - Update resource initialization (~line 593)
+   Change: if (modelType === 'limestone' || modelType === 'sandstone')
+   To:     if (modelType === 'limestone' || modelType === 'sandstone' || modelType === 'clay')
+
+3. public/config.js - Add to ROCK_TYPES array (~line 212)
+   Change: ROCK_TYPES: ['limestone', 'sandstone'],
+   To:     ROCK_TYPES: ['limestone', 'sandstone', 'clay'],
+
+4. public/config.js - Add bounding cylinder (~line 361)
+   Add after sandstone:
+   clay: { radius: 0.5 },  // diameter 1.0
+
+5. public/config.js - Add market pricing (~line 487)
+   Add after limestone or sandstone:
+   clay: { buyPrice: 12, sellPrice: 8, minQuantity: 0, maxQuantity: 100 },
+
+6. public/game.js - Update isRock check (~line 395)
+   Change: const isRock = normalizedObject.name === 'limestone' || normalizedObject.name === 'sandstone';
+   To:     const isRock = normalizedObject.name === 'limestone' || normalizedObject.name === 'sandstone' || normalizedObject.name === 'clay';
+
+7. public/game.js - Update rockTypes array (~line 1447)
+   Change: const rockTypes = ['limestone', 'sandstone'];
+   To:     const rockTypes = ['limestone', 'sandstone', 'clay'];
+
+8. public/ui.js - Update rockTypes array (~line 163)
+   Change: const rockTypes = ['limestone', 'sandstone'];
+   To:     const rockTypes = ['limestone', 'sandstone', 'clay'];
+
+9. public/systems/ResourceManager.js - Add tool requirement (~line 491)
+   Add after sandstone:
+   'clay': 'pickaxe',
+
+10. public/terrain.js - Add minimum distance (~line 1560)
+    Add after sandstone:
+    clay: 2.0
+
+SERVER-SIDE CHANGES:
+
+11. server/MessageHandlers.js - Add to market quantities (structureChange) (~line 356)
+    Add after sandstone:
+    clay: defaultQuantity,
+
+12. server/MessageHandlers.js - Add to market qualityAverages (structureChange) (~line 377)
+    Add after sandstone:
+    clay: defaultQuality,
+
+13. server/MessageHandlers.js - Add to market quantities (addedPayload) (~line 444)
+    Add after sandstone:
+    clay: defaultQuantity,
+
+14. server/MessageHandlers.js - Add to market qualityAverages (addedPayload) (~line 465)
+    Add after sandstone:
+    clay: defaultQuality,
+
+
+VERIFICATION:
+-------------
+After implementation, clay should:
+- Spawn naturally in terrain at same elevations as limestone
+- Have larger collision cylinder (radius 0.5 vs limestone's 0.25)
+- Be detectable by proximity system when player approaches
+- Show "Mine Clay" button in UI when player is near
+- Require pickaxe to mine
+- Give "clay" item to player inventory
+- Be buyable/sellable at markets
+- Block player movement (COLLISION_GROUPS.NATURAL)
+
+
+NOTES:
+------
+- No crafting/chiseling support needed per user request
+- Clay will automatically work with existing stone harvesting system
+- Physics/proximity/interaction all handled automatically via existing systems
+- Server will need restart for changes to take effect
+- Existing chunks may need regeneration to see new clay spawns

@@ -1,0 +1,167 @@
+================================================================================
+DOCK vs MARKET BOUNDING BOX - DETAILED COMPARISON
+================================================================================
+
+DIMENSION DEFINITIONS SIDE-BY-SIDE:
+===================================
+
+MARKET (CORRECT):
+-----------------
+config.js line 290:
+  '2x8foundation': { width: 2.0, depth: 8.0 }
+
+game.js line 507:
+  { model: 'market', width: 2, depth: 8 }  ← MATCHES config.js ✓
+
+MessageRouter.js line 227:
+  'market': { type: 'rectangle', width: 2, depth: 8 }  ← MATCHES ✓
+
+StructureManager.js line 345:
+  'market': { type: 'rectangle', width: 2, depth: 8 }  ← MATCHES ✓
+
+Result: Visual box is 2×8, matches config, renders correctly ✓
+
+
+DOCK (WRONG):
+-------------
+config.js line 291:
+  dock: { width: 10.0, depth: 1.0 }
+
+game.js line 508:
+  { model: 'dock', width: 1, depth: 10 }  ← OPPOSITE of config.js ✗
+
+MessageRouter.js line 228:
+  'dock': { type: 'rectangle', width: 1, depth: 10 }  ← OPPOSITE ✗
+
+StructureManager.js line 346:
+  'dock': { type: 'rectangle', width: 1, depth: 10 }  ← OPPOSITE ✗
+
+Result: Visual box is 1×10 when it should be 10×1, renders as cross ✗
+
+
+SPECIAL ROTATION HANDLING:
+==========================
+
+MARKET: None
+  - Model uses standard object rotation
+  - Bounding box uses same rotation
+  - No special cases
+
+DOCK: Special +90° rotation
+  - MessageRouter.js lines 169-174:
+    if (objectType === 'dock') {
+        finalModelRotation = objectRotation + (Math.PI / 2);
+    }
+  - Model is rotated 90 degrees extra
+  - Bounding box doesn't know about this special rotation
+  - Compounds the dimension swap problem
+
+
+THE RENDERING PIPELINE:
+=======================
+
+For MARKET:
+-----------
+1. Server sends market data with rotation (e.g., 0°)
+2. MessageRouter creates instance:
+   - Model rotation = 0° (normal)
+   - Bounding box dimensions = width: 2, depth: 8
+3. BoundingBox.js creates box:
+   - BoxGeometry(2, 8, 0.1)
+   - rotation.y = 0°
+4. Result: 2×8 box at 0°, matches model visually ✓
+
+
+For DOCK (Currently WRONG):
+----------------------------
+1. Server sends dock data with rotation (e.g., 0°)
+2. MessageRouter creates instance:
+   - Model rotation = 0° + 90° = 90° (special case!)
+   - Bounding box dimensions = width: 1, depth: 10 (WRONG - should be 10, 1)
+3. BoundingBox.js creates box:
+   - BoxGeometry(1, 10, 0.1) (wrong dimensions)
+   - rotation.y = 90° (from model rotation)
+4. Result: 1×10 box at 90°, perpendicular to correct position ✗
+
+
+For DOCK (After FIX):
+---------------------
+1. Server sends dock data with rotation (e.g., 0°)
+2. MessageRouter creates instance:
+   - Model rotation = 0° + 90° = 90° (special case)
+   - Bounding box dimensions = width: 10, depth: 1 (CORRECT)
+3. BoundingBox.js creates box:
+   - BoxGeometry(10, 1, 0.1) (correct dimensions)
+   - rotation.y = 90° (from model rotation)
+4. Result: 10×1 box at 90°, matches model visually ✓
+
+
+BLENDER MODEL MAPPING:
+======================
+
+Your Dock Model (from Blender):
+  - 10 units along X axis
+  - 1 unit along Y axis (height)
+  - (Assuming standard Blender orientation)
+
+Three.js Coordinate System:
+  - X axis = width (left-right)
+  - Y axis = height (up-down)
+  - Z axis = depth (forward-back)
+
+Mapping from Blender to Three.js:
+  Blender X (10 units) → Three.js X (width)
+  Blender Y (1 unit, height) → Three.js Z (depth) [Y is vertical, so horizontal extent becomes Z]
+
+Correct Configuration:
+  width: 10  (from Blender X)
+  depth: 1   (from Blender Y used as horizontal depth)
+
+Where It's Right: config.js ✓
+Where It's Wrong: game.js, MessageRouter.js, StructureManager.js ✗
+
+
+COLLISION IMPACT:
+=================
+
+If collision detection uses these dimensions:
+  - Market: Uses width 2, depth 8 from all files ✓
+    Collision bounds are correct
+  
+  - Dock: Uses width 1, depth 10 from most files ✗
+    Collision bounds are perpendicular to model's actual footprint
+    This could cause false collisions or missed collisions
+
+
+SUMMARY TABLE:
+==============
+
+Aspect              | Market                    | Dock (Current)          | Dock (After Fix)
+--------------------|---------------------------|-------------------------|------------------------
+Blender Model       | 2×8 (X×Y)                 | 10×1 (X×Y)             | 10×1 (X×Y)
+config.js           | width: 2, depth: 8 ✓      | width: 10, depth: 1 ✓  | width: 10, depth: 1 ✓
+game.js             | width: 2, depth: 8 ✓      | width: 1, depth: 10 ✗  | width: 10, depth: 1 ✓
+MessageRouter.js    | width: 2, depth: 8 ✓      | width: 1, depth: 10 ✗  | width: 10, depth: 1 ✓
+StructureManager    | width: 2, depth: 8 ✓      | width: 1, depth: 10 ✗  | width: 10, depth: 1 ✓
+Special Rotation    | None (0°)                 | +90°                    | +90°
+Visual Box          | 2×8 (correct)             | 1×10 at 90° (cross)     | 10×1 at 90° (correct)
+Consistency         | All files match ✓         | 3 files wrong ✗         | All files match ✓
+Collision Bounds    | Correct                   | Wrong orientation       | Correct ✓
+
+
+VERIFICATION AFTER FIX:
+=======================
+
+To verify the fix works:
+1. Load the game and place a dock
+2. Press 'V' to show bounding boxes
+3. Check that dock bounding box is a thin line (10×1), not a cross
+4. Compare with market bounding box (2×8 rectangle)
+5. Both should orient correctly with their models
+
+Expected Results:
+- Dock bounding box: thin green line, 10 units long, 1 unit wide
+- Market bounding box: wider rectangle, 2 units wide, 8 units deep
+- Both aligned with their model orientations
+
+================================================================================
