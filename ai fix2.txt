@@ -1,0 +1,164 @@
+Technical Specification: AI Navigation & Ownership Remediation
+Part 1: Fixing AI Movement & Pathfinding
+The Problem
+Currently, AIEnemy.js uses simple vector math to move directly toward the player . It completely ignores the AStar.js pathfinding system, meaning enemies will walk into walls, trees, and water. Furthermore, the existing A* implementation is hard-coded to a single chunk, causing navigation to fail if the target is across a chunk boundary.
+
+Solution Architecture
+We need to replace the vector movement in AIEnemy.js with a pathfinding loop that queries the NavigationManager.
+
+Implementation Steps
+1. Refactor AStar.js for Multi-Chunk Support
+Currently, findPath accepts a single navMap. We must change this to accept NavigationManager so it can look up neighboring chunks dynamically.
+
+Modified AStar.js Signature:
+
+JavaScript
+
+// Change the function signature to accept NavigationManager
+export function findPath(navigationManager, startX, startZ, goalX, goalZ, maxIterations = 1000) {
+    // Helper to get cell cost across chunks
+    const getCellInfo = (worldX, worldZ) => {
+        const chunkId = ChunkCoordinates.worldToChunkId(worldX, worldZ);
+        const navMap = navigationManager.getChunk(chunkId);
+        
+        if (!navMap) return null; // Chunk not loaded
+        
+        const { cellX, cellZ } = navMap.worldToCell(worldX, worldZ);
+        return {
+            walkable: navMap.isWalkable(cellX, cellZ),
+            cost: navMap.getMovementCost(cellX, cellZ)
+        };
+    };
+
+    // ... logic continues using getCellInfo instead of navMap.isWalkable ...
+}
+2. Integrate Pathfinding into AIEnemy.js
+We need to port the logic from PathfindingTestAI.js into the combat enemy.
+
+Update AIEnemy.js:
+
+JavaScript
+
+import { findPath } from './navigation/AStar.js';
+
+// Add new properties in constructor
+this.path = null;
+this.currentWaypointIndex = 0;
+this.lastPathCalcTime = 0;
+this.pathUpdateInterval = 1000; // Recalculate path every 1 second
+
+// Replace the logic in updateMovement()
+updateMovement(deltaTime, currentTime) {
+    if (!this.target) return;
+
+    // 1. Recalculate path periodically
+    if (currentTime - this.lastPathCalcTime > this.pathUpdateInterval) {
+        const navManager = this.game.navigationManager;
+        this.path = findPath(
+            navManager, 
+            this.enemy.position.x, 
+            this.enemy.position.z, 
+            this.target.position.x, 
+            this.target.position.z
+        );
+        this.currentWaypointIndex = 0;
+        this.lastPathCalcTime = currentTime;
+    }
+
+    // 2. Move along path
+    if (this.path && this.currentWaypointIndex < this.path.length) {
+        const waypoint = this.path[this.currentWaypointIndex];
+        
+        // Move toward waypoint (not player)
+        const dx = waypoint.x - this.enemy.position.x;
+        const dz = waypoint.z - this.enemy.position.z;
+        const distToWaypoint = Math.sqrt(dx*dx + dz*dz);
+
+        if (distToWaypoint < 0.5) {
+            this.currentWaypointIndex++; // Advance to next node
+        } else {
+            // Normalize and apply speed
+            const moveX = (dx / distToWaypoint) * this.speed * deltaTime;
+            const moveZ = (dz / distToWaypoint) * this.speed * deltaTime;
+            
+            this.enemy.position.x += moveX;
+            this.enemy.position.z += moveZ;
+            
+            // Rotate toward waypoint
+            this.enemy.rotation.y = Math.atan2(dx, dz);
+        }
+    } else {
+        // Fallback: If no path found (e.g. target too close), look at player
+        // [Keep existing rotation logic here]
+    }
+}
+Part 2: Fixing AI Ownership Jitter
+The Problem
+
+AIEnemy.js checks ownership every 1000ms. It calculates the distance from the AI to every player and assigns control to the closest one .
+
+
+The Glitch: If Player A is 10.0m away and Player B is 10.1m away, ownership is Player A. If Player A takes one step back (10.2m), ownership instantly snaps to Player B. This constant snapping causes the AI to jitter because two different computers are trying to simulate its position with slightly different latency.
+
+Solution Options
+Option A: "Sticky" Ownership (Hysteresis)
+We add a buffer zone. You only lose ownership if another player is significantly closer (e.g., 20% closer) than you. This prevents rapid toggling.
+
+Code Update for AIEnemy.js -> checkOwnership():
+
+JavaScript
+
+checkOwnership() {
+    // ... [existing distance calculation code] ...
+
+    // Sort players by distance
+    playerDistances.sort((a, b) => a.distance - b.distance);
+    const closestPlayer = playerDistances[0];
+    
+    // HYSTERESIS CHECK
+    const currentOwnerId = this.owner;
+    
+    // If I am the current owner, keep ownership unless someone is MUCH closer
+    if (currentOwnerId === this.gameState.clientId) {
+        const myDistance = localDist; // calculated earlier
+        const challengerDistance = closestPlayer.distance;
+
+        // Only give up control if challenger is 20% closer than me
+        // Example: I am 10m away. Challenger must be < 8m away to steal it.
+        if (challengerDistance > myDistance * 0.8) {
+            return; // Keep ownership
+        }
+    }
+
+    // Proceed with standard handoff logic...
+    if (closestPlayer.clientId !== this.owner) {
+        // [Existing handoff code]
+    }
+}
+Option B: Fixed Ownership (Chunk Authority)
+This is the most robust method for P2P. The client with the lowest ID in the chunk owns all entities in that chunk until they disconnect. Distance is ignored.
+
+Code Update for AIEnemy.js -> checkOwnership():
+
+JavaScript
+
+checkOwnership() {
+    // 1. Get all players currently in this chunk (from NetworkManager)
+    const peersInChunk = this.networkManager.getPeersInChunk(this.currentChunk);
+    
+    // 2. Add myself
+    const allClientIds = [...peersInChunk, this.gameState.clientId];
+    
+    // 3. Sort alphabetically/numerically
+    allClientIds.sort();
+    
+    // 4. The "Boss" is the first ID in the list
+    const newOwner = allClientIds[0];
+
+    if (this.owner !== newOwner) {
+        this.owner = newOwner;
+        // broadcast handoff...
+    }
+}
+Recommendation
+For your current stage of development, Option A (Sticky Ownership) is safer to implement. It requires changing only one function in AIEnemy.js and does not require writing new helper functions to track which peers are in which chunk.

@@ -1,0 +1,874 @@
+{
+  "players": [
+    {
+      "id": "client_h3qzfirca2w"
+    }
+  ],
+  "objectChanges": [
+    {
+      "action": "remove",
+      "id": "0,0_fir_339",
+      "name": "fir",
+      "position": [
+        5.486646492499858,
+        1.4755400526796336,
+        13.949925068300217
+      ],
+      "quality": 33,
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "fir_log_1763477454779_j4mngdsvb",
+      "name": "fir_log",
+      "position": [
+        5.486646492499858,
+        1.4755400526796336,
+        13.949925068300217
+      ],
+      "quality": 33,
+      "scale": 1,
+      "chunkId": "chunk_0,0",
+      "totalResources": 5,
+      "remainingResources": 0,
+      "harvestedBy": null,
+      "harvestStartTime": null
+    },
+    {
+      "action": "add",
+      "id": "0,0_limestone_48",
+      "name": "limestone",
+      "position": [
+        8.670140418689698,
+        3.4933314026246243,
+        1.162921858485788
+      ],
+      "quality": 73,
+      "scale": 1,
+      "totalResources": 20,
+      "remainingResources": 19,
+      "chunkId": "chunk_0,0",
+      "harvestedBy": null,
+      "harvestStartTime": null
+    },
+    {
+      "action": "add",
+      "id": "road_1763480665014_j63p3e3dv",
+      "name": "road",
+      "position": [
+        8.25,
+        3.649601780888813,
+        0.25
+      ],
+      "rotation": 0,
+      "chunkId": "chunk_0,0",
+      "isRoad": true
+    },
+    {
+      "action": "add",
+      "id": "0,0_limestone_8",
+      "name": "limestone",
+      "position": [
+        3.4816946950741112,
+        1.9296300339200376,
+        17.496170301456004
+      ],
+      "quality": 52,
+      "scale": 1,
+      "totalResources": 20,
+      "remainingResources": 6,
+      "chunkId": "chunk_0,0",
+      "harvestedBy": null,
+      "harvestStartTime": null
+    },
+    {
+      "action": "add",
+      "id": "campfire_1763482076202_777qs3a41",
+      "name": "campfire",
+      "position": [
+        4.25,
+        2,
+        16.5
+      ],
+      "rotation": 0,
+      "scale": 1,
+      "quality": 50,
+      "chunkId": "chunk_0,0",
+      "inventory": {
+        "items": []
+      }
+    },
+    {
+      "action": "remove",
+      "id": "0,0_fir_477",
+      "name": "fir",
+      "position": [
+        6.151136441621929,
+        1.4295991674469575,
+        18.950362084433436
+      ],
+      "quality": 6,
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "fir_log_1763482351365_2b49qlrw8",
+      "name": "fir_log",
+      "position": [
+        6.151136441621929,
+        1.4295991674469575,
+        18.950362084433436
+      ],
+      "quality": 6,
+      "scale": 1,
+      "chunkId": "chunk_0,0",
+      "totalResources": 5,
+      "remainingResources": 0,
+      "harvestedBy": null,
+      "harvestStartTime": null
+    },
+    {
+      "action": "remove",
+      "id": "construction_1763482571303_a2zhp34j5",
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "add",
+      "id": "house_1763482586332_fl4ls2sto",
+      "name": "house",
+      "position": [
+        5.5,
+        1.75,
+        16.5
+      ],
+      "quality": 6,
+      "scale": 1,
+      "chunkId": "chunk_0,0",
+      "totalResources": null,
+      "remainingResources": null,
+      "harvestedBy": null,
+      "harvestStartTime": null,
+      "rotation": 300,
+      "finalFoundationY": 1.75,
+      "inventory": {
+        "items": []
+      }
+    },
+    {
+      "action": "add",
+      "id": "road_1763488101364_2ano9mwzq",
+      "name": "road",
+      "position": [
+        5.25,
+        2.121338864472314,
+        17.75
+      ],
+      "rotation": 0,
+      "chunkId": "chunk_0,0",
+      "isRoad": true
+    },
+    {
+      "action": "add",
+      "id": "road_1763488118210_015lzl6iq",
+      "name": "road",
+      "position": [
+        6.5,
+        1.8817703303937612,
+        17.25
+      ],
+      "rotation": 0,
+      "chunkId": "chunk_0,0",
+      "isRoad": true
+    },
+    {
+      "action": "add",
+      "id": "road_1763488135781_4cltiyxmx",
+      "name": "road",
+      "position": [
+        4.5,
+        2.486787551344192,
+        17.5
+      ],
+      "rotation": 0,
+      "chunkId": "chunk_0,0",
+      "isRoad": true
+    },
+    {
+      "action": "add",
+      "id": "road_1763488235245_y1w3azut7",
+      "name": "road",
+      "position": [
+        5.25,
+        2.0898891969545215,
+        17.5
+      ],
+      "rotation": 0,
+      "chunkId": "chunk_0,0",
+      "isRoad": true
+    },
+    {
+      "action": "add",
+      "id": "road_1763488330710_tn4xpo5n7",
+      "name": "road",
+      "position": [
+        4.75,
+        1.9859625329931416,
+        15.75
+      ],
+      "rotation": 0,
+      "chunkId": "chunk_0,0",
+      "isRoad": true
+    },
+    {
+      "action": "add",
+      "id": "road_1763488440079_s3hc3b2g7",
+      "name": "road",
+      "position": [
+        6.75,
+        1.6684855342672815,
+        16.5
+      ],
+      "rotation": 0,
+      "chunkId": "chunk_0,0",
+      "isRoad": true
+    },
+    {
+      "action": "add",
+      "id": "road_1763488466397_km0m4sttl",
+      "name": "road",
+      "position": [
+        6.25,
+        1.746307521873044,
+        15.75
+      ],
+      "rotation": 0,
+      "chunkId": "chunk_0,0",
+      "isRoad": true
+    },
+    {
+      "action": "add",
+      "id": "0,0_limestone_141",
+      "name": "limestone",
+      "position": [
+        1.8928229459561408,
+        1.4570472322617964,
+        19.08081426518038
+      ],
+      "quality": 2,
+      "scale": 1,
+      "totalResources": 20,
+      "remainingResources": 18,
+      "chunkId": "chunk_0,0",
+      "harvestedBy": null,
+      "harvestStartTime": null
+    },
+    {
+      "action": "add",
+      "id": "road_1763495264349_ss9z2qbg6",
+      "name": "road",
+      "position": [
+        3.5,
+        2.461106260197372,
+        17
+      ],
+      "rotation": 0,
+      "chunkId": "chunk_0,0",
+      "isRoad": true
+    },
+    {
+      "action": "add",
+      "id": "road_1763495337904_5fiyi1hj8",
+      "name": "road",
+      "position": [
+        3.5,
+        2.031529367049173,
+        16
+      ],
+      "rotation": 0,
+      "chunkId": "chunk_0,0",
+      "isRoad": true
+    },
+    {
+      "action": "remove",
+      "id": "construction_1763534211919_54bu4wjeh",
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "0,0_fir_90",
+      "name": "fir",
+      "position": [
+        -19.862119655590504,
+        2.145387121864295,
+        10.503471922129393
+      ],
+      "quality": 51,
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "add",
+      "id": "fir_log_1763534239096_5kyx38pdp",
+      "name": "fir_log",
+      "position": [
+        -19.862119655590504,
+        2.145387121864295,
+        10.503471922129393
+      ],
+      "quality": 51,
+      "scale": 1,
+      "chunkId": "chunk_0,0",
+      "totalResources": 5,
+      "remainingResources": 3,
+      "harvestedBy": null,
+      "harvestStartTime": null
+    },
+    {
+      "action": "add",
+      "id": "tent_1763534282988_fsr33jiis",
+      "name": "tent",
+      "position": [
+        -22.25,
+        2.25,
+        12.5
+      ],
+      "quality": 51,
+      "scale": 0.5,
+      "chunkId": "chunk_0,0",
+      "totalResources": null,
+      "remainingResources": null,
+      "harvestedBy": null,
+      "harvestStartTime": null,
+      "rotation": 0,
+      "finalFoundationY": 2.25
+    },
+    {
+      "action": "remove",
+      "id": "construction_1763536140383_bvlmf368e",
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "add",
+      "id": "garden_1763536155640_9xjp3rbpg",
+      "name": "garden",
+      "position": [
+        4.25,
+        2,
+        18.5
+      ],
+      "quality": 80,
+      "scale": 1,
+      "chunkId": "chunk_0,0",
+      "totalResources": null,
+      "remainingResources": null,
+      "harvestedBy": null,
+      "harvestStartTime": null,
+      "rotation": 0,
+      "finalFoundationY": 2,
+      "inventory": {
+        "items": [
+          {
+            "id": "apple_1763536193325_nz12fe8wz",
+            "type": "apple",
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1,
+            "rotation": 0,
+            "quality": 80,
+            "durability": 8
+          },
+          {
+            "id": "vegetables_1763536597909_q064b3rx7",
+            "type": "vegetables",
+            "x": 1,
+            "y": 0,
+            "width": 1,
+            "height": 1,
+            "rotation": 0,
+            "quality": 80,
+            "durability": 16
+          },
+          {
+            "id": "vegetables_1763536897917_ula9peccu",
+            "type": "vegetables",
+            "x": 0,
+            "y": 1,
+            "width": 1,
+            "height": 1,
+            "rotation": 0,
+            "quality": 80,
+            "durability": 16
+          },
+          {
+            "id": "vegetables_1763545860510_azg9rtpx0",
+            "type": "vegetables",
+            "x": 1,
+            "y": 1,
+            "width": 1,
+            "height": 1,
+            "rotation": 0,
+            "quality": 80,
+            "durability": 16
+          }
+        ]
+      }
+    },
+    {
+      "action": "remove",
+      "id": "0,0_fir_54",
+      "name": "fir",
+      "position": [
+        -0.9087878745049238,
+        1.8167657052781698,
+        19.88940975861624
+      ],
+      "quality": 31,
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "add",
+      "id": "fir_log_1763551398682_tv32c8wzy",
+      "name": "fir_log",
+      "position": [
+        -0.9087878745049238,
+        1.8167657052781698,
+        19.88940975861624
+      ],
+      "quality": 31,
+      "scale": 1,
+      "chunkId": "chunk_0,0",
+      "totalResources": 5,
+      "remainingResources": 4,
+      "harvestedBy": null,
+      "harvestStartTime": null
+    },
+    {
+      "action": "remove",
+      "id": "0,0_fir_407",
+      "name": "fir",
+      "position": [
+        -5.501617235131562,
+        1.5334549948391452,
+        20.126718375831842
+      ],
+      "quality": 90,
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "add",
+      "id": "fir_log_1763551425737_tzx1tizk5",
+      "name": "fir_log",
+      "position": [
+        -5.501617235131562,
+        1.5334549948391452,
+        20.126718375831842
+      ],
+      "quality": 90,
+      "scale": 1,
+      "chunkId": "chunk_0,0",
+      "totalResources": 5,
+      "remainingResources": 5,
+      "harvestedBy": null,
+      "harvestStartTime": null
+    },
+    {
+      "action": "remove",
+      "id": "0,0_fir_409",
+      "name": "fir",
+      "position": [
+        -7.802852417808026,
+        1.4963014590510142,
+        19.613808777648956
+      ],
+      "quality": 4,
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "add",
+      "id": "fir_log_1763551443841_6x00dcd8n",
+      "name": "fir_log",
+      "position": [
+        -7.802852417808026,
+        1.4963014590510142,
+        19.613808777648956
+      ],
+      "quality": 4,
+      "scale": 1,
+      "chunkId": "chunk_0,0",
+      "totalResources": 5,
+      "remainingResources": 5,
+      "harvestedBy": null,
+      "harvestStartTime": null
+    },
+    {
+      "action": "remove",
+      "id": "0,0_fir_400",
+      "name": "fir",
+      "position": [
+        -9.563942509703338,
+        1.4457107801345543,
+        19.060236075893044
+      ],
+      "quality": 3,
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "add",
+      "id": "fir_log_1763551462319_sb7b9afb5",
+      "name": "fir_log",
+      "position": [
+        -9.563942509703338,
+        1.4457107801345543,
+        19.060236075893044
+      ],
+      "quality": 3,
+      "scale": 1,
+      "chunkId": "chunk_0,0",
+      "totalResources": 5,
+      "remainingResources": 5,
+      "harvestedBy": null,
+      "harvestStartTime": null
+    },
+    {
+      "action": "remove",
+      "id": "0,0_fir_106",
+      "name": "fir",
+      "position": [
+        -1.7145833116956055,
+        1.7271488014672305,
+        18.829806707799435
+      ],
+      "quality": 31,
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "add",
+      "id": "fir_log_1763552879811_hl7wpzbrl",
+      "name": "fir_log",
+      "position": [
+        -1.7145833116956055,
+        1.7271488014672305,
+        18.829806707799435
+      ],
+      "quality": 31,
+      "scale": 1,
+      "chunkId": "chunk_0,0",
+      "totalResources": 5,
+      "remainingResources": 5,
+      "harvestedBy": null,
+      "harvestStartTime": null
+    },
+    {
+      "action": "remove",
+      "id": "construction_1763553938151_gaz3dhvl6",
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "add",
+      "id": "outpost_1763553990789_5yjd0heqa",
+      "name": "outpost",
+      "position": [
+        2.75,
+        1.75,
+        19.75
+      ],
+      "quality": 31,
+      "scale": 1,
+      "chunkId": "chunk_0,0",
+      "totalResources": null,
+      "remainingResources": null,
+      "harvestedBy": null,
+      "harvestStartTime": null,
+      "rotation": 30,
+      "finalFoundationY": 1.75
+    },
+    {
+      "action": "remove",
+      "id": "construction_1763554322425_3a5gkf2u1",
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "0,0_fir_123",
+      "name": "fir",
+      "position": [
+        6.006711372174323,
+        1.9454689959331182,
+        21.34177847765386
+      ],
+      "quality": 54,
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "remove",
+      "id": "fir_log_1763554341922_sand0seek",
+      "name": "fir_log",
+      "position": [
+        6.006711372174323,
+        1.9454689959331182,
+        21.34177847765386
+      ],
+      "quality": 54,
+      "scale": 1,
+      "chunkId": "chunk_0,0",
+      "totalResources": 5,
+      "remainingResources": 0,
+      "harvestedBy": null,
+      "harvestStartTime": null
+    },
+    {
+      "action": "add",
+      "id": "dock_1763554373118_7c195jzhs",
+      "name": "dock",
+      "position": [
+        13.75,
+        1.5,
+        18.25
+      ],
+      "quality": 54,
+      "scale": 1,
+      "chunkId": "chunk_0,0",
+      "totalResources": null,
+      "remainingResources": null,
+      "harvestedBy": null,
+      "harvestStartTime": null,
+      "rotation": 285,
+      "finalFoundationY": 1.5
+    },
+    {
+      "action": "remove",
+      "id": "construction_1763554412023_8tr4hq8un",
+      "chunkId": "chunk_0,0"
+    },
+    {
+      "action": "add",
+      "id": "crate_1763554421696_urpdq5lmy",
+      "name": "crate",
+      "position": [
+        8,
+        1.5,
+        19.25
+      ],
+      "quality": 6,
+      "scale": 1,
+      "chunkId": "chunk_0,0",
+      "totalResources": null,
+      "remainingResources": null,
+      "harvestedBy": null,
+      "harvestStartTime": null,
+      "rotation": 0,
+      "finalFoundationY": 1.5,
+      "inventory": {
+        "items": [
+          {
+            "id": "firplank_1763554526627_v06914ff3",
+            "type": "firplank",
+            "x": 0,
+            "y": 0,
+            "width": 2,
+            "height": 4,
+            "rotation": 0,
+            "quality": 6,
+            "durability": 100
+          },
+          {
+            "id": "firplank_1763554542225_0r0kdxqda",
+            "type": "firplank",
+            "x": 2,
+            "y": 0,
+            "width": 2,
+            "height": 4,
+            "rotation": 0,
+            "quality": 6,
+            "durability": 100
+          },
+          {
+            "id": "firfirewood_1763554582320_futen6s7o",
+            "type": "firfirewood",
+            "x": 4,
+            "y": 0,
+            "width": 2,
+            "height": 4,
+            "rotation": 0,
+            "quality": 54,
+            "durability": 100
+          },
+          {
+            "id": "firfirewood_1763554720443_g9c6i1xbc",
+            "type": "firfirewood",
+            "x": 6,
+            "y": 0,
+            "width": 2,
+            "height": 4,
+            "rotation": 0,
+            "quality": 54,
+            "durability": 100
+          }
+        ]
+      }
+    },
+    {
+      "action": "add",
+      "id": "0,0_apple_55",
+      "name": "apple",
+      "position": [
+        1.8480197875760496,
+        1.4419452243076174,
+        22.002929681912065
+      ],
+      "scale": 1,
+      "rotation": 0,
+      "inventory": {
+        "items": [
+          {
+            "id": "apple_1763554874717_0_r6037b3cf",
+            "type": "apple",
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1,
+            "rotation": 0,
+            "quality": 91,
+            "durability": 5
+          },
+          {
+            "id": "apple_1763554874717_1_c7t24zxvn",
+            "type": "apple",
+            "x": 1,
+            "y": 0,
+            "width": 1,
+            "height": 1,
+            "rotation": 0,
+            "quality": 91,
+            "durability": 5
+          },
+          {
+            "id": "apple_1763554874717_2_wevlqwlb7",
+            "type": "apple",
+            "x": 2,
+            "y": 0,
+            "width": 1,
+            "height": 1,
+            "rotation": 0,
+            "quality": 91,
+            "durability": 5
+          },
+          {
+            "id": "apple_1763554874717_3_xv4lvtzjv",
+            "type": "apple",
+            "x": 0,
+            "y": 1,
+            "width": 1,
+            "height": 1,
+            "rotation": 0,
+            "quality": 91,
+            "durability": 5
+          },
+          {
+            "id": "apple_1763554874717_4_rz2gmfly6",
+            "type": "apple",
+            "x": 1,
+            "y": 1,
+            "width": 1,
+            "height": 1,
+            "rotation": 0,
+            "quality": 91,
+            "durability": 5
+          },
+          {
+            "id": "apple_1763554874717_5_kostfau1v",
+            "type": "apple",
+            "x": 2,
+            "y": 1,
+            "width": 1,
+            "height": 1,
+            "rotation": 0,
+            "quality": 91,
+            "durability": 5
+          },
+          {
+            "id": "apple_1763554874718_6_pgb0rlfbj",
+            "type": "apple",
+            "x": 0,
+            "y": 2,
+            "width": 1,
+            "height": 1,
+            "rotation": 0,
+            "quality": 91,
+            "durability": 5
+          },
+          {
+            "id": "apple_1763554874718_7_oxz4wxck3",
+            "type": "apple",
+            "x": 1,
+            "y": 2,
+            "width": 1,
+            "height": 1,
+            "rotation": 0,
+            "quality": 91,
+            "durability": 5
+          },
+          {
+            "id": "apple_1763554874718_8_es05qb2i1",
+            "type": "apple",
+            "x": 2,
+            "y": 2,
+            "width": 1,
+            "height": 1,
+            "rotation": 0,
+            "quality": 91,
+            "durability": 5
+          }
+        ]
+      },
+      "quality": 91,
+      "chunkId": "chunk_0,0"
+    }
+  ],
+  "seed": 12345
+}

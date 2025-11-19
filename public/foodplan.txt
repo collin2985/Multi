@@ -1,0 +1,182 @@
+FOOD CONSUMPTION SYSTEM - IMPLEMENTATION PLAN
+==============================================
+
+## FOOD ITEMS
+
+1. apple - 10 base durability (exists: garden spawn)
+2. vegetables - 20 base durability (exists: garden spawn)
+3. cookedfish - 30 base durability (NEW: market only)
+4. cookedmeat - 40 base durability (NEW: market only)
+
+## CONSUMPTION MECHANICS
+
+### Base System:
+- Base consumption rate: 1 durability/minute (total across all food)
+- Distribution: Evenly split among ALL food items simultaneously
+- Per item rate: consumptionRate / totalFoodItems
+
+### Variety Bonus:
+- Formula: Math.max(0.6, 1.0 - (uniqueTypes - 1) × 0.1)
+- 1 unique type: 1.0 dur/min (no discount)
+- 2 unique types: 0.9 dur/min (10% discount)
+- 3 unique types: 0.8 dur/min (20% discount)
+- 4 unique types: 0.7 dur/min (30% discount)
+- 5+ unique types: 0.6 dur/min (40% discount, capped at 50%)
+
+### Quality Modifier:
+- Applied at item creation: durability = baseDurability × (quality / 100)
+- Example: Apple at 50% quality = 10 × 0.5 = 5 durability
+- Example: Cookedmeat at 100% quality = 40 × 1.0 = 40 durability
+
+### Precision:
+- Internal tracking: Full floating-point precision
+- Display: Math.floor(item.durability) - whole numbers only
+- Clamping: Math.max(0, item.durability) - prevent negatives
+- Removal: When durability <= 0, remove item and recalculate distribution
+
+## EXAMPLE SCENARIOS
+
+### Scenario 1: Single Food Type
+- 1 apple (10 dur)
+- Consumption: 1.0 dur/min
+- Duration: 10 minutes
+
+### Scenario 2: Two Food Types
+- 1 meat (40 dur) + 2 apples (10 each)
+- Variety bonus: 0.9 dur/min
+- Per item: 0.9 / 3 = 0.3 dur/min each
+- Timeline:
+  * 0-33 min: All 3 items consume at 0.3/min
+  * 33 min: Apples depleted
+  * 33-67 min: Meat continues alone at 0.9/min
+  * 67 min: All food gone
+
+### Scenario 3: Many Items
+- 10 meat (40 each, all 100% quality)
+- Variety bonus: 1.0 dur/min (only 1 type)
+- Per item: 1.0 / 10 = 0.1 dur/min each
+- Duration: 40 / 0.1 = 400 minutes (6.67 hours)
+
+### Scenario 4: Maximum Variety
+- 1 apple + 1 vegetables + 1 cookedfish + 1 cookedmeat
+- Variety bonus: 0.7 dur/min (30% discount for 4 types)
+- Per item: 0.7 / 4 = 0.175 dur/min each
+- Timeline:
+  * Apple (10 dur): 10 / 0.175 = 57 minutes
+  * Vegetables (20 dur): 20 / 0.175 = 114 minutes
+  * Cookedfish (30 dur): 30 / 0.175 = 171 minutes
+  * Cookedmeat (40 dur): 40 / 0.175 = 228 minutes
+  * But rates change as items deplete!
+
+## IMPLEMENTATION TASKS
+
+### 1. Add cookedfish/cookedmeat to Market (public/config.js)
+Location: CONFIG.MARKET.PRICES (lines 486-512)
+Add alongside apple/vegetables:
+```
+cookedfish: { buyPrice: 20, sellPrice: 14, minQuantity: 0, maxQuantity: 150 },
+cookedmeat: { buyPrice: 30, sellPrice: 20, minQuantity: 0, maxQuantity: 150 },
+```
+
+### 2. Add to Market Inventory Initialization (server/MessageHandlers.js)
+Location: Lines 354-405 and 442-495 (two places - market creation in both spots)
+Add to quantities object:
+```
+cookedfish: defaultQuantity,
+cookedmeat: defaultQuantity
+```
+Add to qualityAverages object:
+```
+cookedfish: defaultQuality,
+cookedmeat: defaultQuality
+```
+Note: Food items don't need durabilityAverages (only tools use that)
+
+### 3. Update PlayerHunger.js Food System
+Location: public/player/PlayerHunger.js
+
+Changes:
+a) Replace foodTypes object (lines 24-29):
+   FROM: { baseRate: milliseconds, priority: number }
+   TO: { baseDurability: number }
+
+   NEW:
+   ```
+   this.foodTypes = {
+       'apple': { baseDurability: 10 },
+       'vegetables': { baseDurability: 20 },
+       'cookedfish': { baseDurability: 30 },
+       'cookedmeat': { baseDurability: 40 }
+   };
+   ```
+
+b) Remove currentFood tracking (lines 32-34):
+   DELETE: this.currentFood, this.consumptionStartTime, this.consumptionDuration
+
+c) Remove selectNextFood() method (lines 119-147):
+   DELETE entire method
+
+d) Add new consumeAllFood() method:
+   - Get all food items from inventory
+   - Count unique food types
+   - Calculate variety bonus: Math.max(0.6, 1.0 - (uniqueTypes - 1) * 0.1)
+   - Calculate per-item rate: varietyBonus / totalItems
+   - Convert to per-second: perItemRate / 60
+   - For each item:
+     * item.durability -= consumptionPerSecond
+     * item.durability = Math.max(0, item.durability)
+     * if (item.durability <= 0) remove item and refresh UI
+
+e) Update update() method (lines 57-114):
+   - Replace currentFood logic with consumeAllFood()
+   - Remove validation checks for single food item
+   - Keep starvation handling
+
+f) Remove validateCurrentFood() method (lines 153-162):
+   DELETE entire method
+
+g) Remove deleteCurrentFood() method (lines 209-228):
+   Replace with inline removal in consumeAllFood()
+
+h) Update variety bonus calculation (lines 196-204):
+   Change from 5% to 10% per type
+   Change max from 0.95 to 0.6 (40% max discount)
+
+i) Keep precision tracking:
+   - Store full float in item.durability
+   - Display uses Math.floor() (already handled by InventoryUI)
+
+### 4. Update Garden Spawning (server/MessageHandlers.js)
+Location: Lines 927-938
+
+Change from:
+```
+quality: gardenStructure.quality || 50,
+durability: 100
+```
+
+To:
+```
+const baseDurability = randomFood === 'apple' ? 10 : 20;
+quality: gardenStructure.quality || 50,
+durability: Math.round(baseDurability * (newItem.quality / 100))
+```
+
+### 5. Testing Scenarios
+Test these cases:
+- 1 apple only (should consume at 1.0 dur/min)
+- 2 types: apple + vegetables (should consume at 0.9 dur/min)
+- 4 types: all food types (should consume at 0.7 dur/min with 30% discount)
+- 10 identical items (should spread consumption evenly)
+- Edge case: item with 0.00001 durability (should clamp to 0 and remove)
+- Verify items deplete at different times based on starting durability
+- Verify consumption redistributes when items deplete
+
+## NOTES
+
+- Update frequency: Keep at 1 second (smooth UI updates)
+- No priority system needed (all food consumed simultaneously)
+- Garden only spawns apple/vegetables (cookedfish/cookedmeat from market only)
+- Quality affects initial durability, not consumption rate
+- Variety bonus encourages diverse diet
+- More items = slower individual consumption = longer lasting food supply

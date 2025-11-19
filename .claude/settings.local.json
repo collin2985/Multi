@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(node test-chunk-coordinates.mjs:*)",
+      "Bash(done)",
+      "Bash(node:*)",
+      "Bash(cd:*)",
+      "Bash(public/audio.js.tmp)",
+      "WebFetch(domain:rapier.rs)",
+      "WebSearch",
+      "Bash(find:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

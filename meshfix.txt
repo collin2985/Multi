@@ -1,0 +1,447 @@
+================================================================================
+PERFORMANCE ISSUE ANALYSIS: InstancedMesh Conversion
+================================================================================
+Date: 2025-11-16
+Current Performance: 22 FPS @ 40% GPU, 27% CPU
+Target Performance: 60+ FPS @ 70-90% GPU
+
+================================================================================
+PROBLEM DIAGNOSIS
+================================================================================
+
+SYMPTOM:
+- Low FPS (22) despite low GPU (40%) and CPU (27%) usage
+- Indicates bottleneck is NOT hardware-limited
+
+ROOT CAUSE:
+- Too many individual draw calls from cloned mesh objects
+- Each tree/rock/log = 1 separate mesh = 1 draw call
+- JavaScript overhead preparing draw calls on main thread (single-threaded)
+- GPU sitting idle waiting for draw call preparation
+
+CURRENT ARCHITECTURE (objects.js:438):
+  const instance = model.clone();  // ← Every object is a separate mesh!
+
+ESTIMATED OBJECT COUNT:
+- 500 objects per type per chunk (default)
+- ~5 tree types + rocks + logs across 9 loaded chunks (3x3 grid)
+- Total: 500-1000+ individual meshes
+- Visible objects with culling: 100-200+
+- Draw calls: 200-500+ per frame
+
+WHY LOW CPU/GPU:
+- CPU at 27%: Only ONE browser thread maxed out, other cores idle
+- GPU at 40%: Starved of work, waiting for JavaScript to prepare draw calls
+
+================================================================================
+PROPOSED SOLUTION: InstancedMesh
+================================================================================
+
+WHAT IS InstancedMesh:
+- Renders thousands of identical objects in a SINGLE draw call
+- Stores geometry/material once, uses transformation matrices for instances
+- Already used in codebase for:
+  * Billboards (BillboardSystem.js)
+  * Blob shadows (blobshadow.js)
+
+EXPECTED BENEFITS:
+- Draw calls: 200-500+ → ~5-10 (one per object type)
+- Memory usage: Reduced 10-20x (shared geometry)
+- FPS: 22 → 60+
+- GPU usage: 40% → 70-90% (actually working)
+
+================================================================================
+IMPACT ANALYSIS: WHAT WOULD BREAK
+================================================================================
+
+CURRENT DEPENDENCIES ON INDIVIDUAL MESH OBJECTS:
+
+❌ 1. OBJECT REGISTRY SYSTEM (game.js:1324-1339)
+   Current: this.objectRegistry.set(objectId, meshObject)
+   Used by: Proximity detection, object lookups, removal
+   Problem: Can't store InstancedMesh instances (only indices exist)
+
+❌ 2. PROXIMITY DETECTION (game.js:1841-1987)
+   Current: Accesses object.position, object.userData.modelType, etc.
+   Flow: Physics query → objectId → objectRegistry → mesh object
+   Problem: No individual mesh objects to retrieve
+   Accesses:
+   - object.position.x / object.position.z
+   - object.userData.modelType
+   - object.userData.objectId
+   - object.userData.quality
+   - object.userData.remainingResources
+   - object.userData.totalResources
+   - object.userData.isConstructionSite
+   - object.userData.chunkKey
+
+❌ 3. BILLBOARD MAPPING (BillboardSystem.js:270-274)
+   Current: this.instanceData.set(treeObject, {type, index, position})
+   Uses: Object reference as Map key
+   Problem: No tree object references with InstancedMesh
+   Has removal method: removeTreeBillboard(treeObject)
+
+❌ 4. OBJECT REMOVAL (ChunkManager.js:267, MessageRouter.js:552)
+   Current: this.scene.remove(object); this.disposeObject(object);
+   Trigger: Player harvests tree/rock
+   Problem: Can't remove individual instances from InstancedMesh
+   Current flow:
+   - Player harvests → server sends 'object_removed'
+   - handleObjectRemoved() → chunkManager.removeObject(objectId)
+   - scene.remove(object) + disposeObject(object)
+   - objectId added to removedObjectsCache
+
+❌ 5. CHUNK OBJECT TRACKING (game.js:1328-1335, terrain.js)
+   Current: terrainRenderer.chunkObjects.get(chunkKey) → Array<Mesh>
+   Used by: populateObjectRegistry, cullDistantTrees, chunk unloading
+   Problem: Array contains mesh objects, not instance indices
+
+❌ 6. CULLING SYSTEM (game.js:1709-1737)
+   Current: obj.visible = distanceSquared <= maxDistanceSquared
+   Sets individual mesh visibility to hide distant objects
+   Problem: Can't set visible property on instances
+   Solution: Would hide instance by setting matrix scale to 0
+
+✅ 7. PHYSICS SYSTEM - WOULD STILL WORK
+   Current: Creates collider per object with objectId identifier
+   Implementation: physicsManager.createStaticCollider(objectId, shape, position, rotation, group)
+   Why it works: Physics uses objectId strings, not object references
+   Proximity flow: querySphere() → colliderHandle → objectId
+   Can adapt: Still create one collider per instance, same as now
+
+✅ 8. NAVIGATION SYSTEM - WOULD STILL WORK
+   Current: Creates obstacles based on position/dimensions
+   Implementation: navMap.addCylindricalObstacle(x, z, radius)
+   Why it works: Uses position/dimensions, doesn't depend on mesh structure
+   Can adapt: Still create obstacles per instance at instance positions
+
+================================================================================
+SPECIAL CONSIDERATIONS
+================================================================================
+
+LOD/BILLBOARD INTERACTION:
+- Trees use distance-based LOD (close = 3D mesh, far = billboard)
+- Billboards already use InstancedMesh (good!)
+- Problem: Billboard mapping uses tree object references
+- Solution: Change billboard mapping from object → data to objectId → data
+- When hiding tree instance, also hide corresponding billboard instance
+
+REMOVAL WITH InstancedMesh:
+- Option 1: HIDE instance (set matrix scale to 0) - RECOMMENDED
+  Pros: Fast, no rebuild needed
+  Cons: Instances still in memory (minimal impact)
+
+- Option 2: REBUILD InstancedMesh (recreate without removed instances)
+  Pros: Clean removal, reclaim memory
+  Cons: Expensive if removing frequently
+
+- Option 3: HYBRID (static = instanced, modified = regular mesh)
+  Pros: Best performance for static objects
+  Cons: Complex to manage transitions
+
+RECOMMENDED APPROACH: Option 1 (Hide instances)
+- Set instance matrix to zero scale when removed
+- Keep removedObjectsCache to prevent respawn on chunk reload
+- Billboard system already uses this approach (BillboardSystem.js:296-300)
+
+================================================================================
+REQUIRED REFACTOR
+================================================================================
+
+ARCHITECTURAL CHANGES NEEDED:
+
+1. NEW INSTANCE DATA STORE
+   Replace mesh object storage with instance metadata:
+
+   this.instanceData = new Map(); // objectId → instance metadata
+
+   Structure:
+   {
+     objectId: "oak_0_0_42",
+     treeType: "oak",
+     instanceIndex: 42,
+     position: Vector3(x, y, z),
+     rotation: 0,
+     scale: 1.0,
+     quality: 75,
+     remainingResources: 100,
+     totalResources: 100,
+     chunkKey: "0,0",
+     physicsHandle: colliderHandle,
+     billboardIndex: 15,
+     // All userData fields stored here
+   }
+
+2. UPDATE OBJECT REGISTRY (game.js:1324-1339)
+   From: Map<objectId, MeshObject>
+   To:   Map<objectId, InstanceData>
+
+   Before: this.objectRegistry.set(objectId, meshObject)
+   After:  this.objectRegistry.set(objectId, instanceData)
+
+3. REWRITE PROXIMITY DETECTION (game.js:1841-1987)
+   Change all object.property accesses to instanceData.property:
+
+   Before:
+   - object.position.x → instanceData.position.x
+   - object.userData.modelType → instanceData.treeType
+   - object.userData.quality → instanceData.quality
+
+   After:
+   const instanceData = this.objectRegistry.get(objectId);
+   const dx = playerPos.x - instanceData.position.x;
+   const modelType = instanceData.treeType;
+
+4. UPDATE BILLBOARD SYSTEM (BillboardSystem.js:270, 289)
+   From: Map<treeObject, BillboardData>
+   To:   Map<objectId, BillboardData>
+
+   Before: this.instanceData.set(treeObject, {type, index, position})
+   After:  this.instanceData.set(objectId, {type, index, position})
+
+   Add method: removeBillboardById(objectId)
+
+5. REWRITE CHUNK TRACKING (terrain.js)
+   From: Map<chunkKey, Array<MeshObject>>
+   To:   Map<chunkKey, Array<objectId>>  OR  keep instance data
+
+   Alternative: Keep instanceData as source of truth, chunk membership in data
+
+6. UPDATE REMOVAL SYSTEM (ChunkManager.js:239-292)
+   From: scene.remove(object); disposeObject(object);
+   To:   Hide instance by setting matrix scale to 0
+
+   Implementation:
+   function removeInstance(treeType, instanceIndex) {
+     const instancedMesh = this.instancedMeshes.get(treeType);
+     const matrix = new THREE.Matrix4();
+     matrix.set(0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,1); // Zero scale
+     instancedMesh.setMatrixAt(instanceIndex, matrix);
+     instancedMesh.instanceMatrix.needsUpdate = true;
+
+     // Also hide billboard
+     const billboardData = this.billboardSystem.instanceData.get(objectId);
+     if (billboardData) {
+       this.billboardSystem.removeBillboardById(objectId);
+     }
+
+     // Keep in removedObjectsCache to prevent respawn
+     this.gameState.removedObjectsCache.get(chunkKey).add(objectId);
+   }
+
+7. UPDATE CULLING SYSTEM (game.js:1709-1737)
+   From: obj.visible = false
+   To:   Hide instance by setting matrix scale to 0 (same as removal)
+
+   Note: This becomes same operation as removal, just temporary
+
+8. CREATE INSTANCED MESH MANAGER
+   New system to manage InstancedMesh creation and instance allocation:
+
+   class InstancedObjectManager {
+     constructor(scene) {
+       this.instancedMeshes = new Map(); // treeType → InstancedMesh
+       this.instanceData = new Map(); // objectId → instance data
+       this.availableIndices = new Map(); // treeType → Set<availableIndex>
+       this.maxInstancesPerType = 5000;
+     }
+
+     createInstance(objectId, treeType, position, rotation, scale, userData) {
+       // Get or create InstancedMesh for this type
+       // Allocate instance index
+       // Set matrix
+       // Store instance data
+       // Return instance index
+     }
+
+     removeInstance(objectId) {
+       // Get instance data
+       // Hide instance (set scale to 0)
+       // Mark index as available for reuse
+       // Keep in instanceData for physics/navigation
+     }
+
+     getInstanceData(objectId) {
+       return this.instanceData.get(objectId);
+     }
+   }
+
+================================================================================
+FILES TO MODIFY
+================================================================================
+
+Core Changes (Required):
+1. public/objects.js - Replace clone() with InstancedMesh allocation
+2. public/game.js - Update objectRegistry and proximity detection
+3. public/world/ChunkManager.js - Update removal and chunk tracking
+4. public/BillboardSystem.js - Change mapping from object to objectId
+5. public/terrain.js - Update chunk object tracking
+
+Supporting Changes:
+6. public/network/MessageRouter.js - Update object removal handling
+7. public/core/GameState.js - May need instance data structures
+8. public/systems/ResourceManager.js - Update harvest completion
+
+New Files:
+9. public/core/InstancedObjectManager.js - New manager class
+
+Testing/Verification:
+- Ensure physics colliders still work
+- Verify proximity detection accuracy
+- Test object removal (harvesting)
+- Validate billboard LOD transitions
+- Check multiplayer synchronization
+- Test chunk loading/unloading
+
+================================================================================
+IMPLEMENTATION OPTIONS
+================================================================================
+
+OPTION 1: FULL REFACTOR (Recommended for maximum performance)
+Scope: Convert all vegetation and props to InstancedMesh
+Effort: High (8-10 files, ~2-3 days work)
+Risk: High (many interconnected systems)
+Benefit: Maximum performance gain (22 FPS → 60+ FPS)
+Testing: Extensive testing required
+
+OPTION 2: LIMITED SCOPE TEST (Recommended for validation)
+Scope: Convert ONE object type (e.g., rocks or pine trees)
+Effort: Medium (proof of concept)
+Risk: Medium (isolated changes)
+Benefit: Validates approach, partial performance gain
+Testing: Easier to debug and verify
+
+OPTION 3: HYBRID APPROACH (Complex but potentially best)
+Scope: Keep current system, add InstancedMesh for static/unmodified objects
+Strategy:
+- Load chunks with InstancedMesh
+- When player interacts, convert instance to regular mesh
+- After interaction, can keep as regular mesh or reconvert
+Effort: High (maintain two systems)
+Risk: Medium (fallback to current system)
+Benefit: Best of both worlds
+Testing: Both systems need testing
+
+OPTION 4: ALTERNATIVE OPTIMIZATIONS (Lower risk)
+Instead of InstancedMesh, try:
+- Reduce object density (fewer trees/rocks per chunk)
+- Reduce render distance (load fewer chunks)
+- Merge geometries per chunk (batch into fewer meshes)
+- Optimize culling (more aggressive distance culling)
+Effort: Low-Medium
+Risk: Low
+Benefit: Moderate performance gain (may not reach 60 FPS)
+
+================================================================================
+RECOMMENDED IMPLEMENTATION PLAN
+================================================================================
+
+PHASE 1: VALIDATION (1 day)
+1. Create debug script to measure current draw calls
+   - Run: game.sceneManager.renderer.info.render.calls
+   - Confirm draw call count matches estimate (200-500+)
+2. Test Option 2 (convert rocks only) as proof of concept
+3. Measure performance improvement with rocks as InstancedMesh
+4. Validate physics, proximity, and removal still work
+
+PHASE 2: INFRASTRUCTURE (1-2 days)
+1. Create InstancedObjectManager class
+2. Create instance data storage structures
+3. Update objectRegistry to use instance data
+4. Update billboard mapping system
+
+PHASE 3: INTEGRATION (1-2 days)
+1. Convert vegetation types (trees) to InstancedMesh
+2. Update proximity detection for instance data
+3. Update removal system to hide instances
+4. Update culling system
+
+PHASE 4: TESTING (1 day)
+1. Test object interactions (harvesting, proximity)
+2. Test multiplayer synchronization
+3. Test chunk loading/unloading
+4. Verify billboard transitions
+5. Performance benchmarking
+
+TOTAL ESTIMATE: 4-6 days for full implementation
+
+================================================================================
+PERFORMANCE EXPECTATIONS
+================================================================================
+
+BEFORE (Current):
+- FPS: 22
+- Draw calls: 200-500+
+- GPU usage: 40%
+- CPU usage: 27% (single thread maxed)
+- Memory: High (geometry duplicated per object)
+
+AFTER (InstancedMesh):
+- FPS: 60+ (potentially capped by VSync)
+- Draw calls: 5-10 (one per object type)
+- GPU usage: 70-90% (properly utilized)
+- CPU usage: Lower main thread usage, GPU bottleneck
+- Memory: 10-20x reduction (shared geometry)
+
+INTERMEDIATE (Rocks only):
+- FPS: 30-35 (estimated)
+- Draw calls: 150-400 (partial reduction)
+- Validates approach with lower risk
+
+================================================================================
+QUESTIONS TO ANSWER BEFORE STARTING
+================================================================================
+
+1. Risk tolerance: Full refactor vs. incremental approach?
+2. Timeline: How urgent is the performance fix?
+3. Multiplayer impact: Will server-side changes be needed?
+4. Fallback plan: Can we revert if issues arise?
+5. Testing resources: Can you test thoroughly after each phase?
+6. Feature freeze: Can we pause other features during refactor?
+
+================================================================================
+ADDITIONAL NOTES
+================================================================================
+
+EXISTING INSTANCED SYSTEMS (Good foundation):
+- BillboardSystem.js already uses InstancedMesh for tree billboards
+- blobshadow.js already uses InstancedMesh for shadows
+- Both show the pattern works well in this codebase
+
+ALTERNATIVE: GPU INSTANCING WITH REGULAR MESHES
+- THREE.js supports instancing via InstancedBufferGeometry
+- Could potentially keep mesh objects but use GPU instancing
+- More complex, less common pattern
+
+RAYCASTING WITH InstancedMesh:
+- THREE.js Raycaster works with InstancedMesh
+- Returns instance index in intersection.instanceId
+- Need to map instanceId → objectId for interactions
+
+ANIMATION CONSIDERATIONS:
+- InstancedMesh doesn't support animated geometries well
+- Trees are static, so this is fine
+- Player/AI would stay as regular meshes
+
+================================================================================
+CONCLUSION
+================================================================================
+
+Converting to InstancedMesh would provide MASSIVE performance improvements
+(22 FPS → 60+ FPS) but requires significant architectural changes across
+multiple core systems.
+
+The refactor is feasible but high-risk. Recommend starting with limited
+scope test (rocks only) to validate approach before full implementation.
+
+Current architecture heavily depends on individual mesh object references
+for proximity detection, removal, billboards, and tracking. All of these
+systems would need updates to work with instance indices and separate
+data storage.
+
+Physics and navigation systems would continue to work with minimal changes
+since they use objectId strings rather than object references.
+
+Estimated effort: 4-6 days for full implementation with proper testing.
+
+================================================================================

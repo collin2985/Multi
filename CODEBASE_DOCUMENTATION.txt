@@ -1,0 +1,103 @@
+================================================================================
+                    HORSES GAME - CODEBASE DOCUMENTATION
+================================================================================
+Generated: 2025-11-16
+
+================================================================================
+PROJECT STRUCTURE
+================================================================================
+
+horses/
+│
+├── public/
+│   ├── core/
+│   │   ├── 116 - CameraController.js - Game code file
+│   │   ├── 169 - ChunkCoordinates.js - Game code file
+│   │   ├── 116 - GameLoop.js - Game code file
+│   │   ├── 219 - GameState.js - Central game state management
+│   │   ├── 211 - InputManager.js - Game code file
+│   │   ├── 590 - PhysicsManager.js - Game code file
+│   │   ├── 141 - QualityGenerator.js - Game code file
+│   │   └── 307 - SceneManager.js - Game code file
+│   ├── entity/
+│   │   ├── 271 - AIEnemyManager.js - Game code file
+│   │   ├── 316 - AvatarManager.js - Game code file
+│   │   └── 96 - DeathSystem.js - Game code file
+│   ├── items/
+│   ├── models/
+│   ├── navigation/
+│   │   ├── 231 - AStar.js - Game code file
+│   │   ├── 493 - NavigationManager.js - Game code file
+│   │   └── 1,476 - NavigationMap.js - Game code file
+│   ├── network/
+│   │   ├── 56 - EventEmitter.js - Game code file
+│   │   ├── 387 - GameStateManager.js - Game code file
+│   │   ├── 70 - MessageQueue.js - Game code file
+│   │   ├── 974 - MessageRouter.js - Client-side WebSocket message routing
+│   │   ├── 321 - NetworkManager.js - Game code file
+│   │   ├── 283 - P2PTransport.js - Game code file
+│   │   └── 211 - WebSocketTransport.js - Game code file
+│   ├── player/
+│   │   ├── 388 - PlayerActions.js - Game code file
+│   │   ├── 402 - PlayerCombat.js - Game code file
+│   │   ├── 323 - PlayerController.js - Player input, movement, and camera
+│   │   ├── 251 - PlayerHunger.js - Game code file
+│   │   └── 327 - PlayerInventory.js - Game code file
+│   ├── sounds/
+│   ├── structures/
+│   ├── systems/
+│   │   ├── 121 - AnimationSystem.js - Game code file
+│   │   ├── 371 - BuildingSystem.js - Game code file
+│   │   ├── 441 - CraftingSystem.js - Game code file
+│   │   ├── 267 - GrassGathering.js - Game code file
+│   │   └── 772 - ResourceManager.js - Game code file
+│   ├── terrain/
+│   ├── textures/
+│   │   └── skybox/
+│   ├── ui/
+│   │   ├── 932 - BuildMenu.js - Construction UI and building placement
+│   │   ├── 124 - GridUIHelpers.js - Game code file
+│   │   ├── 2,513 - InventoryUI.js - Inventory interface rendering
+│   │   └── 310 - RotationControls.js - Game code file
+│   ├── world/
+│   │   ├── 344 - ChunkManager.js - Game code file
+│   │   ├── 423 - SkyboxManager.js - Game code file
+│   │   └── 426 - StructureManager.js - Structure placement and validation
+│   ├── 635 - ai-enemy.js - AI enemy spawning utilities
+│   ├── 1,102 - audio.js - Audio system for sounds and music
+│   ├── 477 - BillboardSystem.js - Game code file
+│   ├── 375 - blobshadow.js - Circular blob shadows for objects
+│   ├── 1,335 - client.html - Main HTML entry point
+│   ├── 641 - config.js - Game constants and configuration parameters
+│   ├── 131 - debug-navigation.js - Game code file
+│   ├── 2,373 - game.js - Main client game loop and Three.js scene setup
+│   ├── 875 - objects.js - 3D model loading and object placement
+│   ├── 368 - PathfindingTestAI.js - Game code file
+│   ├── 152 - show-nav-grid.js - Game code file
+│   ├── 236 - SmokeEffect.js - Game code file
+│   ├── 2,650 - terrain.js - Procedural terrain generation with Perlin noise
+│   ├── 101 - test-navigation-blocking.js - Game code file
+│   ├── 458 - ui.js - Main UI controller for HUD and status displays
+│   ├── 155 - visualize-navigation-fixed.js - Game code file
+│   ├── 184 - visualize-navigation.js - Game code file
+│   └── 1,896 - WaterRenderer.js - Water rendering with waves and foam
+├── server/
+│   ├── 168 - ChunkCoordinates.js - Game code file
+│   ├── 196 - ChunkManager.js - Manages world chunks and persistence
+│   ├── 32 - config.js - Game code file
+│   ├── 221 - CookingSystem.js - Game code file
+│   ├── 1,492 - MessageHandlers.js - Processes client messages and game state
+│   └── 159 - MessageRouter.js - Game code file
+├── 212 - generate-docs.js - Documentation generation script
+├── 187 - server.js - Main server entry point, WebSocket connections
+├── 38 - start-game.bat - Windows launcher batch script
+└── 52 - test-server-chunk-coords.js - Game code file
+
+================================================================================
+SUMMARY
+================================================================================
+Total Files: 66
+Total Lines of Code: 32,690
+Server Files: 7 (2,455 lines)
+Client Files: 56 (29,933 lines)
+================================================================================

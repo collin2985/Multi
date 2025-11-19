@@ -1,0 +1,328 @@
+GRID-ALIGNED SPLATMAP SYSTEM FOR ROAD TEXTURE PAINTING
+========================================================
+
+This system allows players to place 1x1 road textures that blend smoothly with surrounding terrain
+while following terrain contours perfectly.
+
+SYSTEM OVERVIEW
+---------------
+- Aligned to World Grid: Each world unit (1x1) maps to specific pixel in splatmap
+- Automatic Soft Falloff: Road tiles automatically create soft edges
+- Terrain-Following: Roads painted into terrain shader follow contours perfectly
+- Fast & Performant: Simple texture lookups, no extra geometry
+
+IMPLEMENTATION DETAILS
+----------------------
+
+1. SPLATMAP RESOLUTION
+   - 64x64 texture per 50x50 chunk (slight oversampling for smooth edges)
+   - Each pixel covers ~0.78 world units
+   - Memory: 64x64 RGBA = 16KB per chunk
+
+2. PLACEMENT LOGIC
+------------------
+
+// When player places road at world position (x, z)
+function placeRoadTile(worldX, worldZ) {
+    // Find which chunk this belongs to
+    const chunkX = Math.floor(worldX / 50);
+    const chunkZ = Math.floor(worldZ / 50);
+
+    // Convert to splatmap UV (0-1 range within chunk)
+    const localX = (worldX % 50) / 50;
+    const localZ = (worldZ % 50) / 50;
+
+    // Convert to texture pixels
+    const pixelX = Math.floor(localX * 64);
+    const pixelZ = Math.floor(localZ * 64);
+
+    // Paint with automatic falloff
+    paintWithFalloff(chunk.splatmap, pixelX, pixelZ, {
+        radius: 2,        // 2-pixel radius for soft edges
+        strength: 1.0,    // Full strength at center
+        falloff: 0.5      // How quickly it fades
+    });
+}
+
+function paintWithFalloff(splatmap, cx, cz, options) {
+    const { radius, strength, falloff } = options;
+
+    for (let z = -radius; z <= radius; z++) {
+        for (let x = -radius; x <= radius; x++) {
+            const dist = Math.sqrt(x*x + z*z);
+            if (dist <= radius) {
+                const px = cx + x;
+                const pz = cz + z;
+
+                // Falloff calculation - smooth gradient
+                const factor = Math.max(0, 1 - (dist / radius) * falloff);
+                const value = strength * factor * factor; // Squared for smoother falloff
+
+                // Set pixel (clamped to texture bounds)
+                if (px >= 0 && px < 64 && pz >= 0 && pz < 64) {
+                    const idx = (pz * 64 + px) * 4;
+                    splatmap.data[idx] = Math.min(255, splatmap.data[idx] + value * 255);
+                }
+            }
+        }
+    }
+
+    // Update the texture
+    splatmap.needsUpdate = true;
+}
+
+3. SHADER MODIFICATIONS
+-----------------------
+
+VERTEX SHADER: (no changes needed)
+
+FRAGMENT SHADER ADDITIONS:
+uniform sampler2D uSplatMap;
+uniform sampler2D uRoadTexture;
+uniform float uBlendSharpness; // Control blend edge sharpness
+
+// In main():
+// Get splatmap weight for this position
+vec2 chunkUV = fract(vWorldPosition.xz / 50.0);
+float roadWeight = texture2D(uSplatMap, chunkUV).r;
+
+// Apply curve for sharper/softer blending
+roadWeight = pow(roadWeight, uBlendSharpness); // 0.5 = softer, 2.0 = sharper
+
+// Sample road texture with anti-tiling
+vec3 roadColor = sampleTextureMulti(uRoadTexture, vWorldPosition.xz, 1.0);
+
+// Blend with terrain
+vec3 terrainColor = /* existing terrain color calculation */;
+vec3 finalColor = mix(terrainColor, roadColor, roadWeight);
+
+// Optional: Add edge darkening for definition
+float edgeDarken = 1.0 - roadWeight * 0.1;
+finalColor *= edgeDarken;
+
+4. VISUAL FEATURES
+------------------
+
+A. BLEND PROFILES
+// Different blend profiles for different effects
+const blendProfiles = {
+    road: { radius: 2, falloff: 0.7 },    // Fairly sharp edges
+    path: { radius: 3, falloff: 0.3 },    // Very soft blend
+    plaza: { radius: 1, falloff: 1.0 }    // Hard edges
+};
+
+B. TEXTURE VARIATION TO HIDE TILING
+// In shader - add variation to road texture
+vec3 sampleRoadWithVariation(vec2 worldPos) {
+    vec3 road1 = texture2D(uRoadTexture, worldPos * 0.5).rgb;
+    vec3 road2 = texture2D(uRoadTexture, worldPos * 0.3 + vec2(0.5)).rgb;
+
+    // Use world position for variation
+    float blend = sin(worldPos.x * 0.5) * cos(worldPos.y * 0.5) * 0.5 + 0.5;
+    return mix(road1, road2, blend * 0.3);
+}
+
+5. PERFORMANCE OPTIMIZATIONS
+----------------------------
+
+- Dirty Rectangle Tracking: Only update GPU texture for modified regions
+- LOD System: Lower splatmap resolution for distant chunks
+- Texture Atlas: Combine multiple road types in one texture
+- Instanced Updates: Batch multiple tile placements before GPU update
+
+6. ADDITIONAL FEATURES
+----------------------
+
+AUTO-PATH GENERATION:
+// Connect two points with road tiles
+function createPath(start, end) {
+    const steps = Math.max(
+        Math.abs(end.x - start.x),
+        Math.abs(end.z - start.z)
+    );
+
+    for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const x = Math.round(lerp(start.x, end.x, t));
+        const z = Math.round(lerp(start.z, end.z, t));
+        placeRoadTile(x, z);
+    }
+}
+
+EROSION EFFECT (makes roads look worn):
+// Add noise to splatmap for organic edges
+function addErosion(splatmap, strength = 0.1) {
+    for (let i = 0; i < splatmap.data.length; i += 4) {
+        const noise = Math.random() * strength;
+        splatmap.data[i] *= (1 - noise);
+    }
+}
+
+7. CHUNK SPLATMAP MANAGEMENT
+-----------------------------
+
+class ChunkSplatmap {
+    constructor(chunkX, chunkZ) {
+        this.chunkX = chunkX;
+        this.chunkZ = chunkZ;
+        this.size = 64;
+
+        // Create canvas for CPU-side manipulation
+        this.canvas = document.createElement('canvas');
+        this.canvas.width = this.size;
+        this.canvas.height = this.size;
+        this.ctx = this.canvas.getContext('2d');
+
+        // Initialize to transparent (no roads)
+        this.ctx.clearRect(0, 0, this.size, this.size);
+
+        // Create THREE.js texture
+        this.texture = new THREE.CanvasTexture(this.canvas);
+        this.texture.minFilter = THREE.LinearFilter;
+        this.texture.magFilter = THREE.LinearFilter;
+        this.texture.wrapS = THREE.ClampToEdgeWrapping;
+        this.texture.wrapT = THREE.ClampToEdgeWrapping;
+    }
+
+    paintTile(worldX, worldZ, options = {}) {
+        // Convert world to local chunk coordinates
+        const localX = worldX - (this.chunkX * 50);
+        const localZ = worldZ - (this.chunkZ * 50);
+
+        // Convert to texture pixels
+        const px = (localX / 50) * this.size;
+        const pz = (localZ / 50) * this.size;
+
+        // Paint with gradient
+        const gradient = this.ctx.createRadialGradient(px, pz, 0, px, pz, options.radius || 2);
+        gradient.addColorStop(0, `rgba(255, 0, 0, ${options.strength || 1})`);
+        gradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
+
+        this.ctx.fillStyle = gradient;
+        this.ctx.fillRect(px - 3, pz - 3, 6, 6);
+
+        // Update texture
+        this.texture.needsUpdate = true;
+    }
+
+    save() {
+        // Return base64 for saving to disk/server
+        return this.canvas.toDataURL();
+    }
+
+    load(dataURL) {
+        // Load from saved data
+        const img = new Image();
+        img.onload = () => {
+            this.ctx.drawImage(img, 0, 0);
+            this.texture.needsUpdate = true;
+        };
+        img.src = dataURL;
+    }
+}
+
+8. INTEGRATION WITH TERRAIN.JS
+-------------------------------
+
+// In TerrainMaterialFactory.createTerrainMaterial():
+
+// Add to uniforms:
+uSplatMap: { value: null }, // Will be set per chunk
+uRoadTexture: { value: roadTexture },
+uBlendSharpness: { value: 1.5 },
+
+// In fragment shader, after existing terrain calculation:
+// Road overlay
+vec2 chunkUV = fract(vWorldPosition.xz / 50.0);
+float roadWeight = texture2D(uSplatMap, chunkUV).r;
+roadWeight = pow(roadWeight, uBlendSharpness);
+
+vec3 roadColor = sampleTextureMulti(uRoadTexture, vWorldPosition.xz, 1.0);
+vec3 finalColor = mix(terrainColor, roadColor, roadWeight);
+
+9. NETWORK SYNCHRONIZATION
+---------------------------
+
+// Message format for road placement
+{
+    type: 'placeRoad',
+    worldX: number,
+    worldZ: number,
+    roadType: 'stone' | 'dirt' | 'gravel',
+    playerId: string
+}
+
+// Chunk splatmap synchronization
+{
+    type: 'chunkSplatmapUpdate',
+    chunkX: number,
+    chunkZ: number,
+    splatmapData: base64String
+}
+
+10. MEMORY & PERFORMANCE METRICS
+---------------------------------
+
+Memory Usage:
+- Per chunk: 64x64 RGBA = 16KB
+- 100 loaded chunks = 1.6MB
+- Compressed (base64): ~4KB per chunk
+
+Performance:
+- Single tile placement: < 1ms
+- Texture update to GPU: ~2ms
+- Shader overhead: +1 texture sample per fragment
+- Network packet: ~100 bytes per placement
+
+Features Summary:
+✅ 1x1 tile placement precision
+✅ Automatic soft blending
+✅ Follows terrain contours perfectly
+✅ Very performant (just texture lookups)
+✅ Handles non-tileable textures well
+✅ Easy to extend with more texture types
+✅ Persistent (can save/load)
+✅ Network-ready
+
+IMPLEMENTATION STEPS
+--------------------
+
+Phase 1: Basic System
+1. Create ChunkSplatmap class
+2. Add splatmap texture to terrain chunks
+3. Modify terrain shader to blend road texture
+4. Add basic placement tool
+
+Phase 2: Visual Polish
+1. Implement texture variation for anti-tiling
+2. Add multiple blend profiles
+3. Create erosion/wear effects
+4. Add edge darkening/highlighting
+
+Phase 3: Full Integration
+1. Save/load splatmaps with chunks
+2. Network synchronization
+3. Multiple road types (texture atlas)
+4. Path-building tools
+
+HANDLING NON-TILEABLE TEXTURES
+-------------------------------
+
+Since the stone road texture doesn't tile well:
+
+1. Texture Bombing (already in terrain.js):
+   - Sample texture 3-4 times at different scales/rotations
+   - Blend with noise-based weights
+
+2. Detail Masking:
+   - Use a tileable noise texture to add variation
+   - Multiply/overlay on road texture
+
+3. Edge Breakup:
+   - Use noise in the splatmap painting
+   - Creates organic, non-repetitive edges
+
+4. Texture Atlas Variation:
+   - Include 3-4 variations of road in atlas
+   - Randomly select variation per tile
+   - Blend at edges for seamless transition
