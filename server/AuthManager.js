@@ -4,7 +4,7 @@
  * Supports dual-mode operation: local (no database) and production (PostgreSQL)
  */
 
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const db = require('./DatabaseManager');
 
