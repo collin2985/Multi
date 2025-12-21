@@ -1,0 +1,269 @@
+# Anti-Cheat Strategy: Police Peer Network
+
+## Overview
+
+Browser-based games cannot verify client integrity. Any JavaScript can be modified,
+DevTools gives full access to game state, and custom WebSocket clients can connect
+directly to the server. The only real defense is validation - either server-side
+or peer-based.
+
+This document describes a "Police Peer" system where players validate each other,
+reducing server load while maintaining cheat detection.
+
+---
+
+## Architecture
+
+### The Problem
+- Server is lightweight (tracks map changes, not player behavior)
+- Local P2P handles real-time sync (positions, animations)
+- Neither validates player actions for cheating
+- Server-side validation is expensive at scale
+
+### The Solution: Police Peer Network
+
+```
+                          SERVER
+                    (assigns police peers)
+                    (fallback when low pop)
+                             |
+         +-------------------+-------------------+
+         |                   |                   |
+     PLAYER A            PLAYER B            PLAYER C
+    (Chunk 0,0)         (Chunk 5,5)        (Chunk -10,3)
+         |                   |                   |
+         |<-- Local P2P ---->|                   |
+         |   (same chunk)    |                   |
+         |                                       |
+         |<----------- Police P2P ------------->|
+         |        (validation only)             |
+```
+
+Each player maintains two separate P2P networks:
+1. LOCAL P2P: Players in same/nearby chunks (gameplay sync)
+2. POLICE P2P: 5 random distant players (validation only)
+
+---
+
+## How It Works
+
+### 1. Server Assigns Police Peers
+When a player connects, server assigns 5 random players as their "police"
+- Police must be from different chunks (can't be local peers)
+- Police should be from different IP ranges (sybil protection)
+- Police assignment is server-controlled (player can't choose)
+
+### 2. Player Reports Actions to Police
+Player sends lightweight action reports to police channel:
+- Position updates (every 1 second)
+- Harvest start/complete events
+- Build events
+- Combat events
+
+This is NOT full game state - just enough for validation (~100-200 bytes/sec)
+
+### 3. Police Peers Validate
+Each police peer independently checks:
+- SPEED: Did player move faster than possible?
+- HARVEST TIMING: Did harvest complete in <8 seconds?
+- BUILD PROXIMITY: Was player near the build location?
+- COMBAT: Does bandit health match our simulation?
+
+### 4. Consensus Triggers Disconnect
+- Police peer detects violation -> reports to server
+- Server requires 3+ independent reports within 30 seconds
+- If threshold met -> player disconnected
+- Single reports logged but not acted on (prevents griefing)
+
+### 5. Server Fallback
+When online player count is too low for police network:
+- Server receives action reports directly
+- Server runs same validation checks
+- More expensive but necessary for low population
+
+---
+
+## What Police Peers Validate
+
+| Cheat Type      | Detection Method                    | Data Required        |
+|-----------------|-------------------------------------|----------------------|
+| Speed hack      | Position delta / time > max speed   | Position every 1s    |
+| Teleport        | Position delta > impossible         | Position every 1s    |
+| Fast harvest    | Complete event < 8s after start     | Start/complete events|
+| Remote build    | Distance to build position > 15     | Position + build pos |
+| Instant kill    | Bandit HP mismatch with simulation  | Kill claims          |
+
+---
+
+## Sybil Attack Prevention
+
+A "Sybil attack" is when a cheater runs multiple fake accounts to be their own
+police peers, then never reports their own violations.
+
+Defenses:
+1. SERVER ASSIGNS POLICE - cheater cannot choose their police peers
+2. IP RANGE DIVERSITY - police peers must be from different IP ranges
+3. ACCOUNT AGE - only accounts older than X hours can be police
+4. GAME PROGRESS - police must have reached certain milestones
+5. RANDOM ROTATION - police assignments change periodically
+
+---
+
+## Implementation Components
+
+### Client-Side
+
+```
+PoliceChannel.js (new file)
+- Manages police P2P connections (separate from local P2P)
+- Sends lightweight action reports
+- Receives and processes police assignments
+
+PoliceValidator.js (new file)
+- Receives reports from players we're policing
+- Tracks their position/action history
+- Detects violations and reports to server
+```
+
+### Server-Side
+
+```
+PoliceManager.js (new file)
+- Assigns police peers on player connect
+- Tracks police connection status
+- Receives violation reports
+- Enforces consensus threshold
+- Falls back to server validation when needed
+```
+
+### Message Types
+
+```
+Server -> Client:
+  police_assignment    - "you are now policing player X"
+  assigned_police      - "players X,Y,Z are your police"
+
+Client -> Police Peers:
+  police_report        - position/action data for validation
+
+Police -> Server:
+  police_violation     - "player X violated rule Y"
+```
+
+---
+
+## Criticisms & Concerns
+
+### 1. Complexity vs. Payoff (HIGH CONCERN)
+Building a second P2P network is significant engineering work. This system
+fights DETERMINED cheaters. Most cheaters are casual (DevTools users) who
+would be stopped by much simpler measures.
+
+QUESTION: Is the game popular enough to justify this complexity?
+RECOMMENDATION: Start with simple server-side rate limiting. Add police
+network only if cheating becomes a real problem at scale.
+
+### 2. False Positives (HIGH CONCERN)
+Network lag can make legitimate players look like cheaters:
+- Lag spike causes position "jump" that looks like teleport
+- Clock drift between peers causes timing mismatches
+- Packet loss causes missed "harvest start" event
+
+MITIGATION:
+- Generous tolerances (8s instead of 10s for harvest)
+- Require 3+ reports (one lagged peer isn't enough)
+- Track player "trust score" over time
+- Give benefit of doubt to established players
+
+### 3. Latency Window (MEDIUM CONCERN)
+Police peers are distant = 100-300ms validation latency.
+What happens during validation window?
+
+OPTIONS:
+a) Optimistic: Allow action, punish later if invalid
+   - Better UX, but cheater gets temporary benefit
+b) Pessimistic: Wait for validation before confirming
+   - Feels laggy, especially for distant police
+
+RECOMMENDATION: Optimistic approach. Cheaters get caught eventually,
+occasional success isn't game-breaking.
+
+### 4. Connection Overhead (MEDIUM CONCERN)
+5 extra WebRTC connections per player. Bad for:
+- Mobile players with limited connections
+- Players with poor internet
+
+MITIGATION:
+- Police connections are data-channel only (no video/audio)
+- Very low bandwidth (~200 bytes/sec per connection)
+- Could reduce to 3 police peers minimum
+
+### 5. Bootstrap / Low Population (LOW CONCERN)
+New game or off-peak hours = not enough players for police network.
+
+SOLUTION: Server fallback is already part of the design.
+When population < threshold, server validates directly.
+
+### 6. Griefing via False Reports (LOW CONCERN)
+Group of friends coordinate to report innocent player.
+
+MITIGATION:
+- Require 3+ reports from INDEPENDENT sources
+- Track reporter accuracy over time
+- Penalize reporters with high false-positive rate
+- Weight reports by reporter reputation
+
+---
+
+## Alternative: Simple Server Validation
+
+Before building the police network, consider simpler server-side checks:
+
+1. RATE LIMITING
+   - Max 1 harvest completion per 8 seconds per player
+   - Max 1 chunk change per 2 seconds (speed limit proxy)
+   - Max 1 structure placement per 5 seconds
+
+2. LOGGING
+   - Log suspicious patterns for manual review
+   - Don't auto-disconnect, just flag accounts
+
+3. CLIENT PEER REJECTION
+   - Clients locally reject obviously impossible peer data
+   - Cheater plays alone (shadowban effect)
+   - No server involvement needed
+
+This approach is:
+- Much simpler to implement
+- No new P2P connections
+- Handles casual cheaters
+- Can add police network later if needed
+
+---
+
+## Recommendation
+
+PHASE 1 (Now):
+- Add simple server-side rate limiting
+- Add client-side peer validation (reject impossible data)
+- Log suspicious patterns
+
+PHASE 2 (If cheating becomes problem):
+- Implement police peer network
+- Start with 3 police peers minimum
+- Generous tolerances to avoid false positives
+
+PHASE 3 (At scale):
+- Add reputation system
+- Rotate police assignments
+- Tune detection thresholds based on data
+
+---
+
+## Summary
+
+The police peer network is a clever distributed validation system that scales
+with player count and reduces server load. However, it's significant engineering
+work that may be premature for a game that doesn't yet have a cheating problem.
+
+Start simple. Add complexity when needed.

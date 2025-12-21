@@ -1,0 +1,567 @@
+/**
+ * SpawnScreen.js
+ * Post-auth spawn selection UI
+ * Shows home spawn, friend spawn, and random spawn options
+ */
+
+import { FACTION_ZONES } from '../spawn/SpawnSystem.js';
+import { ui } from '../ui.js';
+
+export class SpawnScreen {
+    constructor(gameState, networkManager, onSpawnSelected, onLogout = null) {
+        this.gameState = gameState;
+        this.networkManager = networkManager;
+        this.onSpawnSelected = onSpawnSelected;  // Callback: (spawnType, data) => void
+        this.onLogout = onLogout;  // Callback: () => void
+
+        this.overlay = null;
+        this.container = null;
+        this.isVisible = false;
+
+        // Friend spawn state
+        this.selectedFriend = null;
+        this.friendPositionPending = false;
+
+        this.createElements();
+        this.setupMessageHandlers();
+    }
+
+    setupMessageHandlers() {
+        // Listen for friends list updates to re-render spawn screen
+        if (this.networkManager) {
+            this.networkManager.on('friends_list_response', (data) => {
+                // Update gameState with friends list
+                this.gameState.setFriendsList(data.friends);
+                // Re-render if spawn screen is visible, but NOT if we're waiting for friend position
+                if (this.isVisible && !this.friendPositionPending) {
+                    this.render();
+                }
+            });
+        }
+    }
+
+    createElements() {
+        // Create overlay
+        this.overlay = document.createElement('div');
+        this.overlay.id = 'spawnScreenOverlay';
+        this.overlay.style.cssText = `
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 10000;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Segoe UI', Arial, sans-serif;
+        `;
+
+        // Create container
+        this.container = document.createElement('div');
+        this.container.style.cssText = `
+            background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%);
+            border: 2px solid #444;
+            border-radius: 12px;
+            padding: 30px;
+            min-width: 400px;
+            max-width: 500px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        `;
+
+        this.overlay.appendChild(this.container);
+        document.body.appendChild(this.overlay);
+    }
+
+    /**
+     * Show the spawn screen
+     * @param {object} options - { isRespawn: boolean }
+     */
+    show(options = {}) {
+        const isRespawn = options.isRespawn || false;
+
+        this.render(isRespawn);
+        this.overlay.style.display = 'flex';
+        this.isVisible = true;
+    }
+
+    hide() {
+        this.overlay.style.display = 'none';
+        this.isVisible = false;
+        this.selectedFriend = null;
+        this.friendPositionPending = false;
+    }
+
+    render(isRespawn = false) {
+        const hasHome = this.gameState.home !== null;
+        const factionName = this.gameState.getFactionName(this.gameState.factionId);
+        const onlineFriends = this.gameState.getOnlineFriendsInFaction();
+        const isGuest = this.gameState.isGuest;
+
+        // Guests just see "Respawn", logged-in users see welcome message
+        const title = isRespawn ? 'Respawn' : (isGuest ? 'Respawn' : `Welcome back, ${this.gameState.username || 'Player'}!`);
+
+        this.container.innerHTML = `
+            <h2 style="margin: 0 0 20px 0; color: #fff; text-align: center; font-size: 24px;">
+                ${title}
+            </h2>
+
+            <!-- Spawn Options -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                ${hasHome ? `
+                    <button id="spawnHomeBtn" style="${this.getButtonStyle('#4a7c4e')}">
+                        Spawn at Home
+                    </button>
+                ` : ''}
+
+                <button id="spawnRandomBtn" style="${this.getButtonStyle('#4a6a8c')}">
+                    Random Spawn
+                </button>
+            </div>
+
+            <!-- Friends Section (only for logged-in users) -->
+            ${!isGuest ? (onlineFriends.length > 0 ? `
+                <div style="margin-top: 24px; border-top: 1px solid #444; padding-top: 20px;">
+                    <h3 style="margin: 0 0 12px 0; color: #D4C4A8; font-size: 14px; text-transform: uppercase;">
+                        Friends in ${factionName} Territory
+                    </h3>
+                    <div id="friendsList" style="max-height: 200px; overflow-y: auto;">
+                        ${this.renderFriendsList(onlineFriends)}
+                    </div>
+                </div>
+            ` : `
+                <div style="margin-top: 24px; border-top: 1px solid #444; padding-top: 20px;">
+                    <p style="color: #C8B898; text-align: center; margin: 0;">
+                        No friends online in your territory
+                    </p>
+                </div>
+            `) : ''}
+
+            <!-- Unavailable Friends (only for logged-in users) -->
+            ${!isGuest ? this.renderUnavailableFriends() : ''}
+
+            <!-- Faction Info (only for logged-in users) -->
+            ${!isGuest ? `
+                <div style="margin-top: 24px; border-top: 1px solid #444; padding-top: 16px; text-align: center;">
+                    <span style="color: #D4C4A8; font-size: 13px;">
+                        Faction: <span style="color: #fff;">${factionName}</span>
+                    </span>
+                    ${this.gameState.canChangeFaction ? `
+                        <button id="changeFactionBtn" style="
+                            margin-left: 12px;
+                            background: transparent;
+                            border: 1px solid #777;
+                            color: #D4C4A8;
+                            padding: 4px 12px;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            font-size: 12px;
+                        ">Change</button>
+                    ` : `
+                        <span style="margin-left: 12px; color: #C8B898; font-size: 12px;">
+                            (Change available tomorrow)
+                        </span>
+                    `}
+                </div>
+
+                <!-- Logout -->
+                <div style="margin-top: 16px; text-align: center;">
+                    <button id="logoutBtn" style="
+                        background: transparent;
+                        border: none;
+                        color: #C8B898;
+                        padding: 8px 16px;
+                        cursor: pointer;
+                        font-size: 12px;
+                        text-decoration: underline;
+                    ">Log Out</button>
+                </div>
+            ` : ''}
+
+            <!-- Loading overlay for friend spawn -->
+            <div id="spawnLoading" style="
+                display: none;
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.8);
+                justify-content: center;
+                align-items: center;
+                border-radius: 12px;
+            ">
+                <div style="color: #fff; text-align: center;">
+                    <div style="font-size: 18px; margin-bottom: 8px;">Connecting to friend...</div>
+                    <div style="color: #C8B898; font-size: 14px;">Requesting position</div>
+                </div>
+            </div>
+        `;
+
+        // Make container relative for loading overlay
+        this.container.style.position = 'relative';
+
+        this.attachEventListeners();
+    }
+
+    renderFriendsList(friends) {
+        return friends.map(friend => `
+            <div style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 10px;
+                background: #333;
+                border-radius: 6px;
+                margin-bottom: 8px;
+            ">
+                <span style="color: #fff;">${friend.username}</span>
+                <button
+                    class="spawnOnFriendBtn"
+                    data-friend-id="${friend.id}"
+                    data-friend-username="${friend.username}"
+                    style="${this.getSmallButtonStyle('#5a8a5e')}"
+                >
+                    Spawn Near
+                </button>
+            </div>
+        `).join('');
+    }
+
+    renderUnavailableFriends() {
+        // Get friends who are online but in wrong faction or wrong zone
+        const allFriends = this.gameState.friendsList || [];
+        const unavailable = allFriends.filter(f => {
+            if (!f.online || f.status !== 'accepted') return false;
+            // Different faction
+            if (f.faction !== this.gameState.factionId) return true;
+            return false;
+        });
+
+        if (unavailable.length === 0) return '';
+
+        return `
+            <div style="margin-top: 16px;">
+                <h4 style="margin: 0 0 8px 0; color: #C8B898; font-size: 12px;">
+                    Friends Unavailable for Spawn:
+                </h4>
+                ${unavailable.map(f => {
+                    const reason = f.faction !== this.gameState.factionId
+                        ? `Different faction (${this.gameState.getFactionName(f.faction)})`
+                        : 'Outside your territory';
+                    return `
+                        <div style="color: #A89878; font-size: 12px; padding: 4px 0;">
+                            ${f.username} - ${reason}
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+    }
+
+    attachEventListeners() {
+        // Home spawn button
+        const homeBtn = document.getElementById('spawnHomeBtn');
+        if (homeBtn) {
+            homeBtn.addEventListener('click', () => this.handleHomeSpawn());
+        }
+
+        // Random spawn button
+        const randomBtn = document.getElementById('spawnRandomBtn');
+        if (randomBtn) {
+            randomBtn.addEventListener('click', () => this.handleRandomSpawn());
+        }
+
+        // Friend spawn buttons
+        const friendBtns = document.querySelectorAll('.spawnOnFriendBtn');
+        friendBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const friendId = e.target.dataset.friendId;
+                const friendUsername = e.target.dataset.friendUsername;
+                this.handleFriendSpawn(friendId, friendUsername);
+            });
+        });
+
+        // Change faction button
+        const changeFactionBtn = document.getElementById('changeFactionBtn');
+        if (changeFactionBtn) {
+            changeFactionBtn.addEventListener('click', () => this.handleChangeFaction());
+        }
+
+        // Logout button
+        const logoutBtn = document.getElementById('logoutBtn');
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', () => this.handleLogout());
+        }
+    }
+
+    handleLogout() {
+        if (this.onLogout) {
+            this.onLogout();
+        }
+    }
+
+    handleHomeSpawn() {
+        if (!this.gameState.home) {
+            console.error('No home set');
+            return;
+        }
+
+        this.onSpawnSelected('home', {
+            x: this.gameState.home.x,
+            z: this.gameState.home.z
+        });
+    }
+
+    handleRandomSpawn() {
+        this.onSpawnSelected('random', {
+            factionId: this.gameState.factionId
+        });
+    }
+
+    async handleFriendSpawn(friendId, friendUsername) {
+        // Show loading state
+        this.showLoading(true);
+        this.friendPositionPending = true;
+
+        try {
+            // Request friend's position via server
+            const result = await this.requestFriendPosition(friendId);
+
+            if (result.error) {
+                // Show specific error message based on reason
+                const errorMessages = {
+                    'not_spawned': `${friendUsername} hasn't spawned yet`,
+                    'timeout': `Could not reach ${friendUsername}`,
+                    'unavailable': `${friendUsername} is not available`,
+                    'dead': `${friendUsername} is dead`,
+                    'on_mobile_entity': `${friendUsername} is on a boat`,
+                    'on_dock': `${friendUsername} is on a dock`,
+                    'climbing': `${friendUsername} is in an outpost`
+                };
+
+                // More specific mobile entity message if type provided
+                let errorMsg = errorMessages[result.error];
+                if (result.error === 'on_mobile_entity' && result.entityType) {
+                    const entityNames = { 'boat': 'boat', 'horse': 'horse', 'cart': 'cart' };
+                    errorMsg = `${friendUsername} is on a ${entityNames[result.entityType] || 'vehicle'}`;
+                }
+
+                this.showError(errorMsg || `Could not connect to ${friendUsername}`);
+                // Delay resetting pending flag to prevent flicker from friends_list_response
+                setTimeout(() => {
+                    this.friendPositionPending = false;
+                }, 1000);
+                return;
+            }
+
+            // Check if friend is in our faction zone
+            const canSpawn = this.checkFriendZone(result.z);
+            if (!canSpawn.allowed) {
+                this.showError(canSpawn.reason);
+                // Delay resetting pending flag to prevent flicker
+                setTimeout(() => {
+                    this.friendPositionPending = false;
+                }, 1000);
+                return;
+            }
+
+            // Proceed with spawn - screen will hide, so pending flag doesn't matter
+            this.onSpawnSelected('friend', {
+                friendId,
+                friendX: result.x,
+                friendZ: result.z
+            });
+
+        } catch (error) {
+            console.error('Friend spawn error:', error);
+            this.showError('Failed to spawn near friend');
+            // Delay resetting pending flag to prevent flicker
+            setTimeout(() => {
+                this.friendPositionPending = false;
+            }, 1000);
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    /**
+     * Request friend's position via server
+     * @param {string} friendId - Friend's account ID
+     * @returns {Promise<{x: number, z: number, error?: string}|null>}
+     */
+    async requestFriendPosition(friendId) {
+        return new Promise((resolve) => {
+            const timeout = setTimeout(() => {
+                this.networkManager.off('friend_position_response', handler);
+                resolve({ error: 'timeout' });
+            }, 5000);  // 5 second timeout
+
+            // Listen for response from server
+            const handler = (data) => {
+                if (data.friendId === friendId) {
+                    clearTimeout(timeout);
+                    this.networkManager.off('friend_position_response', handler);
+                    if (data.success && data.position) {
+                        resolve({ x: data.position.x, z: data.position.z });
+                    } else {
+                        // Pass through reason AND entityType for specific messages
+                        resolve({
+                            error: data.reason || 'unavailable',
+                            entityType: data.entityType
+                        });
+                    }
+                }
+            };
+
+            this.networkManager.on('friend_position_response', handler);
+
+            // Request position via server
+            this.networkManager.sendMessage('get_friend_position', {
+                friendId: friendId
+            });
+        });
+    }
+
+    checkFriendZone(friendZ) {
+        return { allowed: true };
+    }
+
+    handleChangeFaction() {
+        // Show faction selection modal
+        this.showFactionSelector();
+    }
+
+    showFactionSelector() {
+        const factionOptions = [
+            { id: null, name: 'Neutral' },
+            { id: 3, name: 'Northmen' },
+            { id: 1, name: 'Southguard' }
+        ];
+
+        const currentFaction = this.gameState.factionId;
+
+        this.container.innerHTML = `
+            <h2 style="margin: 0 0 25px 0; color: #fff; text-align: center; font-size: 24px; font-weight: 500;">
+                Choose Your Faction
+            </h2>
+            <p style="color: rgba(255, 255, 255, 0.7); text-align: center; margin-bottom: 30px; font-size: 14px;">
+                You can change factions once per day.
+            </p>
+            <div style="display: flex; flex-direction: column;">
+                ${factionOptions.map(f => `
+                    <button
+                        class="factionOption"
+                        data-faction-id="${f.id}"
+                        style="
+                            width: 100%;
+                            padding: 12px 20px;
+                            border: 1px solid ${f.id === currentFaction ? 'rgba(255, 255, 255, 0.4)' : 'rgba(255, 255, 255, 0.2)'};
+                            border-radius: 6px;
+                            font-size: 16px;
+                            font-weight: 500;
+                            cursor: ${f.id === currentFaction ? 'default' : 'pointer'};
+                            transition: all 0.3s;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            margin-bottom: 12px;
+                            background: ${f.id === currentFaction ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.1)'};
+                            color: ${f.id === currentFaction ? 'rgba(255, 255, 255, 0.5)' : 'white'};
+                        "
+                        ${f.id === currentFaction ? 'disabled' : ''}
+                    >
+                        <span>${f.name}</span>
+                    </button>
+                `).join('')}
+            </div>
+            <div style="margin-top: 20px; text-align: center;">
+                <button id="cancelFactionBtn" style="
+                    background: none;
+                    border: none;
+                    color: #3498db;
+                    cursor: pointer;
+                    font-size: 14px;
+                    padding: 0;
+                    text-decoration: none;
+                    transition: color 0.3s;
+                ">← Back</button>
+            </div>
+        `;
+
+        // Attach listeners
+        document.querySelectorAll('.factionOption').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const factionId = e.currentTarget.dataset.factionId;
+                this.confirmFactionChange(factionId === 'null' ? null : parseInt(factionId));
+            });
+        });
+
+        document.getElementById('cancelFactionBtn').addEventListener('click', () => {
+            this.render();  // Go back to main spawn screen
+        });
+    }
+
+    async confirmFactionChange(newFactionId) {
+        const factionName = newFactionId === null ? 'Neutral' : FACTION_ZONES[newFactionId]?.name;
+
+        const confirmed = await ui.showConfirmDialog(
+            `Join ${factionName}?\n\n` +
+            'You can change factions once per day.\n' +
+            'Your home spawn will be cleared.'
+        );
+
+        if (confirmed) {
+            // Send faction change to server
+            this.networkManager.sendMessage('change_faction', {
+                factionId: newFactionId
+            });
+
+            // Update local state
+            this.gameState.setFaction(newFactionId);
+
+            // Re-render spawn screen
+            this.render();
+        }
+    }
+
+    showLoading(show) {
+        const loadingEl = document.getElementById('spawnLoading');
+        if (loadingEl) {
+            loadingEl.style.display = show ? 'flex' : 'none';
+        }
+    }
+
+    showError(message) {
+        this.showLoading(false);
+        ui.showToast(message, 'error');
+    }
+
+    getButtonStyle(bgColor) {
+        return `
+            width: 100%;
+            padding: 14px 20px;
+            background: ${bgColor};
+            border: none;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        `.replace(/\s+/g, ' ').trim();
+    }
+
+    getSmallButtonStyle(bgColor) {
+        return `
+            padding: 6px 14px;
+            background: ${bgColor};
+            border: none;
+            border-radius: 4px;
+            color: #fff;
+            font-size: 13px;
+            cursor: pointer;
+        `.replace(/\s+/g, ' ').trim();
+    }
+}
