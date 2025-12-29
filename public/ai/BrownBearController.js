@@ -1,0 +1,1547 @@
+/**
+ * BrownBearController.js
+ * Melee predator AI with authority-based multiplayer sync
+ *
+ * Architecture:
+ * - Spawns from bearden structures
+ * - Melee combat (not ranged like bandits)
+ * - One authority client simulates each bear
+ * - Authority broadcasts state; non-authority interpolates
+ */
+
+import { BaseAIController } from './BaseAIController.js';
+import { getAISpawnQueue } from './AISpawnQueue.js';
+
+// =============================================================================
+// CONFIGURATION
+// =============================================================================
+
+const AI_CONFIG = {
+    BROWN_BEAR: {
+        // Spawning
+        SPAWN_RANGE: 50,           // Distance from den to trigger spawn
+        SPAWN_HEIGHT_MIN: 0.5,     // Don't spawn/walk in water
+
+        // Movement
+        MOVE_SPEED: 2.5,           // Units per second (faster than bandits)
+        WANDER_SPEED: 0.5,         // Slow walk speed for wandering
+        FLEE_SPEED: 2.5,           // Units per second when fleeing
+        CHASE_RANGE: 30,           // Distance to detect/chase players
+        LEASH_RANGE: 50,           // Max distance from home den
+
+        // State durations
+        IDLE_DURATION: 10000,      // 10 seconds idle before wandering
+        WANDER_DURATION: 5000,     // 5 seconds of wandering
+        FLEE_DURATION: 20000,      // 20 seconds of fleeing from structures
+
+        // Structure detection
+        OBJECT_DETECT_RANGE: 10,   // Distance to detect structures
+        DETECTION_INTERVAL: 500,   // Ms between structure detection checks
+
+        // Natural objects (don't flee from these)
+        NATURAL_OBJECTS: [
+            'tree', 'pine', 'oak', 'fir', 'cypress', 'apple',
+            'rock', 'limestone', 'sandstone', 'clay', 'iron',
+            'vegetable', 'vegetables', 'grass', 'bush', 'flower',
+            'horse', 'cart', 'crate', 'mobilecrate', 'bearden'
+        ],
+
+        // Melee Combat
+        ATTACK_RANGE: 1,           // Distance to deal damage (instant kill)
+        ATTACK_COOLDOWN: 1000,     // Ms between attacks
+
+        // Sound
+        ROAR_INTERVAL: 3000,       // Play roar every 3 seconds while chasing/attacking
+
+        // Harvesting
+        HARVEST_RANGE: 3,          // Distance to harvest corpse
+
+        // Performance
+        IDLE_CHECK_INTERVAL: 30,   // Frames between target checks when idle
+        TARGET_VALIDATE_INTERVAL: 5,  // Frames between current target validation (chasing/attacking)
+        TARGET_RESCAN_INTERVAL: 60,   // Frames between full target re-scan (chasing/attacking)
+        CHUNK_SIZE: 50,
+    },
+};
+
+// =============================================================================
+// BROWN BEAR CONTROLLER CLASS
+// =============================================================================
+
+export class BrownBearController extends BaseAIController {
+    constructor() {
+        super({
+            entityType: 'brownbear',
+            entityIdField: 'denId',
+            messagePrefix: 'brownbear',
+            broadcastInterval: 1000,
+        });
+
+        // State (entities Map inherited from BaseAIController)
+        this._frameCount = 0;
+
+        // Callbacks (set via initialize)
+        this.getPlayersInChunks = null;
+        this.getPlayerPosition = null;
+        this.getBrownBearStructures = null;
+        this.getTerrainHeight = null;
+        this.getChunkObjects = null;
+        this.createVisual = null;
+        this.destroyVisual = null;
+        this.broadcastP2P = null;
+        this.onAttack = null;
+        this.isPlayerDead = null;
+
+        // AIRegistry for cross-controller queries (bandits, deer, etc.)
+        this.registry = null;
+
+        // Spawn optimization
+        this._hasDensInRange = false;
+        this._lastCheckedChunkX = null;
+        this._lastCheckedChunkZ = null;
+
+        // Performance caches
+        this._playerListCache = [];
+        this._playerObjectPool = [];
+        this._candidatesCache = [];
+        this._candidateObjectPool = [];
+
+        // Structure detection caches
+        this._naturalObjectsSet = new Set(AI_CONFIG.BROWN_BEAR.NATURAL_OBJECTS);
+        this._chunkObjectsCache = new Map();
+        this._chunkCacheFrame = 0;
+    }
+
+    // =========================================================================
+    // INITIALIZATION
+    // =========================================================================
+
+    initialize(config) {
+        this.clientId = config.clientId;
+        this.game = config.game;
+        this.getPlayersInChunks = config.getPlayersInChunks;
+        this.getPlayerPosition = config.getPlayerPosition;
+        this.getBrownBearStructures = config.getBrownBearStructures;
+        this.getTerrainHeight = config.getTerrainHeight;
+        this.getChunkObjects = config.getChunkObjects;
+        this.createVisual = config.createVisual;
+        this.destroyVisual = config.destroyVisual;
+        this.broadcastP2P = config.broadcastP2P;
+        this.isPlayerDead = config.isPlayerDead;
+        this.onAttack = config.onAttack;
+
+        // Registry is set automatically when registered with AIRegistry
+        // but can also be passed explicitly
+        if (config.registry) {
+            this.registry = config.registry;
+        }
+
+        // Register spawn callback with queue system
+        const spawnQueue = getAISpawnQueue();
+        spawnQueue.registerSpawnCallback('brownbear', (data) => {
+            this._executeSpawn(data);
+        });
+
+        return true;
+    }
+
+    /**
+     * Execute spawn from queue (called by AISpawnQueue)
+     * @param {object} data - Spawn data from queue { den }
+     */
+    _executeSpawn(data) {
+        const { den } = data;
+
+        // Race condition check - entity may have spawned while in queue
+        if (this.entities.has(den.id)) {
+            return;
+        }
+
+        this._spawnBrownBear(den);
+    }
+
+    // =========================================================================
+    // MAIN UPDATE LOOP
+    // =========================================================================
+
+    update(deltaTime, chunkX, chunkZ) {
+        this._frameCount++;
+        const now = Date.now();
+
+        // Build player list for targeting
+        const players = this._buildPlayerList(chunkX, chunkZ);
+
+        // Update all entities
+        for (const [denId, entity] of this.entities) {
+            this._updateEntity(entity, deltaTime, now, players);
+        }
+    }
+
+    // =========================================================================
+    // TARGET ACQUISITION
+    // =========================================================================
+
+    _buildPlayerList(chunkX, chunkZ) {
+        this._playerListCache.length = 0;
+        let poolIndex = 0;
+
+        const getPlayerObj = (id, x, z, y) => {
+            if (poolIndex >= this._playerObjectPool.length) {
+                this._playerObjectPool.push({ id: '', x: 0, z: 0, y: 0 });
+            }
+            const obj = this._playerObjectPool[poolIndex++];
+            obj.id = id;
+            obj.x = x;
+            obj.z = z;
+            obj.y = y;
+            return obj;
+        };
+
+        // Get players in 3x3 chunk area
+        const chunkKeys = this._get3x3ChunkKeys(chunkX, chunkZ);
+        const playerIds = this.getPlayersInChunks(chunkKeys);
+
+        for (const playerId of playerIds) {
+            if (this.isPlayerDead && this.isPlayerDead(playerId)) continue;
+            const pos = this.getPlayerPosition(playerId);
+            if (pos) {
+                this._playerListCache.push(getPlayerObj(playerId, pos.x, pos.z, pos.y || 0));
+            }
+        }
+
+        return this._playerListCache;
+    }
+
+    _get3x3ChunkKeys(chunkX, chunkZ) {
+        const keys = [];
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dz = -1; dz <= 1; dz++) {
+                keys.push(`${chunkX + dx},${chunkZ + dz}`);
+            }
+        }
+        return keys;
+    }
+
+    _findClosestPlayer(pos, range, players) {
+        const rangeSq = range * range;
+
+        // Clear cache
+        this._candidatesCache.length = 0;
+        let poolIndex = 0;
+
+        // Find all players in range
+        for (const player of players) {
+            const dx = player.x - pos.x;
+            const dz = player.z - pos.z;
+            const distSq = dx * dx + dz * dz;
+
+            if (distSq < rangeSq) {
+                if (poolIndex >= this._candidateObjectPool.length) {
+                    this._candidateObjectPool.push({ player: null, distSq: 0 });
+                }
+                const obj = this._candidateObjectPool[poolIndex++];
+                obj.player = player;
+                obj.distSq = distSq;
+                this._candidatesCache.push(obj);
+            }
+        }
+
+        if (this._candidatesCache.length === 0) return null;
+        if (this._candidatesCache.length === 1) return this._candidatesCache[0].player;
+
+        // Find minimum distance
+        let minDistSq = Infinity;
+        for (const c of this._candidatesCache) {
+            if (c.distSq < minDistSq) minDistSq = c.distSq;
+        }
+
+        // Tie-breaker: players within 2 units of closest are "equally close"
+        const thresholdSq = 4;
+
+        // Move near-equal candidates to front
+        let nearEqualCount = 0;
+        for (let i = 0; i < this._candidatesCache.length; i++) {
+            if (this._candidatesCache[i].distSq <= minDistSq + thresholdSq) {
+                if (i !== nearEqualCount) {
+                    const temp = this._candidatesCache[nearEqualCount];
+                    this._candidatesCache[nearEqualCount] = this._candidatesCache[i];
+                    this._candidatesCache[i] = temp;
+                }
+                nearEqualCount++;
+            }
+        }
+
+        // Find minimum player id among near-equal candidates (deterministic)
+        if (nearEqualCount > 1) {
+            let minIndex = 0;
+            let minId = this._candidatesCache[0].player.id;
+
+            for (let i = 1; i < nearEqualCount; i++) {
+                const id = this._candidatesCache[i].player.id;
+                if (id < minId) {
+                    minIndex = i;
+                    minId = id;
+                }
+            }
+
+            if (minIndex !== 0) {
+                const temp = this._candidatesCache[0];
+                this._candidatesCache[0] = this._candidatesCache[minIndex];
+                this._candidatesCache[minIndex] = temp;
+            }
+        }
+
+        return this._candidatesCache[0].player;
+    }
+
+    /**
+     * Find nearest chase target (players, bandits, deer) within range
+     * Bears are aggressive toward all living things
+     */
+    _findNearestTarget(entity, range, players) {
+        const rangeSq = range * range;
+
+        let nearestTarget = null;
+        let nearestDistSq = Infinity;
+
+        // Check players
+        for (const player of players) {
+            const dx = player.x - entity.position.x;
+            const dz = player.z - entity.position.z;
+            const distSq = dx * dx + dz * dz;
+
+            if (distSq < rangeSq && distSq < nearestDistSq) {
+                nearestDistSq = distSq;
+                nearestTarget = { id: player.id, x: player.x, z: player.z, type: 'player' };
+            }
+        }
+
+        // Check bandits (through registry)
+        const banditController = this.registry?.get('bandit');
+        if (banditController?.entities) {
+            for (const [tentId, bandit] of banditController.entities) {
+                if (!bandit.mesh || bandit.state === 'dead') continue;
+                const pos = bandit.mesh.position;
+
+                const dx = pos.x - entity.position.x;
+                const dz = pos.z - entity.position.z;
+                const distSq = dx * dx + dz * dz;
+
+                if (distSq < rangeSq && distSq < nearestDistSq) {
+                    nearestDistSq = distSq;
+                    nearestTarget = { id: tentId, x: pos.x, z: pos.z, type: 'bandit' };
+                }
+            }
+        }
+
+        // Check deer (through registry)
+        const deerController = this.registry?.get('deer');
+        if (deerController?.entities) {
+            for (const [chunkKey, deer] of deerController.entities) {
+                if (!deer.mesh || deer.isDead) continue;
+                const pos = deer.position;
+
+                const dx = pos.x - entity.position.x;
+                const dz = pos.z - entity.position.z;
+                const distSq = dx * dx + dz * dz;
+
+                if (distSq < rangeSq && distSq < nearestDistSq) {
+                    nearestDistSq = distSq;
+                    nearestTarget = { id: chunkKey, x: pos.x, z: pos.z, type: 'deer' };
+                }
+            }
+        }
+
+        return nearestTarget;
+    }
+
+    /**
+     * Validate current cached target still exists and is in range
+     * Cheap check - only looks up the specific target, doesn't iterate all entities
+     */
+    _validateCurrentTarget(entity, range, players) {
+        const cached = entity.cachedTarget;
+        if (!cached) return null;
+
+        const rangeSq = range * range;
+
+        // Get current position of the cached target
+        let currentPos = null;
+
+        switch (cached.type) {
+            case 'player': {
+                // Check if player still exists and get position
+                const player = players.find(p => p.id === cached.id);
+                if (player) {
+                    currentPos = { x: player.x, z: player.z };
+                }
+                break;
+            }
+            case 'bandit': {
+                const banditController = this.registry?.get('bandit');
+                const bandit = banditController?.entities?.get(cached.id);
+                if (bandit?.mesh && bandit.state !== 'dead') {
+                    currentPos = { x: bandit.mesh.position.x, z: bandit.mesh.position.z };
+                }
+                break;
+            }
+            case 'deer': {
+                const deerController = this.registry?.get('deer');
+                const deer = deerController?.entities?.get(cached.id);
+                if (deer?.mesh && !deer.isDead) {
+                    currentPos = { x: deer.position.x, z: deer.position.z };
+                }
+                break;
+            }
+        }
+
+        if (!currentPos) return null;
+
+        // Check if still in range
+        const dx = currentPos.x - entity.position.x;
+        const dz = currentPos.z - entity.position.z;
+        const distSq = dx * dx + dz * dz;
+
+        if (distSq < rangeSq) {
+            // Update cached position and return
+            return { id: cached.id, x: currentPos.x, z: currentPos.z, type: cached.type };
+        }
+
+        return null;
+    }
+
+    _moveToward(entity, targetX, targetZ, speed, deltaTime) {
+        const dx = targetX - entity.position.x;
+        const dz = targetZ - entity.position.z;
+        const distSq = dx * dx + dz * dz;
+
+        if (distSq < 0.01) return; // Already there
+
+        const dist = Math.sqrt(distSq);
+        const moveAmount = speed * (deltaTime / 1000);
+
+        if (moveAmount >= dist) {
+            entity.position.x = targetX;
+            entity.position.z = targetZ;
+        } else {
+            const dirX = dx / dist;
+            const dirZ = dz / dist;
+            entity.position.x += dirX * moveAmount;
+            entity.position.z += dirZ * moveAmount;
+            entity.rotation = Math.atan2(dirX, dirZ);
+        }
+
+        if (this.getTerrainHeight) {
+            entity.position.y = this.getTerrainHeight(entity.position.x, entity.position.z);
+        }
+    }
+
+    _moveInDirection(entity, dirX, dirZ, speed, deltaTime) {
+        const config = AI_CONFIG.BROWN_BEAR;
+        const moveAmount = speed * (deltaTime / 1000);
+
+        const newX = entity.position.x + dirX * moveAmount;
+        const newZ = entity.position.z + dirZ * moveAmount;
+        const newY = this.getTerrainHeight(newX, newZ);
+
+        // Stop at water
+        if (newY < config.SPAWN_HEIGHT_MIN) {
+            return false;
+        }
+
+        entity.position.x = newX;
+        entity.position.z = newZ;
+        entity.position.y = newY;
+        entity.rotation = Math.atan2(dirX, dirZ);
+
+        return true;
+    }
+
+    _startIdle(entity, now) {
+        entity.state = 'idle';
+        entity.stateStartTime = now;
+        entity.wanderDirection = null;
+    }
+
+    _startWandering(entity, now) {
+        entity.state = 'wandering';
+        entity.stateStartTime = now;
+
+        // Random direction
+        const angle = Math.random() * Math.PI * 2;
+        entity.wanderDirection = {
+            x: Math.sin(angle),
+            z: Math.cos(angle)
+        };
+    }
+
+    _startFleeing(entity, threat, now) {
+        entity.state = 'fleeing';
+        entity.stateStartTime = now;
+        entity.chaseTarget = null;
+
+        // Direction away from threat
+        const dx = entity.position.x - threat.x;
+        const dz = entity.position.z - threat.z;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+
+        if (dist < 0.001) {
+            // Threat exactly on top of bear, pick random direction
+            const angle = Math.random() * Math.PI * 2;
+            entity.fleeDirection = { x: Math.sin(angle), z: Math.cos(angle) };
+        } else {
+            entity.fleeDirection = { x: dx / dist, z: dz / dist };
+        }
+    }
+
+    _performAttack(entity, target, now) {
+        const config = AI_CONFIG.BROWN_BEAR;
+
+        // Check cooldown
+        if (now - entity.lastAttackTime < config.ATTACK_COOLDOWN) return;
+
+        entity.lastAttackTime = now;
+        entity.attackCount++;
+
+        // Face target
+        const dx = target.x - entity.position.x;
+        const dz = target.z - entity.position.z;
+        entity.rotation = Math.atan2(dx, dz);
+
+        // Play attack animation
+        if (entity.controller?.playAttackAnimation) {
+            entity.controller.playAttackAnimation();
+        }
+
+        const targetType = entity.chaseTargetType || 'player';
+        const bearPos = { x: entity.position.x, y: entity.position.y, z: entity.position.z };
+        const targetPos = { x: target.x, y: entity.position.y + 0.5, z: target.z };
+
+        // Spawn blood effect at target position
+        if (this.game?.effectManager) {
+            this.game.effectManager.spawnBloodEffect(targetPos, bearPos);
+        }
+
+        // Handle damage based on target type
+        switch (targetType) {
+            case 'player':
+                // Deal damage to player via callback
+                if (this.onAttack) {
+                    this.onAttack(entity.denId, target.id, bearPos);
+                }
+                break;
+
+            case 'deer':
+                // Kill deer via registry
+                this.registry?.killEntity('deer', target.id, entity.denId);
+                break;
+
+            case 'bandit':
+                // Kill bandit via registry
+                this.registry?.killEntity('bandit', target.id, entity.denId);
+                break;
+        }
+
+        // Broadcast attack
+        this.broadcastP2P({
+            type: 'brownbear_attack',
+            denId: entity.denId,
+            targetId: target.id,
+            targetType: targetType,
+            position: bearPos
+        });
+    }
+
+    _playRoar(entity) {
+        // Play bear sound through AudioManager as positional audio
+        if (this.game?.audioManager && entity.mesh) {
+            this.game.audioManager.playPositionalSound('brownbear', entity.mesh);
+        }
+    }
+
+    // =========================================================================
+    // STRUCTURE DETECTION
+    // =========================================================================
+
+    /**
+     * Get cached chunk objects for 3x3 area around entity
+     * Cache is invalidated each frame to avoid stale data
+     */
+    _getCachedChunkObjects(entity) {
+        if (!this.getChunkObjects) return [];
+
+        const config = AI_CONFIG.BROWN_BEAR;
+        const chunkX = Math.floor(entity.position.x / config.CHUNK_SIZE);
+        const chunkZ = Math.floor(entity.position.z / config.CHUNK_SIZE);
+        const cacheKey = `${chunkX},${chunkZ}`;
+
+        // Return cached if valid for this frame
+        if (this._chunkObjectsCache.has(cacheKey) && this._chunkCacheFrame === this._frameCount) {
+            return this._chunkObjectsCache.get(cacheKey);
+        }
+
+        // Build objects array for 3x3 chunk area
+        const allObjects = [];
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dz = -1; dz <= 1; dz++) {
+                const key = `${chunkX + dx},${chunkZ + dz}`;
+                const objs = this.getChunkObjects(key);
+                if (objs) {
+                    for (let i = 0; i < objs.length; i++) {
+                        allObjects.push(objs[i]);
+                    }
+                }
+            }
+        }
+
+        // Store in cache
+        this._chunkObjectsCache.set(cacheKey, allObjects);
+        this._chunkCacheFrame = this._frameCount;
+
+        return allObjects;
+    }
+
+    _isNaturalObject(objectType) {
+        if (!objectType) return false;
+        const lower = objectType.toLowerCase();
+        // O(1) check for exact match
+        if (this._naturalObjectsSet.has(lower)) return true;
+        // Check if type contains any natural object keyword
+        for (const nat of this._naturalObjectsSet) {
+            if (lower.includes(nat)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Find nearest structure (for fleeing) - excludes players and natural objects
+     */
+    _findNearestStructure(entity) {
+        const config = AI_CONFIG.BROWN_BEAR;
+        const objectRange = config.OBJECT_DETECT_RANGE;
+        const objectRangeSq = objectRange * objectRange;
+
+        let nearestStructure = null;
+        let nearestDistSq = Infinity;
+
+        const allObjects = this._getCachedChunkObjects(entity);
+
+        for (const obj of allObjects) {
+            // Skip natural objects
+            if (this._isNaturalObject(obj.type)) continue;
+
+            const pos = obj.position;
+            if (!pos) continue;
+
+            const objDx = pos.x - entity.position.x;
+            const objDz = pos.z - entity.position.z;
+            const distSq = objDx * objDx + objDz * objDz;
+
+            if (distSq < objectRangeSq && distSq < nearestDistSq) {
+                nearestDistSq = distSq;
+                nearestStructure = { x: pos.x, z: pos.z };
+            }
+        }
+
+        return nearestStructure;
+    }
+
+    /**
+     * Update detection cache (throttled for performance)
+     */
+    _updateDetectionCache(entity, now) {
+        const config = AI_CONFIG.BROWN_BEAR;
+        if (now - entity.lastDetectionCheck < config.DETECTION_INTERVAL) {
+            return; // Use cached results
+        }
+
+        entity.lastDetectionCheck = now;
+        entity.cachedStructure = this._findNearestStructure(entity);
+    }
+
+    // =========================================================================
+    // STATE MACHINE
+    // =========================================================================
+
+    _updateEntity(entity, deltaTime, now, players) {
+        const config = AI_CONFIG.BROWN_BEAR;
+
+        // Dead entities do nothing
+        if (entity.state === 'dead') {
+            return;
+        }
+
+        // Non-authority: interpolate only
+        if (entity.authorityId !== this.clientId) {
+            this._interpolateEntity(entity, deltaTime);
+            return;
+        }
+
+        // === AUTHORITY LOGIC ===
+
+        // Find target with throttling to reduce iteration overhead
+        // - Idle/wandering: full scan every IDLE_CHECK_INTERVAL frames
+        // - Chasing/attacking: validate current target every TARGET_VALIDATE_INTERVAL frames,
+        //   full re-scan every TARGET_RESCAN_INTERVAL frames
+        let target = entity.cachedTarget || null;
+
+        if (entity.state === 'idle' || entity.state === 'wandering') {
+            // Idle/wandering: periodic full scan
+            if (this._frameCount % config.IDLE_CHECK_INTERVAL === 0) {
+                target = this._findNearestTarget(entity, config.CHASE_RANGE, players);
+                entity.cachedTarget = target;
+            }
+        } else if (entity.state === 'chasing') {
+            // Chasing: validate current target frequently, full re-scan rarely
+            const hadTarget = entity.cachedTarget !== null;
+            if (this._frameCount % config.TARGET_RESCAN_INTERVAL === 0) {
+                // Full re-scan for possibly closer target
+                target = this._findNearestTarget(entity, config.CHASE_RANGE, players);
+                entity.cachedTarget = target;
+            } else if (this._frameCount % config.TARGET_VALIDATE_INTERVAL === 0) {
+                // Validate current target still exists and in range
+                target = this._validateCurrentTarget(entity, config.CHASE_RANGE, players);
+                entity.cachedTarget = target;
+            }
+            // Track when target is lost (for anti-oscillation)
+            if (hadTarget && !entity.cachedTarget) {
+                entity.targetLostTime = now;
+            }
+            // Otherwise use cached target
+        } else if (entity.state === 'returning') {
+            // Returning: only validate existing target, don't actively scan for new ones
+            // This prevents oscillation when rapidly acquiring/losing targets
+            if (entity.cachedTarget && this._frameCount % config.TARGET_VALIDATE_INTERVAL === 0) {
+                target = this._validateCurrentTarget(entity, config.CHASE_RANGE, players);
+                entity.cachedTarget = target;
+            } else {
+                target = entity.cachedTarget;
+            }
+        }
+        // Attacking state: don't re-scan, wait for animation to finish
+
+        entity.target = target ? target.id : null;
+        entity.chaseTargetType = target ? target.type : null;
+
+        // Distance to home
+        const dxHome = entity.position.x - entity.homePosition.x;
+        const dzHome = entity.position.z - entity.homePosition.z;
+        const distFromHomeSq = dxHome * dxHome + dzHome * dzHome;
+        const atHome = distFromHomeSq < 4; // Within 2 units
+        const isLeashed = distFromHomeSq > config.LEASH_RANGE * config.LEASH_RANGE;
+
+        // Time in current state
+        const elapsed = now - entity.stateStartTime;
+
+        // Update structure detection cache (throttled)
+        this._updateDetectionCache(entity, now);
+
+        // State transitions
+        switch (entity.state) {
+            case 'idle':
+                // Structure flee takes priority
+                if (entity.cachedStructure) {
+                    this._startFleeing(entity, entity.cachedStructure, now);
+                    break;
+                }
+                if (target) {
+                    entity.state = 'chasing';
+                    entity.stateStartTime = now;
+                    entity.wanderDirection = null;
+                    // Play roar only if cooldown has elapsed (don't reset timer on every state entry)
+                    if (now - entity.lastRoarTime >= config.ROAR_INTERVAL) {
+                        entity.lastRoarTime = now;
+                        this._playRoar(entity);
+                    }
+                } else if (elapsed >= config.IDLE_DURATION) {
+                    this._startWandering(entity, now);
+                }
+                break;
+
+            case 'wandering': {
+                // Structure flee takes priority
+                if (entity.cachedStructure) {
+                    this._startFleeing(entity, entity.cachedStructure, now);
+                    break;
+                }
+
+                // Can still detect and chase targets while wandering
+                if (target) {
+                    entity.state = 'chasing';
+                    entity.stateStartTime = now;
+                    entity.wanderDirection = null;
+                    // Play roar only if cooldown has elapsed
+                    if (now - entity.lastRoarTime >= config.ROAR_INTERVAL) {
+                        entity.lastRoarTime = now;
+                        this._playRoar(entity);
+                    }
+                    break;
+                }
+
+                if (elapsed >= config.WANDER_DURATION) {
+                    this._startIdle(entity, now);
+                } else if (entity.wanderDirection) {
+                    const moved = this._moveInDirection(
+                        entity,
+                        entity.wanderDirection.x,
+                        entity.wanderDirection.z,
+                        config.WANDER_SPEED,
+                        deltaTime
+                    );
+                    if (!moved) {
+                        // Hit water, stop and go idle
+                        this._startIdle(entity, now);
+                    }
+                }
+                break;
+            }
+
+            case 'chasing':
+                // Structure flee takes priority
+                if (entity.cachedStructure) {
+                    this._startFleeing(entity, entity.cachedStructure, now);
+                    break;
+                }
+
+                if (!target || isLeashed) {
+                    entity.state = 'returning';
+                    entity.stateStartTime = now;
+                    // FIX: Clear cached target to prevent oscillation from stale data
+                    entity.cachedTarget = null;
+                    entity.targetLostTime = now;
+                } else {
+                    // Check if close enough to attack
+                    const dx = target.x - entity.position.x;
+                    const dz = target.z - entity.position.z;
+                    const distSq = dx * dx + dz * dz;
+                    if (distSq < config.ATTACK_RANGE * config.ATTACK_RANGE) {
+                        // COMMIT: Deal damage immediately when entering attack
+                        this._performAttack(entity, target, now);
+                        entity.state = 'attacking';
+                        entity.stateStartTime = now;
+                    } else {
+                        // Move toward target
+                        this._moveToward(entity, target.x, target.z, config.MOVE_SPEED, deltaTime);
+
+                        // Play roar periodically while chasing
+                        if (now - entity.lastRoarTime >= config.ROAR_INTERVAL) {
+                            entity.lastRoarTime = now;
+                            this._playRoar(entity);
+                        }
+                    }
+                }
+                break;
+
+            case 'attacking':
+                // Wait for attack animation to complete before any state changes
+                if (entity.controller?.isAttackAnimationPlaying?.()) {
+                    break;
+                }
+
+                // Animation done - decide next action
+                // Structure flee takes priority
+                if (entity.cachedStructure) {
+                    this._startFleeing(entity, entity.cachedStructure, now);
+                    break;
+                }
+
+                // FIX: Re-validate target to get CURRENT position after attack animation
+                // (the cached target from earlier in the frame may have stale coordinates)
+                const freshTarget = this._validateCurrentTarget(entity, config.CHASE_RANGE, players);
+                entity.cachedTarget = freshTarget;
+
+                if (!freshTarget) {
+                    // Target gone (dead or out of range) - return home
+                    entity.state = 'returning';
+                    entity.stateStartTime = now;
+                } else {
+                    // Check distance to target using FRESH coordinates
+                    const dx = freshTarget.x - entity.position.x;
+                    const dz = freshTarget.z - entity.position.z;
+                    const distSq = dx * dx + dz * dz;
+                    if (distSq < config.ATTACK_RANGE * config.ATTACK_RANGE) {
+                        // Still in range - attack again
+                        this._performAttack(entity, freshTarget, now);
+                    } else {
+                        // Target moved away - chase
+                        entity.state = 'chasing';
+                        entity.stateStartTime = now;
+                    }
+                }
+                break;
+
+            case 'fleeing': {
+                // Flee from structures for FLEE_DURATION
+                if (elapsed >= config.FLEE_DURATION) {
+                    this._startIdle(entity, now);
+                } else if (entity.fleeDirection) {
+                    const moved = this._moveInDirection(
+                        entity,
+                        entity.fleeDirection.x,
+                        entity.fleeDirection.z,
+                        config.FLEE_SPEED,
+                        deltaTime
+                    );
+                    if (!moved) {
+                        // Hit water/obstacle, pick new random flee direction
+                        const angle = Math.random() * Math.PI * 2;
+                        entity.fleeDirection = {
+                            x: Math.sin(angle),
+                            z: Math.cos(angle)
+                        };
+                    }
+                }
+                break;
+            }
+
+            case 'returning': {
+                // FIX: Add 2-second delay before re-engaging targets to prevent oscillation
+                const TARGET_REACQUIRE_DELAY = 2000;
+                const canReacquire = now - (entity.targetLostTime || 0) >= TARGET_REACQUIRE_DELAY;
+
+                if (target && !isLeashed && canReacquire) {
+                    entity.state = 'chasing';
+                    entity.stateStartTime = now;
+                    // Play roar only if cooldown has elapsed
+                    if (now - entity.lastRoarTime >= config.ROAR_INTERVAL) {
+                        entity.lastRoarTime = now;
+                        this._playRoar(entity);
+                    }
+                } else if (atHome) {
+                    this._startIdle(entity, now);
+                } else {
+                    // Move toward home
+                    this._moveToward(entity, entity.homePosition.x, entity.homePosition.z, config.MOVE_SPEED, deltaTime);
+                }
+                break;
+            }
+        }
+
+        // Update visual controller state flags (animation handled by visual's update())
+        if (entity.controller) {
+            entity.controller.moving = entity.state === 'chasing' || entity.state === 'returning' || entity.state === 'wandering' || entity.state === 'fleeing';
+            entity.controller.isWandering = entity.state === 'wandering';
+            entity.controller.isAttacking = entity.state === 'attacking';
+            entity.controller.isFleeing = entity.state === 'fleeing';
+        }
+
+        // Update mesh position
+        if (entity.mesh) {
+            entity.mesh.position.set(entity.position.x, entity.position.y, entity.position.z);
+            entity.mesh.rotation.y = entity.rotation;
+        }
+    }
+
+    // =========================================================================
+    // INTERPOLATION (NON-AUTHORITY)
+    // =========================================================================
+
+    _interpolateEntity(entity, deltaTime) {
+        if (!entity.targetPosition) return;
+
+        const lerpSpeed = 5;
+        const t = Math.min(1, deltaTime * lerpSpeed / 1000);
+
+        entity.position.x += (entity.targetPosition.x - entity.position.x) * t;
+        entity.position.y += (entity.targetPosition.y - entity.position.y) * t;
+        entity.position.z += (entity.targetPosition.z - entity.position.z) * t;
+
+        if (entity.targetRotation !== null) {
+            let diff = entity.targetRotation - entity.rotation;
+            if (diff > Math.PI) diff -= Math.PI * 2;
+            if (diff < -Math.PI) diff += Math.PI * 2;
+            entity.rotation += diff * t;
+        }
+
+        if (entity.mesh) {
+            entity.mesh.position.set(entity.position.x, entity.position.y, entity.position.z);
+            entity.mesh.rotation.y = entity.rotation;
+        }
+
+        // Update visual controller state flags (animation handled by visual's update())
+        if (entity.controller) {
+            entity.controller.moving = entity.state === 'chasing' || entity.state === 'returning' || entity.state === 'wandering' || entity.state === 'fleeing';
+            entity.controller.isWandering = entity.state === 'wandering';
+            entity.controller.isAttacking = entity.state === 'attacking';
+            entity.controller.isFleeing = entity.state === 'fleeing';
+        }
+    }
+
+    // =========================================================================
+    // SPAWNING
+    // =========================================================================
+
+    /**
+     * Update den presence cache - call on chunk change
+     * Sets _hasDensInRange flag for spawn early-out optimization
+     */
+    updateDenPresence(chunkX, chunkZ, force = false) {
+        // Skip if same chunk (unless forced)
+        if (!force && chunkX === this._lastCheckedChunkX && chunkZ === this._lastCheckedChunkZ) {
+            return;
+        }
+
+        this._lastCheckedChunkX = chunkX;
+        this._lastCheckedChunkZ = chunkZ;
+        this._hasDensInRange = false;
+
+        // Check 3x3 grid for any dens
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dz = -1; dz <= 1; dz++) {
+                const key = `${chunkX + dx},${chunkZ + dz}`;
+                const dens = this.getBrownBearStructures(key);
+                if (dens && dens.length > 0) {
+                    this._hasDensInRange = true;
+                    return;
+                }
+            }
+        }
+    }
+
+    checkSpawnsOnTick(chunkX, chunkZ) {
+        // Always refresh den presence to catch newly registered structures
+        // (Fixes timing issue where structures are queued during initial load)
+        this.updateDenPresence(chunkX, chunkZ, true);  // Bug 3 Fix: force=true
+
+        // Early-out if no dens nearby
+        if (!this._hasDensInRange) return;
+
+        const config = AI_CONFIG.BROWN_BEAR;
+        const spawnRangeSq = config.SPAWN_RANGE * config.SPAWN_RANGE;
+
+        // Get my position
+        const myPos = this.getPlayerPosition(this.clientId);
+        if (!myPos) return;
+
+        // Get players once for all dens
+        const chunkKeys = this._get3x3ChunkKeys(chunkX, chunkZ);
+        const playerIds = this.getPlayersInChunks(chunkKeys);
+
+        // Pre-fetch all player positions
+        const playerPositions = new Map();
+        playerPositions.set(this.clientId, myPos);
+        if (playerIds) {
+            for (const playerId of playerIds) {
+                if (playerId !== this.clientId) {
+                    const pos = this.getPlayerPosition(playerId);
+                    if (pos) playerPositions.set(playerId, pos);
+                }
+            }
+        }
+
+        // Check 3x3 grid for dens
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dz = -1; dz <= 1; dz++) {
+                const key = `${chunkX + dx},${chunkZ + dz}`;
+                const dens = this.getBrownBearStructures(key);
+                if (!dens) continue;
+
+                for (const den of dens) {
+                    // Skip if already spawned
+                    if (this.entities.has(den.id)) continue;
+
+                    const denX = den.position.x;
+                    const denZ = den.position.z;
+
+                    // Check if I'm in range
+                    const dxMe = myPos.x - denX;
+                    const dzMe = myPos.z - denZ;
+                    if (dxMe * dxMe + dzMe * dzMe >= spawnRangeSq) continue;
+
+                    // Find authority: lowest clientId in range
+                    let authorityId = this.clientId;
+
+                    for (const [playerId, pos] of playerPositions) {
+                        if (playerId === this.clientId) continue;
+
+                        const dxP = pos.x - denX;
+                        const dzP = pos.z - denZ;
+                        if (dxP * dxP + dzP * dzP < spawnRangeSq) {
+                            if (playerId < authorityId) {
+                                authorityId = playerId;
+                            }
+                        }
+                    }
+
+                    if (authorityId === this.clientId) {
+                        // Queue spawn instead of immediate spawn to prevent frame stutter
+                        const spawnQueue = getAISpawnQueue();
+                        if (!spawnQueue.isQueued('brownbear', den.id)) {
+                            spawnQueue.queueSpawn('brownbear', { den }, den.id);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    _spawnBrownBear(den) {
+        const now = Date.now();
+
+        // Spawn position near den
+        const spawnRadius = 2.5;
+        const angle = Math.random() * Math.PI * 2;
+        const spawnX = den.position.x + Math.cos(angle) * spawnRadius;
+        const spawnZ = den.position.z + Math.sin(angle) * spawnRadius;
+        const spawnY = this.getTerrainHeight(spawnX, spawnZ);
+
+        const entity = {
+            // Identity
+            denId: den.id,
+            type: 'brownbear',
+            authorityId: this.clientId,
+            spawnedBy: this.clientId,
+            spawnTime: now,
+
+            // Position
+            homePosition: { x: den.position.x, z: den.position.z },
+            position: { x: spawnX, y: spawnY, z: spawnZ },
+            rotation: 0,
+
+            // State
+            state: 'idle',
+            stateStartTime: now,
+            target: null,
+            cachedTarget: null,  // Full target object for throttled validation
+            chaseTargetType: null,  // 'player', 'bandit', or 'deer'
+            wanderDirection: null,
+            fleeDirection: null,
+
+            // Structure detection cache
+            cachedStructure: null,
+            lastDetectionCheck: 0,
+
+            // Melee combat
+            attackCount: 0,
+            lastAttackTime: 0,
+
+            // Sound
+            lastRoarTime: 0,
+
+            // Target tracking (anti-oscillation)
+            targetLostTime: 0,
+
+            // Visual (controller is the BrownBearVisual instance)
+            mesh: null,
+            controller: null,
+
+            // Interpolation
+            targetPosition: null,
+            targetRotation: null,
+        };
+
+        // Create visual
+        const visual = this.createVisual(den.id, entity.position);
+        if (visual) {
+            entity.controller = visual;
+            entity.mesh = visual.mesh;
+        }
+
+        this.entities.set(den.id, entity);
+
+        // Register name tag
+        if (this.game?.nameTagManager && entity.mesh) {
+            this.game.nameTagManager.registerEntity(`brownbear_${den.id}`, 'Brown Bear', entity.mesh);
+        }
+
+        // Broadcast spawn
+        this.broadcastP2P({
+            type: 'brownbear_spawn',
+            denId: den.id,
+            spawnedBy: this.clientId,
+            spawnTime: now,
+            position: { x: entity.position.x, y: entity.position.y, z: entity.position.z },
+            homePosition: { x: den.position.x, z: den.position.z },
+        });
+    }
+
+    handleSpawnMessage(data) {
+        const { denId, spawnedBy, spawnTime, position, homePosition } = data;
+
+        // Skip if already exists
+        if (this.entities.has(denId)) {
+            const existing = this.entities.get(denId);
+
+            // Lowest clientId wins conflicts
+            if (spawnedBy < existing.spawnedBy) {
+                this._destroyEntity(denId);
+            } else {
+                return;
+            }
+        }
+
+        const entity = {
+            denId,
+            type: 'brownbear',
+            authorityId: spawnedBy,
+            spawnedBy,
+            spawnTime,
+
+            homePosition: { x: homePosition.x, z: homePosition.z },
+            position: { x: position.x, y: position.y, z: position.z },
+            rotation: 0,
+
+            state: 'idle',
+            stateStartTime: Date.now(),
+            target: null,
+            cachedTarget: null,
+            chaseTargetType: null,  // 'player', 'bandit', or 'deer'
+            wanderDirection: null,
+            fleeDirection: null,
+
+            cachedStructure: null,
+            lastDetectionCheck: 0,
+
+            attackCount: 0,
+            lastAttackTime: 0,
+
+            lastRoarTime: 0,
+
+            // Target tracking (anti-oscillation)
+            targetLostTime: 0,
+
+            mesh: null,
+            controller: null,
+
+            targetPosition: { x: position.x, y: position.y, z: position.z },
+            targetRotation: 0,
+        };
+
+        const visual = this.createVisual(denId, entity.position);
+        if (visual) {
+            entity.controller = visual;
+            entity.mesh = visual.mesh;
+        }
+
+        this.entities.set(denId, entity);
+
+        // Register name tag
+        if (this.game?.nameTagManager && entity.mesh) {
+            this.game.nameTagManager.registerEntity(`brownbear_${denId}`, 'Brown Bear', entity.mesh);
+        }
+    }
+
+    /**
+     * Destroy visual only but keep entity in map to prevent respawn
+     */
+    _destroyVisualOnly(denId) {
+        const entity = this.entities.get(denId);
+        if (!entity) return;
+
+        // Cleanup name tag
+        if (this.game?.nameTagManager) {
+            this.game.nameTagManager.unregisterEntity(`brownbear_${denId}`);
+        }
+
+        if (entity.mesh) {
+            this.destroyVisual(denId, entity.mesh);
+        }
+
+        // Clear references but keep entity in map to prevent respawn
+        entity.mesh = null;
+        entity.controller = null;
+    }
+
+    /**
+     * Destroy entity completely (removes from map, allows respawn)
+     * Used for chunk unload cleanup
+     */
+    _destroyEntity(denId) {
+        this._destroyVisualOnly(denId);
+        this.entities.delete(denId);
+    }
+
+    // =========================================================================
+    // P2P SYNC
+    // =========================================================================
+
+    /**
+     * Broadcast state for all entities we're authority over
+     * Called on server tick from MessageRouter
+     */
+    broadcastAuthorityState() {
+        for (const [denId, entity] of this.entities) {
+            if (entity.authorityId !== this.clientId) continue;
+            if (entity.state === 'dead') continue;
+            this._broadcastState(entity);
+        }
+    }
+
+    _broadcastState(entity) {
+        const msg = {
+            type: 'brownbear_state',
+            denId: entity.denId,
+            position: { x: entity.position.x, y: entity.position.y, z: entity.position.z },
+            rotation: entity.rotation,
+            state: entity.state,
+            target: entity.target,
+            chaseTargetType: entity.chaseTargetType,
+        };
+
+        // Include wander direction if wandering
+        if (entity.wanderDirection) {
+            msg.wanderDirection = { x: entity.wanderDirection.x, z: entity.wanderDirection.z };
+        }
+
+        // Include flee direction if fleeing
+        if (entity.fleeDirection) {
+            msg.fleeDirection = { x: entity.fleeDirection.x, z: entity.fleeDirection.z };
+        }
+
+        this.broadcastP2P(msg);
+    }
+
+    handleStateMessage(data) {
+        const { denId, position, rotation, state, target, chaseTargetType, wanderDirection, fleeDirection } = data;
+
+        const entity = this.entities.get(denId);
+        if (!entity) return;
+
+        // Ignore if we're authority
+        if (entity.authorityId === this.clientId) return;
+
+        // Store for interpolation
+        entity.targetPosition = { x: position.x, y: position.y, z: position.z };
+        entity.targetRotation = rotation;
+        entity.state = state;
+        entity.target = target;
+        entity.chaseTargetType = chaseTargetType || null;
+
+        // Store wander direction
+        if (wanderDirection) {
+            entity.wanderDirection = { x: wanderDirection.x, z: wanderDirection.z };
+        } else {
+            entity.wanderDirection = null;
+        }
+
+        // Store flee direction
+        if (fleeDirection) {
+            entity.fleeDirection = { x: fleeDirection.x, z: fleeDirection.z };
+        } else {
+            entity.fleeDirection = null;
+        }
+
+        // Update visual controller flags (animation handled by visual's update())
+        if (entity.controller) {
+            entity.controller.moving = state === 'chasing' || state === 'returning' || state === 'wandering' || state === 'fleeing';
+            entity.controller.isWandering = state === 'wandering';
+            entity.controller.isAttacking = state === 'attacking';
+            entity.controller.isFleeing = state === 'fleeing';
+        }
+    }
+
+    handleAttackMessage(data) {
+        const { denId, targetId, targetType, position } = data;
+
+        // Handle attack based on target type
+        switch (targetType) {
+            case 'player':
+                // Deal damage to player via callback
+                if (this.onAttack) {
+                    this.onAttack(denId, targetId, position);
+                }
+                break;
+
+            case 'deer':
+                // Kill deer via registry
+                this.registry?.killEntity('deer', targetId, denId);
+                break;
+
+            case 'bandit':
+                // Kill bandit via registry
+                this.registry?.killEntity('bandit', targetId, denId);
+                break;
+
+            default:
+                // Fallback for old messages without targetType
+                if (this.onAttack) {
+                    this.onAttack(denId, targetId, position);
+                }
+        }
+    }
+
+    // =========================================================================
+    // DEATH HANDLING
+    // =========================================================================
+
+    /**
+     * Kill an entity (called when player kills the bear)
+     */
+    killEntity(denId, killedBy) {
+        const entity = this.entities.get(denId);
+        if (!entity || entity.state === 'dead') return;
+
+        entity.state = 'dead';
+
+        // Update name tag to show (DEAD)
+        if (this.game?.nameTagManager) {
+            this.game.nameTagManager.setEntityDead(`brownbear_${denId}`);
+        }
+
+        // Trigger death animation on visual controller
+        if (entity.controller?.kill) {
+            entity.controller.kill();
+        }
+
+        // Broadcast death to peers
+        this.broadcastP2P({
+            type: 'brownbear_death',
+            denId: denId,
+            killedBy: killedBy
+        });
+
+        // Schedule visual cleanup after death animation (2 minutes for harvesting)
+        // Entity stays in map to prevent respawn until chunk unloads
+        setTimeout(() => {
+            this._destroyVisualOnly(denId);
+        }, 120000);
+    }
+
+    handleDeathMessage(data) {
+        const { denId } = data;
+
+        const entity = this.entities.get(denId);
+        if (!entity || entity.state === 'dead') return;
+
+        entity.state = 'dead';
+
+        // Update name tag to show (DEAD)
+        if (this.game?.nameTagManager) {
+            this.game.nameTagManager.setEntityDead(`brownbear_${denId}`);
+        }
+
+        // Trigger death animation on visual controller
+        if (entity.controller?.kill) {
+            entity.controller.kill();
+        }
+
+        // Schedule visual cleanup after death animation (2 minutes for harvesting)
+        // Entity stays in map to prevent respawn until chunk unloads
+        setTimeout(() => {
+            this._destroyVisualOnly(denId);
+        }, 120000);
+    }
+
+    // =========================================================================
+    // HARVESTING
+    // =========================================================================
+
+    /**
+     * Harvest a dead brownbear corpse
+     * @param {string} denId - The bear's den ID
+     * @returns {boolean} - True if harvested successfully
+     */
+    harvestBrownbear(denId) {
+        const entity = this.entities.get(denId);
+        if (!entity || entity.state !== 'dead' || entity.isHarvested) {
+            return false;
+        }
+
+        entity.isHarvested = true;
+
+        // Unregister name tag
+        if (this.game?.nameTagManager) {
+            this.game.nameTagManager.unregisterEntity(`brownbear_${denId}`);
+        }
+
+        // Destroy visual
+        if (entity.mesh && this.destroyVisual) {
+            this.destroyVisual(denId, entity.mesh);
+            entity.mesh = null;
+        }
+
+        // Remove from tracking
+        this.entities.delete(denId);
+
+        // Broadcast to peers
+        if (this.broadcastP2P) {
+            this.broadcastP2P({
+                type: 'brownbear_harvested',
+                denId: denId
+            });
+        }
+
+        return true;
+    }
+
+    /**
+     * Handle harvest message from peer
+     * @param {object} data - { denId }
+     */
+    handleHarvestMessage(data) {
+        const { denId } = data;
+        const entity = this.entities.get(denId);
+        if (!entity) return;
+
+        entity.isHarvested = true;
+
+        // Unregister name tag
+        if (this.game?.nameTagManager) {
+            this.game.nameTagManager.unregisterEntity(`brownbear_${denId}`);
+        }
+
+        // Destroy visual
+        if (entity.mesh && this.destroyVisual) {
+            this.destroyVisual(denId, entity.mesh);
+            entity.mesh = null;
+        }
+
+        // Remove from tracking
+        this.entities.delete(denId);
+    }
+
+    /**
+     * Get the nearest harvestable dead brownbear
+     * @param {number} playerX - Player X position
+     * @param {number} playerZ - Player Z position
+     * @returns {object|null} - { denId, position, distance, chunkX, chunkZ } or null
+     */
+    getNearestHarvestableBrownbear(playerX, playerZ) {
+        let nearest = null;
+        let nearestDistSq = AI_CONFIG.BROWN_BEAR.HARVEST_RANGE * AI_CONFIG.BROWN_BEAR.HARVEST_RANGE;
+
+        for (const [denId, entity] of this.entities) {
+            // Must be dead, not harvested, and have a mesh
+            if (entity.state !== 'dead' || entity.isHarvested || !entity.mesh) continue;
+
+            const dx = entity.position.x - playerX;
+            const dz = entity.position.z - playerZ;
+            const distSq = dx * dx + dz * dz;
+
+            if (distSq < nearestDistSq) {
+                nearestDistSq = distSq;
+                const chunkX = Math.floor(entity.position.x / AI_CONFIG.BROWN_BEAR.CHUNK_SIZE);
+                const chunkZ = Math.floor(entity.position.z / AI_CONFIG.BROWN_BEAR.CHUNK_SIZE);
+                nearest = {
+                    denId,
+                    position: { x: entity.position.x, y: entity.position.y, z: entity.position.z },
+                    distance: Math.sqrt(distSq),
+                    chunkX,
+                    chunkZ
+                };
+            }
+        }
+        return nearest;
+    }
+
+    // =========================================================================
+    // CHUNK LIFECYCLE
+    // =========================================================================
+
+    /**
+     * Called when a chunk is unloaded - clean up entities in that chunk
+     */
+    onChunkUnloaded(chunkKey) {
+        for (const [denId, entity] of this.entities) {
+            const entityChunkX = Math.floor(entity.homePosition.x / AI_CONFIG.BROWN_BEAR.CHUNK_SIZE);
+            const entityChunkZ = Math.floor(entity.homePosition.z / AI_CONFIG.BROWN_BEAR.CHUNK_SIZE);
+            const entityChunkKey = `${entityChunkX},${entityChunkZ}`;
+
+            if (entityChunkKey === chunkKey) {
+                this._destroyEntity(denId);
+            }
+        }
+    }
+}
+
+export { AI_CONFIG };

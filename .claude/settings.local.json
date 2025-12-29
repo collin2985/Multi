@@ -1,0 +1,53 @@
+{
+  "env": {
+    "DISABLE_AUTOUPDATER": "1"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(node test-chunk-coordinates.mjs:*)",
+      "Bash(done)",
+      "Bash(node:*)",
+      "Bash(cd:*)",
+      "Bash(public/audio.js.tmp)",
+      "WebFetch(domain:rapier.rs)",
+      "WebSearch",
+      "Bash(find:*)",
+      "Bash(git log:*)",
+      "Bash(cat:*)",
+      "Bash(dir:*)",
+      "Bash(findstr:*)",
+      "Bash(nul)",
+      "Bash(npm install:*)",
+      "Bash(netstat:*)",
+      "Bash(rm:*)",
+      "Bash(tr:*)",
+      "Bash(if exist \"C:\\Users\\colli\\Desktop\\test horses\\horses\\test-ownership-fix.md\" echo EXISTS)",
+      "Bash(copy \"C:\\Users\\colli\\Desktop\\water test\\foam.png\" \"C:\\Users\\colli\\Desktop\\test horses\\horses\\public\\terrain\\foam.png\")",
+      "Bash(powershell -Command \"(Get-Item ''C:\\Users\\colli\\Desktop\\test horses\\horses\\public\\models\\apple.glb'').Length / 1KB\")",
+      "Bash(powershell -Command \"Get-ChildItem ''C:\\Users\\colli\\Desktop\\test horses\\horses\\public\\models\\lod'' | Select-Object Name, @{N=''SizeKB'';E={[math]::Round($_Length/1KB,1)}}\")",
+      "Bash(npx @gltf-transform/cli inspect:*)",
+      "Bash(npx @gltf-transform/cli resize:*)",
+      "Bash(powershell:*)",
+      "Bash(npx @gltf-transform/cli:*)",
+      "Bash(mv:*)",
+      "Bash(wc:*)",
+      "Bash(grep:*)",
+      "Bash(node -c:*)",
+      "Bash(npx gltf-transform:*)",
+      "Bash(node optimize-models.js:*)",
+      "Bash(xargs:*)",
+      "Bash(powershell -Command \"Get-Content ''C:\\Users\\colli\\Desktop\\test horses\\horses\\public\\objects.js'' | Select-Object -Last 30\")",
+      "Bash(powershell -Command \"Get-Content ''C:\\Users\\colli\\Desktop\\test horses\\horses\\public\\ui.js'' | Select-Object -Last 50\")",
+      "Bash(sort:*)",
+      "Bash(for f in *.js *.html)",
+      "Bash(do [ -f \"$f\" ])",
+      "Bash(for:*)",
+      "mcp__sequential-thinking__sequentialthinking",
+      "Bash(copy:*)"
+    ],
+    "deny": [],
+    "ask": []
+  },
+    "alwaysThinkingEnabled": true 
+}
