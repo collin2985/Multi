@@ -1,0 +1,886 @@
+/**
+ * AvatarManager.js
+ * Manages peer player avatars - creation, movement, animations, death
+ */
+
+import * as THREE from 'three';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import { CONFIG } from '../config.js';
+import { MuzzleFlash } from '../effects/MuzzleFlash.js';
+import { ChunkCoordinates } from '../core/ChunkCoordinates.js';
+
+export class AvatarManager {
+    constructor(scene, networkManager, structureManager, terrainGenerator, modelManager, navigationManager = null, playerScale = 1) {
+        this.scene = scene;
+        this.networkManager = networkManager;
+        this.structureManager = structureManager;
+        this.terrainGenerator = terrainGenerator;
+        this.modelManager = modelManager;
+        this.navigationManager = navigationManager;
+        this.camera = null; // Set via setCamera() for LOD calculations
+
+        this.playerScale = playerScale; // Use the same scale as main player
+        this.playerSpeed = 0.0005; // Base speed (matches PlayerController)
+        this.stopThreshold = 0.01;
+
+        // Frame counter for periodic updates (height, LOD, combat stance)
+        this.frameCounter = 0;
+
+        // Combat stance cache (updated every N frames to reduce AI enemy distance checks)
+        this.combatStanceCache = new Map(); // peerId -> { inCombat: boolean, lastUpdate: number }
+        this.COMBAT_CHECK_INTERVAL = 10; // Check combat stance every 10 frames (6 times per second at 60 FPS)
+
+        // PERFORMANCE: Distance thresholds for LOD (squared to avoid sqrt)
+        this.LOD_DISTANCE_FAR_SQ = 2500;    // > 50 units: minimal updates
+        this.LOD_DISTANCE_MED_SQ = 625;     // > 25 units: reduced updates
+        this.LOD_PHYSICS_DISTANCE_SQ = 400; // > 20 units: skip physics
+
+        // Terrain height update interval (using getHeightFast instead of raycasting)
+        this.HEIGHT_UPDATE_INTERVAL = 4; // Update Y position every 4 frames (was 10)
+
+        // Effect manager reference (set via setEffectManager)
+        this.effectManager = null;
+
+        // PERFORMANCE: Reusable vectors to avoid GC pressure (pooled objects)
+        this._tempNextPosition = new THREE.Vector3();
+        this._tempDirection = new THREE.Vector3();
+
+        // PERFORMANCE: Pre-computed squared thresholds
+        this.stopThresholdSq = this.stopThreshold * this.stopThreshold;
+    }
+
+    /**
+     * Set camera reference for LOD calculations
+     * @param {THREE.Camera} camera
+     */
+    setCamera(camera) {
+        this.camera = camera;
+    }
+
+    /**
+     * Set effect manager reference for gunsmoke effects
+     * @param {EffectManager} effectManager
+     */
+    setEffectManager(effectManager) {
+        this.effectManager = effectManager;
+    }
+
+    /**
+     * Create a new avatar for a peer player
+     * @returns {THREE.Object3D|null}
+     */
+    createAvatar() {
+        const manGLTF = this.modelManager.getGLTF('man');
+        if (!manGLTF) {
+            console.error('Man model not loaded for avatar');
+            return null;
+        }
+
+        // Use SkeletonUtils.clone() to preserve skeleton binding for animations
+        const avatarMesh = SkeletonUtils.clone(manGLTF.scene);
+        avatarMesh.scale.set(this.playerScale, this.playerScale, this.playerScale);
+
+        // Setup materials (same as main player)
+        avatarMesh.traverse((child) => {
+            if (child.isMesh || child.isSkinnedMesh) {
+                child.visible = true;
+                child.frustumCulled = true;  // PERFORMANCE: Enable frustum culling to skip off-screen rendering
+                child.renderOrder = 1;
+
+                if (child.material) {
+                    child.material.depthWrite = true;
+                    child.material.depthTest = true;
+                    if (child.material.type === 'MeshStandardMaterial') {
+                        child.material.needsUpdate = true;
+                    }
+                }
+            }
+        });
+
+        // Create animation mixer for this avatar
+        if (manGLTF.animations && manGLTF.animations.length > 0) {
+            const mixer = new THREE.AnimationMixer(avatarMesh);
+
+            // Load walk animation
+            const walkAnimation = manGLTF.animations.find(anim =>
+                anim.name.toLowerCase().includes('walk')
+            );
+
+            // Load combat animation
+            const combatAnimation = manGLTF.animations.find(anim =>
+                anim.name.toLowerCase().includes('combat')
+            );
+
+            // Load pickaxe/chopping animation (used for all harvest actions)
+            const choppingAnimation = manGLTF.animations.find(anim => {
+                const name = anim.name.toLowerCase();
+                // Check for exact matches first
+                if (name === 'pickaxe' || name === 'pickaxe.001' || name === 'armature|pickaxe') {
+                    return true;
+                }
+                // Then check for partial matches
+                return name.includes('pickaxe') || name.includes('pick') ||
+                       name.includes('axe') || name.includes('action');
+            });
+
+            // Load idle animation
+            const idleAnimation = manGLTF.animations.find(anim =>
+                anim.name.toLowerCase().includes('idle')
+            );
+
+            // Store mixer in userData
+            avatarMesh.userData.mixer = mixer;
+
+            if (walkAnimation) {
+                const walkAction = mixer.clipAction(walkAnimation);
+                avatarMesh.userData.walkAction = walkAction;
+            }
+
+            if (idleAnimation) {
+                const idleAction = mixer.clipAction(idleAnimation);
+                idleAction.loop = THREE.LoopRepeat;
+                idleAction.play(); // Start in idle
+                avatarMesh.userData.idleAction = idleAction;
+            } else if (walkAnimation) {
+                // Fallback: start walk if no idle
+                avatarMesh.userData.walkAction.play();
+            }
+
+            if (combatAnimation) {
+                const combatAction = mixer.clipAction(combatAnimation);
+                avatarMesh.userData.combatAction = combatAction;
+            }
+
+            if (choppingAnimation) {
+                const choppingAction = mixer.clipAction(choppingAnimation);
+                choppingAction.loop = THREE.LoopRepeat;
+                avatarMesh.userData.choppingAction = choppingAction;
+            }
+
+            // Load shoot animation
+            const shootAnimation = manGLTF.animations.find(anim => {
+                const name = anim.name.toLowerCase();
+                return name.includes('shoot') || name.includes('fire') ||
+                       name.includes('rifle') || name.includes('gun') ||
+                       name.includes('aim');
+            });
+
+            if (shootAnimation) {
+                const shootAction = mixer.clipAction(shootAnimation);
+                shootAction.loop = THREE.LoopOnce;
+                shootAction.clampWhenFinished = true;
+                avatarMesh.userData.shootAction = shootAction;
+            }
+        }
+
+        // Attach rifle to peer's hand
+        const rifleModel = this.modelManager.getModel('rifle');
+        if (rifleModel) {
+            const rifleMesh = rifleModel.clone();
+
+            // Find Bone014 (hand bone) in the avatar skeleton
+            let handBone = null;
+            avatarMesh.traverse((child) => {
+                if (child.isBone && child.name === 'Bone014') {
+                    handBone = child;
+                }
+            });
+
+            if (handBone) {
+                // Set rifle position, scale, and rotation (finalized values)
+                rifleMesh.position.set(0.33, 1.8, 0.33);
+                rifleMesh.scale.set(21.4, 23.9, 14);
+                rifleMesh.rotation.set(-1.26, -0.02, 0.82);
+
+                // Set rifle material to black
+                rifleMesh.traverse((child) => {
+                    if (child.isMesh) {
+                        child.material = new THREE.MeshStandardMaterial({
+                            color: 0x000000,
+                            metalness: 0.7,
+                            roughness: 0.3
+                        });
+                    }
+                });
+
+                // Attach rifle to hand bone
+                handBone.add(rifleMesh);
+                rifleMesh.visible = false; // Start hidden - shown only when peer has rifle and is in combat
+                avatarMesh.userData.rifle = rifleMesh;
+
+                // Create muzzle flash for peer's rifle
+                const muzzleFlash = new MuzzleFlash();
+                muzzleFlash.attachTo(rifleMesh);
+                avatarMesh.userData.muzzleFlash = muzzleFlash;
+            } else {
+                console.warn('[PEER] Could not find Bone014 for rifle attachment');
+            }
+        }
+
+        // Store last position for rotation calculation
+        avatarMesh.userData.lastPosition = new THREE.Vector3();
+        avatarMesh.userData.isMoving = false;
+
+        // Note: Character controller will be created when avatar is added to scene with objectId
+
+        return avatarMesh;
+    }
+
+    /**
+     * Create physics character controller for peer avatar
+     * @param {THREE.Object3D} avatar - Avatar mesh
+     * @param {string} peerId - Peer client ID
+     */
+    createAvatarPhysics(avatar, peerId) {
+        const game = this.networkManager.game;
+        if (game && game.physicsManager && game.physicsManager.initialized) {
+            const avatarObjectId = `peer_${peerId}`;
+            avatar.userData.objectId = avatarObjectId;
+
+            // Create character controller (radius: 0.3, height: 1.0)
+            game.physicsManager.createCharacterController(
+                avatarObjectId,
+                0.3,  // Capsule radius
+                1.0,  // Capsule height
+                avatar.position
+            );
+        }
+    }
+
+    /**
+     * Update all avatar movements and animations
+     * @param {number} deltaTime
+     */
+    updateAvatarMovement(deltaTime) {
+        this.frameCounter++;
+        const shouldUpdateHeight = (this.frameCounter % this.HEIGHT_UPDATE_INTERVAL === 0);
+
+        // Get camera position once for all LOD calculations
+        const cameraPos = this.camera?.position;
+
+        this.networkManager.avatars.forEach((avatar, peerId) => {
+            const peer = this.networkManager.peerGameData.get(peerId);
+
+            // Skip position updates for dead avatars (prevents position updates from interfering with death animation)
+            if (avatar.userData.isDead) {
+                return;
+            }
+
+            // PERFORMANCE: Calculate distance to camera for LOD (squared to avoid sqrt)
+            let distToCameraSq = 0;
+            if (cameraPos) {
+                const dx = avatar.position.x - cameraPos.x;
+                const dz = avatar.position.z - cameraPos.z;
+                distToCameraSq = dx * dx + dz * dz;
+            }
+
+            // Store LOD level in avatar for animation system to use
+            avatar.userData.lodLevel = distToCameraSq > this.LOD_DISTANCE_FAR_SQ ? 2 :
+                                       distToCameraSq > this.LOD_DISTANCE_MED_SQ ? 1 : 0;
+
+            // TARGET CHASING SYSTEM (skip if peer is piloting - they follow their vehicle)
+            const target = peer?.targetPosition;
+            const lastUpdateTime = peer?.lastUpdateTime;
+            const isPilotingVehicle = peer?.isPiloting && peer?.mobileEntity;
+
+            if (target && !isPilotingVehicle) {
+                // Store last position for rotation calculation
+                avatar.userData.lastPosition.copy(avatar.position);
+
+                const now = Date.now();
+                const timeSinceUpdate = now - (lastUpdateTime || now);
+                const expectedArrival = CONFIG.PEER_AVATAR.UPDATE_INTERVAL;
+                const timeRemaining = Math.max(expectedArrival - timeSinceUpdate, 16); // Min 16ms
+
+                // Calculate distance (XZ only, Y handled separately)
+                const dx = target.x - avatar.position.x;
+                const dz = target.z - avatar.position.z;
+                const distance = Math.sqrt(dx * dx + dz * dz);
+
+                // Use peer's synced movement state when recent, otherwise derive from distance
+                const isRecentUpdate = (now - (lastUpdateTime || 0)) < 1000;
+                const peerActuallyMoving = peer?.peerIsMoving ?? false;
+
+                if (distance > CONFIG.PEER_AVATAR.SNAP_THRESHOLD) {
+                    // Teleport case (spawn, large desync)
+                    avatar.position.x = target.x;
+                    avatar.position.z = target.z;
+                    avatar.rotation.y = peer.targetRotation || avatar.rotation.y;
+                    avatar.userData.isMoving = false;
+                } else if (distance > CONFIG.PEER_AVATAR.STOP_THRESHOLD) {
+                    // Walk toward target
+                    const speed = Math.min(distance / timeRemaining, CONFIG.PEER_AVATAR.MAX_SPEED);
+                    const step = speed * deltaTime;
+                    const alpha = Math.min(step / distance, 1);
+
+                    avatar.position.x += dx * alpha;
+                    avatar.position.z += dz * alpha;
+                    // Use peer's actual movement state for animation accuracy
+                    avatar.userData.isMoving = isRecentUpdate ? peerActuallyMoving : true;
+
+                    // Smoothly rotate toward movement direction
+                    if (distance > 0.5) {
+                        const targetRot = Math.atan2(dx, dz);
+                        avatar.rotation.y = this.lerpAngle(avatar.rotation.y, targetRot, 0.25);
+                    }
+                } else {
+                    // Close enough - use peer's actual state or stop
+                    avatar.userData.isMoving = isRecentUpdate ? peerActuallyMoving : false;
+                    if (peer.targetRotation !== undefined) {
+                        avatar.rotation.y = this.lerpAngle(avatar.rotation.y, peer.targetRotation, 0.25);
+                    }
+                }
+
+                // PERFORMANCE: Update Y using getHeightFast (much faster than raycasting)
+                if (!peer.isClimbing) {
+                    if (peer.onDock) {
+                        // On dock - use fixed dock height
+                        peer.targetY = CONFIG.CONSTRUCTION.STRUCTURE_PROPERTIES.dock.deckHeight;
+                    } else if (shouldUpdateHeight && this.terrainGenerator) {
+                        // On terrain - use terrain height
+                        const terrainY = this.terrainGenerator.getWorldHeight(avatar.position.x, avatar.position.z);
+                        if (terrainY !== undefined && terrainY !== null) {
+                            peer.targetY = terrainY + 0.03;
+                        }
+                    }
+
+                    // Lerp to target Y every frame for smooth transitions
+                    if (peer.targetY !== undefined) {
+                        avatar.position.y = THREE.MathUtils.lerp(avatar.position.y, peer.targetY, 0.35);
+                    }
+                }
+            }
+
+            // Check if peer is climbing and update climbing animation
+            if (peer?.isClimbing && peer.climbingTargetPosition) {
+                // Lerp to climbing target position (center of outpost + 2 units up)
+                avatar.position.lerp(peer.climbingTargetPosition, 0.2);
+
+                // Stop movement animation when climbing
+                if (avatar.userData.walkAction && avatar.userData.walkAction.isRunning()) {
+                    avatar.userData.walkAction.stop();
+                }
+            }
+
+            // Check if peer is piloting a mobile entity (boat/cart/horse)
+            if (peer?.isPiloting && peer.mobileEntity) {
+                const game = this.networkManager.game;
+                const entityType = peer.mobileEntity.entityType || 'boat';
+                const config = game?.mobileEntitySystem?.getConfig(entityType);
+                const playerYOffset = config?.playerYOffset || (entityType === 'horse' ? 1.0 : -0.1);
+                const mesh = peer.mobileEntity.mesh;
+
+                // Lerp mesh toward target position/rotation for smooth movement
+                if (mesh && peer.mobileEntity.targetPosition) {
+                    // Lerp position (0.2 = smooth but responsive)
+                    mesh.position.lerp(peer.mobileEntity.targetPosition, 0.2);
+
+                    // Lerp rotation with angle wrapping to avoid spinning the long way
+                    const currentRot = mesh.rotation.y;
+                    const targetRot = peer.mobileEntity.targetRotation;
+                    mesh.rotation.y = this.lerpAngle(currentRot, targetRot, 0.2);
+
+                    // Entity-specific Y handling
+                    if (entityType === 'horse' && this.terrainGenerator) {
+                        // Horse Y follows terrain
+                        const terrainY = this.terrainGenerator.getWorldHeight(mesh.position.x, mesh.position.z) || 0;
+                        mesh.position.y = terrainY;
+                    }
+                    // Boats: Y handled by AnimationSystem (wave height)
+
+                    // Attach avatar to the lerped entity position
+                    avatar.position.set(
+                        mesh.position.x,
+                        mesh.position.y + playerYOffset,
+                        mesh.position.z
+                    );
+                    avatar.rotation.y = mesh.rotation.y;
+
+                    // Update horse animation based on movement
+                    if (entityType === 'horse') {
+                        this.updatePeerHorseAnimation(peer, deltaTime);
+                    }
+                } else {
+                    // Fallback: no mesh, use stored position directly
+                    const mobilePos = peer.mobileEntity.position;
+                    const mobileRot = peer.mobileEntity.rotation;
+                    avatar.position.set(mobilePos.x, mobilePos.y + playerYOffset, mobilePos.z);
+                    avatar.rotation.y = mobileRot;
+                }
+
+                // Stop movement animations - peer is stationary on their vehicle
+                if (avatar.userData.walkAction && avatar.userData.walkAction.isRunning()) {
+                    avatar.userData.walkAction.stop();
+                }
+                if (avatar.userData.idleAction && !avatar.userData.idleAction.isRunning()) {
+                    avatar.userData.idleAction.play();
+                }
+                avatar.userData.isMoving = false;
+            }
+
+            // Lerp peer's towed cart (if they're towing one)
+            if (peer?.towedCart && peer.towedCart.mesh) {
+                const cartMesh = peer.towedCart.mesh;
+                const cartTarget = peer.towedCart.targetPosition;
+                const cartTargetRot = peer.towedCart.targetRotation;
+
+                if (cartTarget) {
+                    // Lerp cart position (0.15 = smooth following)
+                    cartMesh.position.lerp(cartTarget, 0.15);
+
+                    // Lerp rotation with angle wrapping
+                    if (cartTargetRot !== undefined) {
+                        cartMesh.rotation.y = this.lerpAngle(cartMesh.rotation.y, cartTargetRot, 0.15);
+                    }
+
+                    // Update Y to follow terrain
+                    if (this.terrainGenerator) {
+                        const cartTerrainY = this.terrainGenerator.getWorldHeight(cartMesh.position.x, cartMesh.position.z);
+                        if (cartTerrainY !== undefined) {
+                            cartMesh.position.y = cartTerrainY;
+                        }
+                    }
+
+                    // If there's a crate on the cart, update its position too
+                    if (peer.towedCart.loadedCrate && peer.towedCart.loadedCrate.mesh) {
+                        const crateMesh = peer.towedCart.loadedCrate.mesh;
+                        const CART_HEIGHT = 0.2;  // CONFIG.CRATE_CART.CART_HEIGHT_OFFSET
+                        const CART_Z = -0.1;      // CONFIG.CRATE_CART.CART_Z_OFFSET
+
+                        // Position crate on cart
+                        const cartDir = new THREE.Vector3(
+                            Math.sin(cartMesh.rotation.y),
+                            0,
+                            Math.cos(cartMesh.rotation.y)
+                        );
+                        crateMesh.position.set(
+                            cartMesh.position.x + cartDir.x * CART_Z,
+                            cartMesh.position.y + CART_HEIGHT,
+                            cartMesh.position.z + cartDir.z * CART_Z
+                        );
+                        crateMesh.rotation.y = cartMesh.rotation.y;
+                    }
+                }
+            }
+
+            // Lerp peer's towed artillery (if they're towing one)
+            if (peer?.towedArtillery && peer.towedArtillery.mesh) {
+                const artilleryMesh = peer.towedArtillery.mesh;
+                const artilleryTarget = peer.towedArtillery.targetPosition;
+                const artilleryTargetRot = peer.towedArtillery.targetRotation;
+
+                if (artilleryTarget) {
+                    // Lerp artillery position (0.15 = smooth following)
+                    artilleryMesh.position.lerp(artilleryTarget, 0.15);
+
+                    // Lerp rotation with angle wrapping
+                    if (artilleryTargetRot !== undefined) {
+                        artilleryMesh.rotation.y = this.lerpAngle(artilleryMesh.rotation.y, artilleryTargetRot, 0.15);
+                    }
+
+                    // Update Y to follow terrain
+                    if (this.terrainGenerator) {
+                        const artilleryTerrainY = this.terrainGenerator.getWorldHeight(artilleryMesh.position.x, artilleryMesh.position.z);
+                        if (artilleryTerrainY !== undefined) {
+                            artilleryMesh.position.y = artilleryTerrainY;
+                        }
+                    }
+                }
+            }
+
+            // Check if peer is harvesting and update harvest animation
+            if (peer?.harvestState) {
+                const now = Date.now();
+                if (now >= peer.harvestState.endTime) {
+                    // Harvest complete, stop chopping animation
+                    if (peer.choppingAction) {
+                        peer.choppingAction.stop();
+                    }
+                    peer.harvestState = null;
+                }
+            }
+
+            // PERFORMANCE: LOD-based animation updates
+            // LOD 0 (close): update every frame
+            // LOD 1 (medium): update every 3 frames
+            // LOD 2 (far): update every 10 frames
+            const lodLevel = avatar.userData.lodLevel || 0;
+            const shouldUpdateAnimation = lodLevel === 0 ||
+                                         (lodLevel === 1 && this.frameCounter % 3 === 0) ||
+                                         (lodLevel === 2 && this.frameCounter % 10 === 0);
+
+            // Update animation mixer
+            if (avatar.userData.mixer && shouldUpdateAnimation) {
+                // Calculate time multiplier for LOD (compensate for skipped frames)
+                const lodTimeMultiplier = lodLevel === 0 ? 1 : (lodLevel === 1 ? 3 : 10);
+
+                // If peer is harvesting, only play chopping animation
+                if (peer?.harvestState) {
+                    // Stop walk/combat/idle animations during harvest
+                    if (avatar.userData.walkAction && avatar.userData.walkAction.isRunning()) {
+                        avatar.userData.walkAction.stop();
+                    }
+                    if (avatar.userData.combatAction && avatar.userData.combatAction.isRunning()) {
+                        avatar.userData.combatAction.stop();
+                    }
+                    if (avatar.userData.idleAction && avatar.userData.idleAction.isRunning()) {
+                        avatar.userData.idleAction.stop();
+                    }
+
+                    // Hide rifle during harvesting (can't harvest while holding rifle)
+                    if (avatar.userData.rifle) {
+                        avatar.userData.rifle.visible = false;
+                    }
+
+                    // Update mixer to advance chopping animation at same speed as main player
+                    avatar.userData.mixer.update((deltaTime / 1000) * 0.375 * lodTimeMultiplier);
+                } else {
+                    // Not harvesting - handle walk/combat animations normally
+                    // Check for nearby enemies to determine combat stance
+                    let inCombatStance = false;
+                    const game = this.networkManager.game;
+
+                    // Use cached combat stance, only update every COMBAT_CHECK_INTERVAL frames
+                    let combatCache = this.combatStanceCache.get(peerId);
+                    const shouldUpdateCombat = !combatCache || (this.frameCounter - combatCache.lastUpdate >= this.COMBAT_CHECK_INTERVAL);
+
+                    if (shouldUpdateCombat && game) {
+                        const combatDistance = 35; // Match PlayerCombat.js combat stance range
+                        const combatDistanceSquared = combatDistance * combatDistance;
+                        const avatarX = avatar.position.x;
+                        const avatarZ = avatar.position.z;
+
+                        // PERFORMANCE: Spatial filtering - only check AI in nearby chunks (3x3 grid)
+                        const avatarChunk = ChunkCoordinates.worldToChunk(avatarX, avatarZ);
+
+                        // Check AI enemies from tents (with spatial filtering)
+                        if (game.aiEnemyManager?.tentAIEnemies) {
+                            for (const [tentId, aiData] of game.aiEnemyManager.tentAIEnemies) {
+                                if (aiData.controller && !aiData.isDead && aiData.controller.enemy) {
+                                    const enemyPos = aiData.controller.enemy.position;
+
+                                    // PERFORMANCE: Skip AI enemies more than 1 chunk away
+                                    const aiChunk = ChunkCoordinates.worldToChunk(enemyPos.x, enemyPos.z);
+                                    if (Math.abs(aiChunk.chunkX - avatarChunk.chunkX) > 1 ||
+                                        Math.abs(aiChunk.chunkZ - avatarChunk.chunkZ) > 1) {
+                                        continue; // Skip distant AI
+                                    }
+
+                                    // Use 2D distance (XZ only) to match PlayerCombat.js
+                                    const dx = enemyPos.x - avatarX;
+                                    const dz = enemyPos.z - avatarZ;
+                                    const distSquared = dx * dx + dz * dz;
+                                    if (distSquared <= combatDistanceSquared) {
+                                        inCombatStance = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        // Check peer-controlled bandits via BanditController
+                        if (!inCombatStance && game.banditController?.entities) {
+                            for (const [tentId, entity] of game.banditController.entities) {
+                                if (entity.state === 'dead') continue;
+                                const entityPos = entity.mesh?.position || entity.position;
+                                if (!entityPos) continue;
+
+                                // PERFORMANCE: Skip bandits more than 1 chunk away (matches tentAIEnemies filtering)
+                                const banditChunk = ChunkCoordinates.worldToChunk(entityPos.x, entityPos.z);
+                                if (Math.abs(banditChunk.chunkX - avatarChunk.chunkX) > 1 ||
+                                    Math.abs(banditChunk.chunkZ - avatarChunk.chunkZ) > 1) {
+                                    continue;
+                                }
+
+                                const dx = entityPos.x - avatarX;
+                                const dz = entityPos.z - avatarZ;
+                                const distSquared = dx * dx + dz * dz;
+                                if (distSquared <= combatDistanceSquared) {
+                                    inCombatStance = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        // Check deer via DeerController
+                        if (!inCombatStance && game.deerController) {
+                            const nearbyDeer = game.deerController.getLivingDeerNear(avatarX, avatarZ, combatDistance);
+                            if (nearbyDeer.length > 0) {
+                                inCombatStance = true;
+                            }
+                        }
+
+                        // Check brown bears via BrownBearController
+                        if (!inCombatStance && game.brownBearController) {
+                            for (const [denId, bear] of game.brownBearController.entities) {
+                                if (bear.state === 'dead') continue;
+                                const pos = bear.position;
+                                const dx = pos.x - avatarX;
+                                const dz = pos.z - avatarZ;
+                                if (dx * dx + dz * dz < combatDistance * combatDistance) {
+                                    inCombatStance = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        // PERFORMANCE: Reuse existing cache entry to avoid object allocation
+                        let cacheEntry = this.combatStanceCache.get(peerId);
+                        if (!cacheEntry) {
+                            cacheEntry = { inCombat: false, lastUpdate: 0 };
+                            this.combatStanceCache.set(peerId, cacheEntry);
+                        }
+                        cacheEntry.inCombat = inCombatStance;
+                        cacheEntry.lastUpdate = this.frameCounter;
+                    } else if (combatCache) {
+                        // Use cached value
+                        inCombatStance = combatCache.inCombat;
+                    }
+
+                    // Only show combat stance if peer has a rifle (synced via player_tick)
+                    const peerHasRifle = peer?.hasRifle || false;
+                    if (inCombatStance && avatar.userData.combatAction && peerHasRifle) {
+                        // Show rifle in combat stance
+                        if (avatar.userData.rifle) {
+                            avatar.userData.rifle.visible = true;
+                        }
+
+                        // Combat stance: stop walk/idle animations
+                        if (avatar.userData.walkAction && avatar.userData.walkAction.isRunning()) {
+                            avatar.userData.walkAction.stop();
+                        }
+                        if (avatar.userData.idleAction && avatar.userData.idleAction.isRunning()) {
+                            avatar.userData.idleAction.stop();
+                        }
+
+                        if (avatar.userData.isMoving) {
+                            // Combat movement: loop combat animation, scaled with movement speed
+                            if (avatar.userData.combatAction) {
+                                avatar.userData.combatAction.paused = false;
+                                if (!avatar.userData.combatAction.isRunning()) {
+                                    avatar.userData.combatAction.play();
+                                }
+                            }
+                            // Use peer's speed multiplier for animation (slope affects both movement and animation)
+                            const peerAnimSpeed = peer?.speedMultiplier ?? 1.0;
+                            avatar.userData.mixer.update((deltaTime / 1000) * peerAnimSpeed * lodTimeMultiplier);
+                        } else {
+                            // Combat idle: freeze combat animation at frame 2
+                            if (avatar.userData.combatAction) {
+                                avatar.userData.combatAction.reset();
+                                const frameTime = 2 / 24;  // Frame 2 at 24fps
+                                avatar.userData.combatAction.time = frameTime;
+                                avatar.userData.combatAction.weight = 1.0;
+                                avatar.userData.combatAction.play();
+                                avatar.userData.combatAction.paused = true;
+                                // Update mixer once to apply the pose (prevents T-pose)
+                                avatar.userData.mixer.update(0.001);
+                            }
+                        }
+                    } else {
+                        // Hide rifle when not in combat
+                        if (avatar.userData.rifle) {
+                            avatar.userData.rifle.visible = false;
+                        }
+
+                        // Normal state: stop combat animation and use walk
+                        if (avatar.userData.combatAction && (avatar.userData.combatAction.isRunning() || avatar.userData.combatAction.paused)) {
+                            avatar.userData.combatAction.stop();
+                            avatar.userData.combatAction.reset();
+                        }
+
+                        if (avatar.userData.isMoving) {
+                            // Play walk animation when moving
+                            if (avatar.userData.idleAction && avatar.userData.idleAction.isRunning()) {
+                                avatar.userData.idleAction.stop();
+                            }
+                            if (avatar.userData.walkAction && !avatar.userData.walkAction.isRunning()) {
+                                avatar.userData.walkAction.play();
+                            }
+                            // Use peer's speed multiplier for animation (slope affects both movement and animation)
+                            const peerAnimSpeed = peer?.speedMultiplier ?? 1.0;
+                            avatar.userData.mixer.update((deltaTime / 1000) * peerAnimSpeed * lodTimeMultiplier);
+                        } else {
+                            // Idle: play idle animation
+                            if (avatar.userData.walkAction && avatar.userData.walkAction.isRunning()) {
+                                avatar.userData.walkAction.stop();
+                            }
+                            if (avatar.userData.idleAction && !avatar.userData.idleAction.isRunning()) {
+                                avatar.userData.idleAction.play();
+                            }
+                            avatar.userData.mixer.update((deltaTime / 1000) * 1 * lodTimeMultiplier);
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    /**
+     * Update death animations for all avatars
+     * @param {number} deltaTime
+     * @param {function} updateDeathAnimationCallback - Callback to update death animation
+     */
+    updateAvatarDeathAnimations(deltaTime, updateDeathAnimationCallback) {
+        this.networkManager.avatars.forEach((avatar, peerId) => {
+            if (avatar.userData.isDead) {
+                // Validate deathStartTime - set to now if invalid (prevents NaN in animation)
+                let deathStartTime = avatar.userData.deathStartTime;
+                if (!deathStartTime || isNaN(deathStartTime)) {
+                    console.warn(`[AvatarManager] Invalid deathStartTime for peer ${peerId}, setting to now`);
+                    deathStartTime = Date.now();
+                    avatar.userData.deathStartTime = deathStartTime;
+                }
+
+                // DEBUG: Log death animation state
+                const elapsed = Date.now() - deathStartTime;
+                if (elapsed < 600) { // Only log during animation
+                    console.log(`[Death Debug] peer=${peerId} elapsed=${elapsed}ms children[0]=${!!avatar.children[0]} fallDir=${avatar.userData.fallDirection}`);
+                }
+
+                updateDeathAnimationCallback(
+                    avatar,
+                    deathStartTime,
+                    deltaTime,
+                    avatar.userData.fallDirection || 1,
+                    false
+                );
+            }
+        });
+    }
+
+    /**
+     * Remove avatar for disconnected peer
+     * @param {string} peerId
+     */
+    removeAvatar(peerId) {
+        const avatar = this.networkManager.avatars.get(peerId);
+        if (avatar) {
+            // Clean up combat stance cache
+            this.combatStanceCache.delete(peerId);
+
+            this.scene.remove(avatar);
+            if (avatar.geometry) avatar.geometry.dispose();
+            if (avatar.material) avatar.material.dispose();
+            this.networkManager.avatars.delete(peerId);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Get all avatars
+     * @returns {Map}
+     */
+    getAvatars() {
+        return this.networkManager.avatars;
+    }
+
+    /**
+     * Get avatar by peer ID
+     * @param {string} peerId
+     * @returns {THREE.Object3D|null}
+     */
+    getAvatar(peerId) {
+        return this.networkManager.avatars.get(peerId);
+    }
+
+    /**
+     * Check if avatar is alive
+     * @param {string} peerId
+     * @returns {boolean}
+     */
+    isAvatarAlive(peerId) {
+        const avatar = this.networkManager.avatars.get(peerId);
+        return avatar && !avatar.userData.isDead;
+    }
+
+    /**
+     * Play shoot animation and muzzle flash for a peer avatar
+     * @param {string} peerId
+     */
+    playShootAnimation(peerId) {
+        const avatar = this.networkManager.avatars.get(peerId);
+        if (!avatar || avatar.userData.isDead) return;
+
+        // Only show rifle and shooting effects if peer actually has one (synced via player_tick)
+        const peer = this.networkManager.peerGameData.get(peerId);
+        const peerHasRifle = peer?.hasRifle || false;
+
+        if (!peerHasRifle) {
+            return; // Can't shoot without a rifle
+        }
+
+        if (avatar.userData.rifle) {
+            avatar.userData.rifle.visible = true;
+        }
+
+        // Trigger muzzle flash and gunsmoke
+        if (avatar.userData.muzzleFlash) {
+            avatar.userData.muzzleFlash.flash();
+            // Spawn gunsmoke at barrel position
+            if (this.effectManager) {
+                const barrelPos = new THREE.Vector3();
+                avatar.userData.muzzleFlash.sprite.getWorldPosition(barrelPos);
+                this.effectManager.spawnGunSmoke(barrelPos);
+            }
+        }
+
+        // Play shoot animation if available
+        if (avatar.userData.shootAction) {
+            avatar.userData.shootAction.reset();
+            avatar.userData.shootAction.play();
+        }
+    }
+
+    /**
+     * Lerp between two angles (handles wraparound)
+     * @param {number} a - Start angle in radians
+     * @param {number} b - End angle in radians
+     * @param {number} t - Interpolation factor (0-1)
+     * @returns {number} - Interpolated angle
+     */
+    lerpAngle(a, b, t) {
+        let diff = b - a;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        return a + diff * t;
+    }
+
+    /**
+     * Update horse animation for peer based on movement
+     * @param {object} peerData - Peer data object
+     * @param {number} deltaTime - Time delta in ms
+     */
+    updatePeerHorseAnimation(peerData, deltaTime) {
+        const mobileEntity = peerData.mobileEntity;
+        if (!mobileEntity?.mixer) return;
+
+        // Update mixer
+        mobileEntity.mixer.update(deltaTime / 1000);
+
+        const walkAction = mobileEntity.walkAction;
+        if (!walkAction) return;
+
+        if (mobileEntity.isMoving) {
+            // Estimate velocity from position delta
+            const distMoved = mobileEntity.targetPosition.distanceTo(mobileEntity.lastPosition);
+            const estimatedVelocity = distMoved / 0.5;  // position updates ~500ms
+
+            const game = this.networkManager.game;
+            const config = game?.mobileEntitySystem?.getConfig('horse') || {
+                maxSpeed: 0.0015,
+                baseAnimationSpeed: 1.0,
+                minAnimationSpeed: 0.3
+            };
+            const maxSpeedPerSec = config.maxSpeed * 1000;
+            const speedRatio = Math.min(estimatedVelocity / maxSpeedPerSec, 1.0);
+            const animSpeed = config.minAnimationSpeed + speedRatio * (config.baseAnimationSpeed - config.minAnimationSpeed);
+
+            walkAction.setEffectiveTimeScale(animSpeed);
+            if (!walkAction.isRunning()) walkAction.play();
+        } else {
+            if (walkAction.isRunning()) walkAction.stop();
+        }
+    }
+}
