@@ -7,7 +7,7 @@ class NavigationWorkerClient {
     }
 
     async initialize() {
-        const workerPath = '/public/workers/NavigationWorker.js';
+        const workerPath = './workers/NavigationWorker.js';
         console.log('[NavigationWorkerClient] Creating worker at', workerPath);
         try {
             // Try to fetch the worker script first to see if it exists
