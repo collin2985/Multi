@@ -1,0 +1,59 @@
+{
+  "players": [],
+  "objectChanges": [
+    {
+      "action": "add",
+      "id": "bearden_70,176",
+      "name": "bearden",
+      "position": [
+        3502.5,
+        2.0211093226899157,
+        8796.5
+      ],
+      "rotation": 6.149404484385619,
+      "scale": 1,
+      "quality": 30,
+      "lastRepairTime": 1768525531235,
+      "chunkId": "chunk_70,176",
+      "isBrownBearStructure": true
+    },
+    {
+      "action": "add",
+      "id": "deertree_70,176",
+      "name": "deertree",
+      "position": [
+        3496.5,
+        5.930843862417747,
+        8803.75
+      ],
+      "rotation": 2.030795415740487,
+      "scale": 1,
+      "quality": 100,
+      "lastRepairTime": 1768525531235,
+      "chunkId": "chunk_70,176",
+      "isDeerTreeStructure": true
+    },
+    {
+      "action": "add",
+      "id": "70,176_sandstone_49",
+      "name": "sandstone",
+      "position": [
+        3504.3434176011942,
+        7.6856505630178,
+        8775.330610224046
+      ],
+      "quality": 67,
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "totalResources": 20,
+      "remainingResources": 19,
+      "chunkId": "chunk_70,176",
+      "harvestedBy": null,
+      "harvestStartTime": null
+    }
+  ],
+  "seed": 12345
+}

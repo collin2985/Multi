@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guns Horses & Ships</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: Georgia, serif;
+            background: url('images/background.png') center center / cover no-repeat fixed;
+            color: #f5f1e8;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 700px;
+            text-align: center;
+        }
+        h1 {
+            font-size: 3em;
+            color: #f5f1e8;
+            margin-bottom: 0;
+            text-shadow:
+                2px 2px 4px #000,
+                -2px -2px 4px #000,
+                2px -2px 4px #000,
+                -2px 2px 4px #000,
+                0 0 20px #000,
+                0 0 40px rgba(0,0,0,0.8);
+        }
+        .tagline {
+            font-size: 1.4em;
+            color: #8b7355;
+            font-style: italic;
+            margin-bottom: 40px;
+        }
+        .buttons {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin-top: 50px;
+            margin-bottom: 50px;
+            flex-wrap: wrap;
+        }
+        .btn {
+            display: inline-block;
+            padding: 18px 50px;
+            font-size: 1.3em;
+            font-family: Georgia, serif;
+            text-decoration: none;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            border: 2px solid;
+        }
+        .btn-play {
+            background: rgba(92, 74, 50, 0.9);
+            color: #f5f1e8;
+            border-color: #8b7355;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+        .btn-play:hover {
+            background: rgba(139, 115, 85, 0.95);
+            border-color: #f5f1e8;
+            transform: scale(1.05);
+        }
+        .btn-wiki {
+            background: rgba(0, 0, 0, 0.4);
+            color: #f5f1e8;
+            border-color: #8b7355;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+        .btn-wiki:hover {
+            background: rgba(139, 115, 85, 0.9);
+            border-color: #f5f1e8;
+            transform: scale(1.05);
+        }
+        .speech {
+            max-width: 600px;
+            line-height: 1.8;
+        }
+        .speech p {
+            margin-bottom: 20px;
+            font-size: 1.15em;
+            color: #f5f1e8;
+            text-shadow:
+                1px 1px 3px #000,
+                -1px -1px 3px #000,
+                1px -1px 3px #000,
+                -1px 1px 3px #000,
+                0 0 15px #000,
+                0 0 30px rgba(0,0,0,0.7);
+        }
+        .speech p:first-child {
+            font-size: 1.3em;
+            color: #f5f1e8;
+            font-weight: bold;
+            text-shadow:
+                2px 2px 4px #000,
+                -2px -2px 4px #000,
+                2px -2px 4px #000,
+                -2px 2px 4px #000,
+                0 0 20px #000,
+                0 0 35px rgba(0,0,0,0.8);
+        }
+        .speech .final {
+            font-size: 1.4em;
+            color: #f5f1e8;
+            font-style: italic;
+            margin-top: 30px;
+            border-top: 1px solid rgba(255,255,255,0.3);
+            padding-top: 20px;
+            text-shadow:
+                2px 2px 4px #000,
+                -2px -2px 4px #000,
+                2px -2px 4px #000,
+                -2px 2px 4px #000,
+                0 0 20px #000,
+                0 0 35px rgba(0,0,0,0.8);
+        }
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 2em;
+            }
+            .tagline {
+                font-size: 1.1em;
+            }
+            .btn {
+                padding: 15px 35px;
+                font-size: 1.1em;
+            }
+            .speech p {
+                font-size: 1em;
+            }
+            .speech .final {
+                font-size: 1.2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Guns Horses & Ships</h1>
+
+        <div class="buttons">
+            <a href="client.html" class="btn btn-play">Play Now</a>
+            <a href="wiki.html" class="btn btn-wiki">Game Wiki</a>
+            <a href="https://discord.gg/jzvfds3S" target="_blank" class="btn btn-wiki">Discord</a>
+        </div>
+
+        <div class="speech">
+            <p>The year is 1743. The old world has nothing left for you.</p>
+            <p>Here, on shores untouched by kings and emperors, you will carve your name into the wilderness itself. Fell the ancient pines. Raise walls from raw stone. Trade with ships that sail from lands you'll never see.</p>
+            <p>But beware - you are not alone. Bandits lurk in the hills. Bears prowl the forests. And across the great divide, another faction watches for the breath of your chimneys.</p>
+            <p class="final">This land will not be given. It must be taken.</p>
+        </div>
+    </div>
+</body>
+</html>

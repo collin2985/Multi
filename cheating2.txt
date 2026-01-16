@@ -1,0 +1,320 @@
+
+Tier 1: Basics (You Likely Have Already)
+javascript// From your existing auth system
+accountId visitorId visitorId visitorId visitorId visitorId visitorId    // Persistent account identifier
+visitorId    // Temporary session identifier
+ipAddress     // From WebSocket connection (req.socket.remoteAddress)
+Tier 2: Device Fingerprint Components
+Collect these separately (not just a combined hash) so you can do fuzzy matching when components change slightly:
+javascript// Collect on client, send to server at login/session start
+function collectFingerprint() {
+  const fp = {};
+  
+  // Hardware signals (most stable, hardest to spoof)
+  fp.hardwareConcurrency = navigator.hardwareConcurrency; // CPU cores
+  fp.deviceMemory = navigator.deviceMemory; // RAM in GB (Chrome only)
+  fp.maxTouchPoints = navigator.maxTouchPoints;
+  
+  // WebGL - reveals GPU/driver (very identifying)
+  const canvas = document.createElement('canvas');
+  const gl = canvas.getContext('webgl');
+  if (gl) {
+    const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+    if (debugInfo) {
+      fp.webglVendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
+      fp.webglRenderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+    }
+  }
+  
+  // Canvas fingerprint (GPU rendering differences)
+  fp.canvasHash = getCanvasFingerprint();
+  
+  // Audio fingerprint (very stable)
+  fp.audioHash = await getAudioFingerprint();
+  
+  // Screen
+  fp.screenWidth = screen.width;
+  fp.screenHeight = screen.height;
+  fp.screenColorDepth = screen.colorDepth;
+  fp.devicePixelRatio = window.devicePixelRatio;
+  
+  // Timezone & locale
+  fp.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  fp.timezoneOffset = new Date().getTimezoneOffset();
+  fp.language = navigator.language;
+  fp.languages = navigator.languages?.join(',');
+  
+  // Platform
+  fp.platform = navigator.platform;
+  fp.userAgent = navigator.userAgent;
+  
+  // Fonts (high entropy, but can be slow to collect)
+  fp.fonts = await detectFonts(); // Optional, adds ~100ms
+  
+  return fp;
+}
+
+function getCanvasFingerprint() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 200;
+  canvas.height = 50;
+  const ctx = canvas.getContext('2d');
+  
+  // Draw text with specific styling - renders differently per GPU/driver
+  ctx.textBaseline = 'top';
+  ctx.font = '14px Arial';
+  ctx.fillStyle = '#f60';
+  ctx.fillRect(125, 1, 62, 20);
+  ctx.fillStyle = '#069';
+  ctx.fillText('Horses fingerprint', 2, 15);
+  ctx.fillStyle = 'rgba(102, 204, 0, 0.7)';
+  ctx.fillText('Horses fingerprint', 4, 17);
+  
+  // Hash the image data
+  return hashString(canvas.toDataURL());
+}
+
+async function getAudioFingerprint() {
+  try {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioCtx.createOscillator();
+    const analyser = audioCtx.createAnalyser();
+    const gain = audioCtx.createGain();
+    const scriptProcessor = audioCtx.createScriptProcessor(4096, 1, 1);
+    
+    gain.gain.value = 0; // Silent
+    oscillator.type = 'triangle';
+    oscillator.connect(analyser);
+    analyser.connect(scriptProcessor);
+    scriptProcessor.connect(gain);
+    gain.connect(audioCtx.destination);
+    oscillator.start(0);
+    
+    const bins = new Float32Array(analyser.frequencyBinCount);
+    analyser.getFloatFrequencyData(bins);
+    oscillator.stop();
+    audioCtx.close();
+    
+    return hashString(bins.slice(0, 30).join(','));
+  } catch {
+    return null;
+  }
+}
+
+function hashString(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return hash.toString(16);
+}
+Tier 3: Behavioral Linking Signals
+javascript// Server-side: track patterns that link alt accounts
+loginTimes         // Unusual patterns (same person plays same hours)
+ipHistory          // All IPs this account has used
+sharedIpAccounts   // Other accounts from same IP
+friendConnections  // Social graph analysis
+playStyle          // Movement patterns, preferred locations, action sequences
+Database Schema
+sql-- Store fingerprint components separately for fuzzy matching
+CREATE TABLE device_fingerprints (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    account_id UUID REFERENCES players(id),
+    
+    -- Hardware (most reliable)
+    hardware_concurrency SMALLINT,
+    device_memory DECIMAL(4,2),
+    webgl_vendor VARCHAR(255),
+    webgl_renderer VARCHAR(255),
+    canvas_hash VARCHAR(32),
+    audio_hash VARCHAR(32),
+    
+    -- Screen
+    screen_width SMALLINT,
+    screen_height SMALLINT,
+    screen_color_depth SMALLINT,
+    device_pixel_ratio DECIMAL(3,2),
+    
+    -- Locale
+    timezone VARCHAR(64),
+    timezone_offset SMALLINT,
+    language VARCHAR(16),
+    
+    -- Platform
+    platform VARCHAR(32),
+    user_agent TEXT,
+    
+    -- Metadata
+    first_seen_at TIMESTAMPTZ DEFAULT NOW(),
+    last_seen_at TIMESTAMPTZ DEFAULT NOW(),
+    times_seen INT DEFAULT 1
+);
+
+-- Index for fast lookups on stable signals
+CREATE INDEX idx_fp_webgl ON device_fingerprints(webgl_vendor, webgl_renderer);
+CREATE INDEX idx_fp_canvas ON device_fingerprints(canvas_hash);
+CREATE INDEX idx_fp_audio ON device_fingerprints(audio_hash);
+
+-- IP history for pattern analysis
+CREATE TABLE ip_history (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    account_id UUID REFERENCES players(id),
+    ip_address INET NOT NULL,
+    first_seen_at TIMESTAMPTZ DEFAULT NOW(),
+    last_seen_at TIMESTAMPTZ DEFAULT NOW(),
+    times_seen INT DEFAULT 1
+);
+
+CREATE INDEX idx_ip_address ON ip_history(ip_address);
+CREATE INDEX idx_ip_account ON ip_history(account_id);
+
+-- Bans reference multiple signals
+CREATE TABLE bans (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    
+    -- What's banned (can be multiple)
+    account_id UUID REFERENCES players(id),
+    ip_address INET,
+    fingerprint_id UUID REFERENCES device_fingerprints(id),
+    
+    -- Ban details
+    ban_type VARCHAR(32) NOT NULL, -- 'account', 'device', 'ip', 'shadow'
+    reason VARCHAR(255),
+    evidence JSONB,
+    
+    -- Duration
+    is_permanent BOOLEAN DEFAULT false,
+    expires_at TIMESTAMPTZ,
+    
+    -- Metadata
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    created_by VARCHAR(64), -- 'sentinel_3', 'admin_username', 'autoban'
+    appeal_status VARCHAR(32) DEFAULT 'none'
+);
+Fuzzy Matching for Device Bans
+Don't require exact fingerprint match—use weighted similarity:
+javascript// server/BanChecker.js
+const FINGERPRINT_WEIGHTS = {
+  webgl_renderer: 0.25,    // GPU is very identifying
+  canvas_hash: 0.20,       // Stable but can change with driver updates
+  audio_hash: 0.15,        // Very stable
+  webgl_vendor: 0.10,
+  hardware_concurrency: 0.08,
+  device_memory: 0.07,
+  screen_resolution: 0.05, // screenWidth + screenHeight combined
+  timezone: 0.05,
+  language: 0.03,
+  platform: 0.02
+};
+
+const BAN_SIMILARITY_THRESHOLD = 0.70; // 70% match = likely same device
+
+async function checkDeviceBan(newFingerprint) {
+  // Get all banned fingerprints
+  const bannedFingerprints = await db.query(`
+    SELECT df.* FROM device_fingerprints df
+    JOIN bans b ON b.fingerprint_id = df.id
+    WHERE b.ban_type = 'device' 
+    AND (b.is_permanent = true OR b.expires_at > NOW())
+  `);
+  
+  for (const banned of bannedFingerprints.rows) {
+    const similarity = calculateSimilarity(newFingerprint, banned);
+    if (similarity >= BAN_SIMILARITY_THRESHOLD) {
+      return {
+        banned: true,
+        matchedFingerprint: banned.id,
+        similarity,
+        originalBanReason: banned.reason
+      };
+    }
+  }
+  
+  return { banned: false };
+}
+
+function calculateSimilarity(fp1, fp2) {
+  let score = 0;
+  
+  // Exact matches
+  if (fp1.webgl_renderer === fp2.webgl_renderer) score += FINGERPRINT_WEIGHTS.webgl_renderer;
+  if (fp1.canvas_hash === fp2.canvas_hash) score += FINGERPRINT_WEIGHTS.canvas_hash;
+  if (fp1.audio_hash === fp2.audio_hash) score += FINGERPRINT_WEIGHTS.audio_hash;
+  if (fp1.webgl_vendor === fp2.webgl_vendor) score += FINGERPRINT_WEIGHTS.webgl_vendor;
+  if (fp1.hardware_concurrency === fp2.hardware_concurrency) score += FINGERPRINT_WEIGHTS.hardware_concurrency;
+  if (fp1.timezone === fp2.timezone) score += FINGERPRINT_WEIGHTS.timezone;
+  if (fp1.language === fp2.language) score += FINGERPRINT_WEIGHTS.language;
+  if (fp1.platform === fp2.platform) score += FINGERPRINT_WEIGHTS.platform;
+  
+  // Fuzzy matches
+  if (Math.abs(fp1.device_memory - fp2.device_memory) < 0.5) {
+    score += FINGERPRINT_WEIGHTS.device_memory;
+  }
+  
+  // Screen resolution - allow small differences (window wasn't maximized)
+  const resDiff = Math.abs(fp1.screen_width - fp2.screen_width) + 
+                  Math.abs(fp1.screen_height - fp2.screen_height);
+  if (resDiff < 100) score += FINGERPRINT_WEIGHTS.screen_resolution;
+  
+  return score;
+}
+What to Check and When
+javascript// In AuthManager.js or a new BanChecker.js
+
+async function onPlayerConnect(ws, fingerprint, ipAddress) {
+  // 1. Check IP ban (fastest)
+  const ipBan = await checkIpBan(ipAddress);
+  if (ipBan.banned) {
+    ws.close(4001, 'banned');
+    return;
+  }
+  
+  // 2. Check device ban (fuzzy match)
+  const deviceBan = await checkDeviceBan(fingerprint);
+  if (deviceBan.banned) {
+    // Log the evasion attempt
+    await logBanEvasionAttempt(fingerprint, deviceBan);
+    ws.close(4001, 'banned');
+    return;
+  }
+  
+  // 3. Store/update fingerprint for this session
+  await upsertFingerprint(accountId, fingerprint);
+  
+  // 4. Record IP
+  await recordIpUsage(accountId, ipAddress);
+  
+  // 5. Check for suspicious patterns (async, don't block connection)
+  checkForLinkedBannedAccounts(accountId, fingerprint, ipAddress);
+}
+
+async function onPlayerLogin(accountId, fingerprint, ipAddress) {
+  // Check account ban
+  const accountBan = await checkAccountBan(accountId);
+  if (accountBan.banned) {
+    return { success: false, reason: 'account_banned', expiresAt: accountBan.expires_at };
+  }
+  
+  // Check shadow ban (let them in but flag)
+  const shadowBan = await checkShadowBan(accountId);
+  if (shadowBan) {
+    // Mark session as shadow banned - affects matchmaking/visibility
+    session.shadowBanned = true;
+  }
+  
+  // Link this fingerprint to account
+  await linkFingerprintToAccount(accountId, fingerprint);
+}
+Priority Order for Effectiveness
+SignalEvasion DifficultyFalse Positive RiskPriorityWebGL rendererHigh (hardware-tied)Low⭐⭐⭐Canvas hashMedium (driver updates change it)Low⭐⭐⭐Audio hashHigh (very stable)Low⭐⭐⭐Hardware concurrency + memoryMediumMedium (common configs)⭐⭐IP addressLow (VPNs)High (shared IPs)⭐Screen resolutionLowHigh⭐Timezone/languageLowHigh⭐
+The WebGL renderer string alone is often enough to identify a device—it contains GPU model and driver version. Combined with canvas and audio hashes, you catch most ban evaders who just make a new account.
+Practical Advice
+
+Collect fingerprint once at session start, not repeatedly (it's slow and suspicious-looking)
+Don't block on fingerprint failure—some browsers restrict APIs. Fall back to IP + account bans for those users.
+Store fingerprints even for non-banned players—when you ban someone, you can retroactively find their alts
+VPN detection is optional but useful—IPQualityScore's free tier gives you 1,000 lookups/month to flag suspicious IPs
+
+Want me to write a complete FingerprintManager.js module that integrates with your existing auth flow?

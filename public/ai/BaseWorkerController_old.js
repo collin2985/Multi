@@ -1,0 +1,1706 @@
+/**
+ * BaseWorkerController.js (OPTIMIZED)
+ * Abstract base class for NPC workers (Woodcutter, Baker, Gardener, etc.)
+ *
+ * PERFORMANCE OPTIMIZATIONS APPLIED:
+ * 1. Cached config values at init (avoid repeated lookups)
+ * 2. Pre-computed squared distance thresholds
+ * 3. Reusable vector objects for calculations
+ * 4. Reduced object allocations in hot paths
+ * 5. Local variable caching in tight loops
+ * 6. Optimized chunk key generation
+ * 7. Consolidated broadcast logic (DRY)
+ * 8. Avoided repeated optional chaining in loops
+ * 9. Pre-allocated arrays where beneficial
+ * 10. Inlined simple getters in performance-critical code
+ */
+
+import * as THREE from 'three';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import { CONFIG } from '../config.js';
+import { modelManager } from '../objects.js';
+import { ChunkCoordinates } from '../core/ChunkCoordinates.js';
+import { getAISpawnQueue } from './AISpawnQueue.js';
+
+// Default configuration shared by all workers
+const BASE_CONFIG_DEFAULTS = {
+    CHUNK_SIZE: 50,
+    MOVE_SPEED: 0.8,
+    PATHFIND_INTERVAL: 6000,
+    IDLE_CHECK_INTERVAL: 1000,
+    BROADCAST_INTERVAL: 1000,
+    MARKET_MAX_DISTANCE: 20,
+    STUCK_TIMEOUT: 60000,
+    FAR_DISTANCE_SQ: 2500,
+    FAR_UPDATE_INTERVAL: 4,
+    WAYPOINT_THRESHOLD_SQ: 0.25,
+    TELEPORT_THRESHOLD_SQ: 100,
+    SNAP_THRESHOLD_SQ: 0.0025,
+};
+
+export class BaseWorkerController {
+    constructor(config) {
+        // Type identification
+        this.workerType = config.workerType;
+        this.configKey = config.configKey;
+        this.displayName = config.displayName || config.workerType.charAt(0).toUpperCase() + config.workerType.slice(1);
+        this.movementStates = new Set(config.movementStates || []);
+
+        // Entity storage
+        this.entities = new Map();
+        this.pendingStates = new Map();
+
+        // Core references (set via initialize)
+        this.clientId = null;
+        this.game = null;
+        this.gameState = null;
+        this.networkManager = null;
+        this.chunkManager = null;
+
+        // Frame/timing
+        this._frameCount = 0;
+        this._lastBroadcastTime = 0;
+
+        // Callbacks
+        this.getPlayersInChunks = null;
+        this.getPlayerPosition = null;
+        this.getTerrainHeight = null;
+        this.isWalkable = null;
+        this.isOnRoad = null;
+        this.findPath = null;
+        this.findPathAsync = null;
+        this.getSpeedMultiplier = null;
+        this.broadcastP2P = null;
+        this.isPlayerActive = null;
+
+        // OPTIMIZATION: Pre-allocate reusable arrays
+        this._nearbyChunkKeys = new Array(9); // 3x3 grid = 9 chunks max
+
+        // Create shared material for apron
+        this._sharedMaterial = new THREE.MeshStandardMaterial({
+            color: config.npcColor,
+            roughness: 0.8,
+            metalness: 0.1
+        });
+
+        // Create reusable broadcast message
+        this._broadcastMsg = this._createBroadcastMessage();
+
+        // OPTIMIZATION: Cache config values (will be populated in _cacheConfigValues)
+        this._cachedConfig = null;
+    }
+
+    /**
+     * OPTIMIZATION: Cache all config values at init to avoid repeated lookups
+     */
+    _cacheConfigValues() {
+        const cfg = CONFIG[this.configKey] || {};
+        this._cachedConfig = {
+            CHUNK_SIZE: cfg.CHUNK_SIZE ?? BASE_CONFIG_DEFAULTS.CHUNK_SIZE,
+            MOVE_SPEED: cfg.MOVE_SPEED ?? BASE_CONFIG_DEFAULTS.MOVE_SPEED,
+            PATHFIND_INTERVAL: cfg.PATHFIND_INTERVAL ?? BASE_CONFIG_DEFAULTS.PATHFIND_INTERVAL,
+            IDLE_CHECK_INTERVAL: cfg.IDLE_CHECK_INTERVAL ?? BASE_CONFIG_DEFAULTS.IDLE_CHECK_INTERVAL,
+            BROADCAST_INTERVAL: cfg.BROADCAST_INTERVAL ?? BASE_CONFIG_DEFAULTS.BROADCAST_INTERVAL,
+            MARKET_MAX_DISTANCE: cfg.MARKET_MAX_DISTANCE ?? BASE_CONFIG_DEFAULTS.MARKET_MAX_DISTANCE,
+            STUCK_TIMEOUT: cfg.STUCK_TIMEOUT ?? BASE_CONFIG_DEFAULTS.STUCK_TIMEOUT,
+            FAR_DISTANCE_SQ: cfg.FAR_DISTANCE_SQ ?? BASE_CONFIG_DEFAULTS.FAR_DISTANCE_SQ,
+            FAR_UPDATE_INTERVAL: cfg.FAR_UPDATE_INTERVAL ?? BASE_CONFIG_DEFAULTS.FAR_UPDATE_INTERVAL,
+            WAYPOINT_THRESHOLD_SQ: cfg.WAYPOINT_THRESHOLD_SQ ?? BASE_CONFIG_DEFAULTS.WAYPOINT_THRESHOLD_SQ,
+            TELEPORT_THRESHOLD_SQ: cfg.TELEPORT_THRESHOLD_SQ ?? BASE_CONFIG_DEFAULTS.TELEPORT_THRESHOLD_SQ,
+            SNAP_THRESHOLD_SQ: cfg.SNAP_THRESHOLD_SQ ?? BASE_CONFIG_DEFAULTS.SNAP_THRESHOLD_SQ,
+        };
+        // OPTIMIZATION: Pre-compute squared values
+        this._cachedConfig.MARKET_MAX_DISTANCE_SQ = this._cachedConfig.MARKET_MAX_DISTANCE * this._cachedConfig.MARKET_MAX_DISTANCE;
+        this._cachedConfig.CATCHUP_THRESHOLD_SQ = 1.0;
+    }
+
+    /**
+     * Create reusable broadcast message object
+     */
+    _createBroadcastMessage() {
+        return {
+            type: `${this.workerType}_state`,
+            buildingId: '',
+            term: 1,
+            authorityTerm: 1,
+            authorityId: '',
+            position: { x: 0, y: 0, z: 0 },
+            rotation: 0,
+            state: '',
+            targetId: null,
+            carrying: [],
+            moving: false,
+            stuckReason: null
+        };
+    }
+
+    /**
+     * OPTIMIZATION: Inline config access for hot paths
+     */
+    _getConfig(key) {
+        // Use cached values when available (hot path)
+        if (this._cachedConfig) {
+            return this._cachedConfig[key];
+        }
+        // Fallback for before init
+        return CONFIG[this.configKey]?.[key] ?? BASE_CONFIG_DEFAULTS[key];
+    }
+
+    // =========================================================================
+    // INITIALIZATION
+    // =========================================================================
+
+    initialize(config) {
+        const required = ['clientId', 'game', 'gameState', 'networkManager', 'getTerrainHeight', 'findPath', 'broadcastP2P'];
+        for (let i = 0; i < required.length; i++) {
+            const key = required[i];
+            if (config[key] === undefined) {
+                console.error(`[${this.constructor.name}] Missing required config: ${key}`);
+            }
+            this[key] = config[key];
+        }
+
+        // Optional callbacks
+        if (config.getPlayersInChunks) this.getPlayersInChunks = config.getPlayersInChunks;
+        if (config.getPlayerPosition) this.getPlayerPosition = config.getPlayerPosition;
+        if (config.isWalkable) this.isWalkable = config.isWalkable;
+        if (config.isOnRoad) this.isOnRoad = config.isOnRoad;
+        if (config.getSpeedMultiplier) this.getSpeedMultiplier = config.getSpeedMultiplier;
+        if (config.chunkManager) this.chunkManager = config.chunkManager;
+        if (config.isPlayerActive) this.isPlayerActive = config.isPlayerActive;
+        if (config.findPathAsync) this.findPathAsync = config.findPathAsync;
+
+        console.log(`[${this.constructor.name}] findPathAsync set:`, !!this.findPathAsync);
+
+        // OPTIMIZATION: Cache config values after init
+        this._cacheConfigValues();
+
+        // Register with spawn queue
+        const spawnQueue = getAISpawnQueue();
+        if (spawnQueue) {
+            spawnQueue.registerSpawnCallback(this.workerType, (data) => {
+                this._executeSpawn(data);
+            });
+        }
+
+        console.log(`[${this.constructor.name}] Initialized`);
+    }
+
+    getWorkerDialogueData(buildingId) {
+        const entity = this.entities.get(buildingId);
+        if (!entity) return null;
+
+        return {
+            state: entity.state,
+            stuckReason: entity.stuckReason,
+            carrying: entity.carrying ? entity.carrying.length : 0,
+            buildingId: buildingId,
+            ...this._getExtraDialogueData(entity)
+        };
+    }
+
+    _getExtraDialogueData(entity) {
+        return {};
+    }
+
+    dispose() {
+        // OPTIMIZATION: Collect keys first to avoid iterator invalidation
+        const keys = Array.from(this.entities.keys());
+        for (let i = 0; i < keys.length; i++) {
+            this._removeWorker(keys[i]);
+        }
+        this.entities.clear();
+        this.pendingStates.clear();
+    }
+
+    // =========================================================================
+    // SPAWN SYSTEM
+    // =========================================================================
+
+    checkWorkerSpawn(dockData) {
+        if (!CONFIG[this.configKey]?.ENABLED) return;
+
+        const { dockPosition, chunkId } = dockData;
+        const dockX = dockPosition?.x ?? dockPosition?.[0];
+        const dockZ = dockPosition?.z ?? dockPosition?.[2];
+
+        if (dockX === undefined || dockZ === undefined) return;
+
+        // OPTIMIZATION: Use cached squared distance (with fallback before init)
+        const maxDist = this._cachedConfig?.MARKET_MAX_DISTANCE ?? this._getConfig('MARKET_MAX_DISTANCE');
+        const maxDistSq = this._cachedConfig?.MARKET_MAX_DISTANCE_SQ ?? (maxDist * maxDist);
+        const spawnRangeSq = maxDistSq;
+        const chunkSize = this._cachedConfig?.CHUNK_SIZE ?? this._getConfig('CHUNK_SIZE');
+
+        const dockChunkMatch = chunkId?.match(/chunk_(-?\d+),(-?\d+)/);
+        if (!dockChunkMatch) return;
+
+        const dockChunkX = parseInt(dockChunkMatch[1], 10);
+        const dockChunkZ = parseInt(dockChunkMatch[2], 10);
+
+        // OPTIMIZATION: Pre-allocate markets array with estimated capacity
+        const marketsNearDock = [];
+        
+        // OPTIMIZATION: Cache gameState reference
+        const gameState = this.gameState;
+        
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dz = -1; dz <= 1; dz++) {
+                const key = `${dockChunkX + dx},${dockChunkZ + dz}`;
+                const markets = gameState.getMarketsInChunk(key);
+                
+                // OPTIMIZATION: Use indexed loop instead of for-of
+                for (let i = 0, len = markets.length; i < len; i++) {
+                    const market = markets[i];
+                    const mdx = market.position.x - dockX;
+                    const mdz = market.position.z - dockZ;
+                    const distSq = mdx * mdx + mdz * mdz;
+                    if (distSq <= maxDistSq) {
+                        marketsNearDock.push(market);
+                    }
+                }
+            }
+        }
+
+        if (marketsNearDock.length === 0) return;
+
+        // OPTIMIZATION: Cache method references
+        const clientId = this.clientId;
+        const getPlayersInChunks = this.getPlayersInChunks;
+        const getPlayerPosition = this.getPlayerPosition;
+        const entities = this.entities;
+
+        for (let m = 0; m < marketsNearDock.length; m++) {
+            const market = marketsNearDock[m];
+            const mChunkX = Math.floor(market.position.x / chunkSize);
+            const mChunkZ = Math.floor(market.position.z / chunkSize);
+
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dz = -1; dz <= 1; dz++) {
+                    const key = `${mChunkX + dx},${mChunkZ + dz}`;
+                    const buildings = this._getStructuresInChunk(key);
+
+                    for (let b = 0, bLen = buildings.length; b < bLen; b++) {
+                        const building = buildings[b];
+                        const bdx = building.position.x - market.position.x;
+                        const bdz = building.position.z - market.position.z;
+                        const distSq = bdx * bdx + bdz * bdz;
+
+                        if (distSq <= maxDistSq) {
+                            if (entities.has(building.id)) continue;
+
+                            const bChunkX = Math.floor(building.position.x / chunkSize);
+                            const bChunkZ = Math.floor(building.position.z / chunkSize);
+
+                            // OPTIMIZATION: Fill pre-allocated array instead of creating new one
+                            let keyIdx = 0;
+                            for (let cdx = -1; cdx <= 1; cdx++) {
+                                for (let cdz = -1; cdz <= 1; cdz++) {
+                                    this._nearbyChunkKeys[keyIdx++] = `${bChunkX + cdx},${bChunkZ + cdz}`;
+                                }
+                            }
+                            
+                            const playerIds = getPlayersInChunks?.(this._nearbyChunkKeys);
+
+                            let authorityId = clientId;
+                            if (playerIds) {
+                                for (let p = 0, pLen = playerIds.length; p < pLen; p++) {
+                                    const playerId = playerIds[p];
+                                    if (playerId === clientId) continue;
+                                    const pos = getPlayerPosition?.(playerId);
+                                    if (!pos) continue;
+
+                                    const dxP = pos.x - building.position.x;
+                                    const dzP = pos.z - building.position.z;
+                                    if (dxP * dxP + dzP * dzP < spawnRangeSq) {
+                                        if (playerId < authorityId) {
+                                            authorityId = playerId;
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (authorityId !== clientId) continue;
+
+                            const spawnQueue = getAISpawnQueue();
+                            if (spawnQueue && !spawnQueue.isQueued(this.workerType, building.id)) {
+                                spawnQueue.queueSpawn(this.workerType, { building }, building.id);
+                            } else if (!spawnQueue) {
+                                this._spawnWorker(building);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    _executeSpawn(data) {
+        const { building } = data;
+        if (this.entities.has(building.id)) return;
+        this._spawnWorker(building);
+    }
+
+    _spawnWorker(buildingData) {
+        const buildingId = buildingData.id;
+        const buildingPos = buildingData.position;
+
+        const spawnRadius = 1.5;
+        const startAngle = Math.random() * Math.PI * 2;
+        let spawnX = buildingPos.x;
+        let spawnZ = buildingPos.z;
+
+        // OPTIMIZATION: Cache isWalkable check
+        const isWalkable = this.isWalkable;
+        
+        for (let attempt = 0; attempt < 8; attempt++) {
+            const angle = startAngle + (attempt * 0.785398163); // PI/4 pre-computed
+            const testX = buildingPos.x + Math.cos(angle) * spawnRadius;
+            const testZ = buildingPos.z + Math.sin(angle) * spawnRadius;
+
+            if (!isWalkable || isWalkable(testX, testZ)) {
+                spawnX = testX;
+                spawnZ = testZ;
+                break;
+            }
+        }
+
+        const spawnY = this.getTerrainHeight?.(spawnX, spawnZ) ?? buildingPos.y ?? 0;
+
+        const entity = this._createBaseEntityState(buildingId, buildingPos, spawnX, spawnY, spawnZ);
+        Object.assign(entity, this._createWorkerSpecificState(buildingData));
+
+        if (!this._createWorkerVisual(entity)) {
+            console.warn(`[${this.constructor.name}] Failed to create visual for ${buildingId}`);
+            return;
+        }
+
+        this.entities.set(buildingId, entity);
+
+        if (this.pendingStates.has(buildingId)) {
+            const pendingState = this.pendingStates.get(buildingId);
+            this.pendingStates.delete(buildingId);
+            this._applyStateMessage(entity, pendingState);
+        }
+
+        if (this.broadcastP2P) {
+            this.broadcastP2P({
+                type: `${this.workerType}_spawn`,
+                buildingId: buildingId,
+                position: entity.position,
+                rotation: entity.rotation,
+                homePosition: entity.homePosition,
+                spawnedBy: this.clientId,
+                spawnTime: entity.spawnTime,
+                ...this._getSpawnBroadcastExtra(entity)
+            });
+        }
+
+        console.log(`[${this.constructor.name}] Spawned ${this.workerType} at ${buildingId}`);
+    }
+
+    _createBaseEntityState(buildingId, buildingPos, spawnX, spawnY, spawnZ) {
+        const STATES = this._getStateEnum();
+        return {
+            buildingId: buildingId,
+            position: { x: spawnX, y: spawnY, z: spawnZ },
+            targetPosition: { x: spawnX, y: spawnY, z: spawnZ },
+            rotation: Math.random() * 6.283185307, // PI*2 pre-computed
+            targetRotation: 0,
+            homePosition: { x: buildingPos.x, y: buildingPos.y ?? spawnY, z: buildingPos.z },
+
+            state: STATES.IDLE,
+            targetId: null,
+            carrying: [],
+
+            path: [],
+            pathIndex: 0,
+            lastPathTime: Date.now() - Math.random() * 6000, // Stagger to prevent synchronized pathfinding
+            pathFailures: 0,
+            pathPending: false,
+            lastTargetId: null,
+
+            stuckReason: null,
+            stuckTime: 0,
+            requestSentAt: null,
+
+            spawnedBy: this.clientId,
+            spawnTime: Date.now(),
+            authorityId: this.clientId,
+            authorityTerm: 1,
+
+            mesh: null,
+            visual: null,
+
+            _lastDecisionTime: 0,
+            _lastTerrainCheck: 0,
+            _cachedOnRoad: false,
+            _cachedSlopeMultiplier: 1.0,
+            _cachedWalkable: true,
+            _cachedWalkablePos: { x: spawnX, z: spawnZ }
+        };
+    }
+
+    _createWorkerVisual(entity) {
+        const manGLTF = modelManager.getGLTF('man');
+        if (!manGLTF) {
+            console.error(`[${this.constructor.name}] Man model not loaded`);
+            return false;
+        }
+
+        const mesh = SkeletonUtils.clone(manGLTF.scene);
+        mesh.scale.set(1, 1, 1);
+
+        let handBone = null;
+        
+        // OPTIMIZATION: Cache shared material reference
+        const sharedMaterial = this._sharedMaterial;
+        
+        mesh.traverse((child) => {
+            if (child.isBone && child.name === 'Bone014') {
+                handBone = child;
+            }
+            if (child.isMesh || child.isSkinnedMesh) {
+                child.visible = true;
+                child.frustumCulled = true;
+                if (child.name === 'Cube001_3' && child.material) {
+                    child.material = sharedMaterial;
+                }
+            }
+        });
+
+        if (handBone) {
+            const children = handBone.children;
+            for (let i = 0, len = children.length; i < len; i++) {
+                const child = children[i];
+                if (child.isMesh || child.isGroup) {
+                    child.visible = false;
+                }
+            }
+        }
+
+        mesh.position.set(entity.position.x, entity.position.y, entity.position.z);
+        mesh.rotation.y = entity.rotation;
+
+        const mixer = new THREE.AnimationMixer(mesh);
+        const animations = manGLTF.animations;
+        
+        // OPTIMIZATION: Use indexed search instead of .find()
+        let walkAnim = null;
+        let idleAnim = null;
+        for (let i = 0, len = animations.length; i < len; i++) {
+            const anim = animations[i];
+            const nameLower = anim.name.toLowerCase();
+            if (!walkAnim && nameLower.includes('walk')) walkAnim = anim;
+            if (!idleAnim && nameLower.includes('idle')) idleAnim = anim;
+            if (walkAnim && idleAnim) break;
+        }
+
+        let walkAction = null;
+        let idleAction = null;
+
+        if (walkAnim) {
+            walkAction = mixer.clipAction(walkAnim);
+        }
+        if (idleAnim) {
+            idleAction = mixer.clipAction(idleAnim);
+            idleAction.loop = THREE.LoopRepeat;
+        }
+
+        entity.visual = {
+            mixer: mixer,
+            walkAction: walkAction,
+            idleAction: idleAction,
+            isMoving: false
+        };
+        entity.mesh = mesh;
+
+        this._setupExtraAnimations(entity, mixer, animations);
+
+        if (idleAction) {
+            idleAction.play();
+        } else if (walkAction) {
+            walkAction.play();
+            mixer.update(0.001);
+            walkAction.stop();
+        }
+
+        if (this.game?.scene) {
+            this.game.scene.add(mesh);
+        }
+
+        if (this.game?.nameTagManager) {
+            this.game.nameTagManager.registerEntity(entity.buildingId, this.displayName, mesh);
+        }
+
+        return true;
+    }
+
+    _setupExtraAnimations(entity, mixer, animations) {}
+
+    _getSpawnBroadcastExtra(entity) {
+        return {};
+    }
+
+    // =========================================================================
+    // UPDATE LOOP
+    // =========================================================================
+
+    update(deltaTime) {
+        if (!CONFIG[this.configKey]?.ENABLED) return;
+
+        this._frameCount++;
+        const now = Date.now();
+
+        // OPTIMIZATION: Cache frequently accessed values (with fallbacks before init)
+        const myPos = this.game?.playerObject?.position;
+        const nearDistSq = this._cachedConfig?.FAR_DISTANCE_SQ ?? this._getConfig('FAR_DISTANCE_SQ');
+        const farUpdateInterval = this._cachedConfig?.FAR_UPDATE_INTERVAL ?? this._getConfig('FAR_UPDATE_INTERVAL');
+        const frameCount = this._frameCount;
+        const deltaSeconds = deltaTime / 1000;
+
+        // OPTIMIZATION: Use iterator directly for better performance on large Maps
+        const entities = this.entities;
+        for (const entry of entities) {
+            const entity = entry[1];
+            
+            // Distance-based update throttling
+            if (myPos) {
+                const dx = entity.position.x - myPos.x;
+                const dz = entity.position.z - myPos.z;
+                const distSq = dx * dx + dz * dz;
+
+                if (distSq > nearDistSq) {
+                    if (frameCount % farUpdateInterval !== 0) {
+                        // Just update animation for far entities
+                        const mixer = entity.visual?.mixer;
+                        if (mixer) {
+                            mixer.update(deltaSeconds);
+                        }
+                        continue;
+                    }
+                }
+            }
+
+            this._updateEntity(entity, deltaTime);
+        }
+
+        // Broadcast state periodically
+        const broadcastInterval = this._cachedConfig?.BROADCAST_INTERVAL ?? this._getConfig('BROADCAST_INTERVAL');
+        if (now - this._lastBroadcastTime >= broadcastInterval) {
+            this._lastBroadcastTime = now;
+            this._broadcastAuthorityState();
+        }
+    }
+
+    _updateEntity(entity, deltaTime) {
+        // Update animation mixer
+        const deltaSeconds = deltaTime / 1000;
+        const mixer = entity.visual?.mixer;
+        if (mixer) {
+            mixer.update(deltaSeconds);
+        }
+
+        // Non-authority clients interpolate only
+        if (entity.authorityId !== this.clientId) {
+            this._interpolateEntity(entity, deltaTime);
+            return;
+        }
+
+        // Authority runs state machine
+        const STATES = this._getStateEnum();
+        const state = entity.state;
+
+        if (state === STATES.IDLE) {
+            this._handleIdleState(entity);
+        } else if (state === STATES.STUCK) {
+            this._handleStuckState(entity);
+        } else if (this.movementStates.has(state)) {
+            this._handleMovementState(entity, deltaTime);
+        } else {
+            this._handleWorkerSpecificState(entity, deltaTime);
+        }
+    }
+
+    // =========================================================================
+    // STATE HANDLERS
+    // =========================================================================
+
+    _handleStuckState(entity) {
+        const now = Date.now();
+        const stuckTimeout = this._cachedConfig?.STUCK_TIMEOUT ?? this._getConfig('STUCK_TIMEOUT');
+        if (now - entity.stuckTime >= stuckTimeout) {
+            const STATES = this._getStateEnum();
+            entity.state = STATES.IDLE;
+            entity.stuckReason = null;
+            entity.pathFailures = 0;
+            entity.path = [];
+            entity.pathIndex = 0;
+            entity.pathPending = false;
+        }
+    }
+
+    _enterStuckState(entity, reason) {
+        const STATES = this._getStateEnum();
+        entity.state = STATES.STUCK;
+        entity.stuckReason = reason;
+        entity.stuckTime = Date.now();
+        this._setMoving(entity, false);
+    }
+
+    /**
+     * Check if this client has authority over the entity
+     */
+    _hasAuthority(entity) {
+        return entity.authorityId === this.clientId;
+    }
+
+    _handleMovementState(entity, deltaTime) {
+        if (entity.pathPending) {
+            const path = entity.path;
+            if (path && path.length > 0 && entity.pathIndex < path.length) {
+                this._setMoving(entity, true);
+                const arrived = this._moveAlongPath(entity, deltaTime);
+                if (arrived) {
+                    entity.path = [];
+                    entity.pathIndex = 0;
+                    this._setMoving(entity, false);
+                    this._onArrival(entity);
+                }
+            }
+            return;
+        }
+
+        const now = Date.now();
+        const pathfindInterval = this._cachedConfig?.PATHFIND_INTERVAL ?? this._getConfig('PATHFIND_INTERVAL');
+
+        if (now - entity.lastPathTime < pathfindInterval) {
+            const path = entity.path;
+            if (path && path.length > 0 && entity.pathIndex < path.length) {
+                // Debug: log first time we enter movement block
+                if (!entity._debugMovementBlockLogged) {
+                    console.log(`[${this.constructor.name}] Movement block entered for ${entity.buildingId}, pathLen=${path.length}, idx=${entity.pathIndex}`);
+                    entity._debugMovementBlockLogged = true;
+                }
+                this._setMoving(entity, true);
+                const arrived = this._moveAlongPath(entity, deltaTime);
+                if (arrived) {
+                    entity.path = [];
+                    entity.pathIndex = 0;
+                    this._setMoving(entity, false);
+                    this._onArrival(entity);
+                }
+            } else {
+                this._setMoving(entity, false);
+            }
+            return;
+        }
+
+        const target = this._getMovementTarget(entity);
+        if (!target) {
+            const STATES = this._getStateEnum();
+            entity.state = STATES.IDLE;
+            entity.pathFailures = 0;
+            this._setMoving(entity, false);
+            return;
+        }
+
+        const currentTargetId = target.id || `${target.x},${target.z}`;
+        if (entity.lastTargetId !== currentTargetId) {
+            entity.lastTargetId = currentTargetId;
+            entity.pathFailures = 0;
+        }
+
+        // Debug: log first path request per entity
+        if (!entity._debugPathLogged) {
+            console.log(`[${this.constructor.name}] Requesting path for ${entity.buildingId}, findPathAsync:`, !!this.findPathAsync);
+            entity._debugPathLogged = true;
+        }
+
+        if (this.findPathAsync) {
+            entity.pathPending = true;
+            entity.lastPathTime = now;
+            const requestTargetId = currentTargetId;
+
+            this.findPathAsync(entity.position, target)
+                .then(path => {
+                    entity.pathPending = false;
+
+                    if (!this._hasAuthority(entity)) return;
+                    if (entity.lastTargetId !== requestTargetId) return;
+
+                    if (path && path.length > 0) {
+                        entity.path = path;
+                        entity.pathIndex = 0;
+                        entity.pathFailures = 0;
+                        // Debug: log when path is set
+                        if (!entity._debugPathSetLogged) {
+                            console.log(`[${this.constructor.name}] Path set for ${entity.buildingId}: ${path.length} waypoints, first=(${path[0].x.toFixed(1)},${path[0].z.toFixed(1)})`);
+                            entity._debugPathSetLogged = true;
+                        }
+                    } else {
+                        const currentTarget = this._getMovementTarget(entity);
+                        if (!currentTarget) return;
+
+                        const dx = currentTarget.x - entity.position.x;
+                        const dz = currentTarget.z - entity.position.z;
+                        const distSq = dx * dx + dz * dz;
+
+                        if (distSq < 0.25) {
+                            entity.pathFailures = 0;
+                            this._setMoving(entity, false);
+                            this._onArrival(entity);
+                            return;
+                        }
+
+                        entity.pathFailures = (entity.pathFailures || 0) + 1;
+                        if (entity.pathFailures >= 3) {
+                            entity.pathFailures = 0;
+                            const STATES = this._getStateEnum();
+                            entity.state = STATES.STUCK;
+                            entity.stuckTime = Date.now();
+                            this._setMoving(entity, false);
+                        }
+                    }
+                })
+                .catch(() => {
+                    entity.pathPending = false;
+                });
+            return;
+        }
+
+        entity.lastPathTime = now;
+
+        if (this.findPath) {
+            const path = this.findPath(entity.position, target);
+            if (path && path.length > 0) {
+                entity.path = path;
+                entity.pathIndex = 0;
+                entity.pathFailures = 0;
+            } else {
+                const dx = target.x - entity.position.x;
+                const dz = target.z - entity.position.z;
+                const distSq = dx * dx + dz * dz;
+
+                if (distSq < 0.25) {
+                    entity.pathFailures = 0;
+                    this._setMoving(entity, false);
+                    this._onArrival(entity);
+                    return;
+                }
+
+                entity.pathFailures = (entity.pathFailures || 0) + 1;
+                if (entity.pathFailures >= 3) {
+                    entity.pathFailures = 0;
+                    const STATES = this._getStateEnum();
+                    entity.state = STATES.IDLE;
+                    this._setMoving(entity, false);
+                    return;
+                }
+            }
+        }
+
+        const path = entity.path;
+        if (!path || path.length === 0) {
+            this._setMoving(entity, false);
+            return;
+        }
+
+        if (entity.pathIndex >= path.length) {
+            entity.path = [];
+            entity.pathIndex = 0;
+            this._setMoving(entity, false);
+            this._onArrival(entity);
+            return;
+        }
+
+        this._setMoving(entity, true);
+
+        const arrived = this._moveAlongPath(entity, deltaTime);
+        if (arrived) {
+            entity.path = [];
+            entity.pathIndex = 0;
+            this._setMoving(entity, false);
+            this._onArrival(entity);
+        }
+    }
+
+    // =========================================================================
+    // PATHFINDING & MOVEMENT
+    // =========================================================================
+
+    /**
+     * OPTIMIZATION: Reduced function call overhead, cached values
+     */
+    _calculateTerrainSpeed(entity, dirX, dirZ) {
+        const now = Date.now();
+
+        // Refresh terrain cache every 250ms
+        if (now - entity._lastTerrainCheck > 250) {
+            entity._lastTerrainCheck = now;
+
+            const posX = entity.position.x;
+            const posZ = entity.position.z;
+
+            // Road check
+            entity._cachedOnRoad = this.isOnRoad ? this.isOnRoad(posX, posZ) : false;
+
+            // Slope check
+            const getTerrainHeight = this.getTerrainHeight;
+            if (getTerrainHeight) {
+                const currentHeight = getTerrainHeight(posX, posZ) || 0;
+                const aheadHeight = getTerrainHeight(posX + dirX, posZ + dirZ) || 0;
+
+                const slope = Math.abs(aheadHeight - currentHeight);
+                // OPTIMIZATION: Pre-computed: 180/PI ≈ 57.2957795, 1/45 ≈ 0.0222222
+                const slopeDegrees = Math.atan(slope) * 57.2957795;
+                const normalized = slopeDegrees * 0.0222222; // /45
+                const clamped = normalized > 1.0 ? 1.0 : normalized;
+                const slopeMultiplier = 1.0 - clamped * 0.9; // (1 - 0.1)
+                entity._cachedSlopeMultiplier = slopeMultiplier > 0.1 ? slopeMultiplier : 0.1;
+            }
+        }
+
+        // Use cached values
+        const speedMultiplier = (entity._cachedOnRoad ? 2.0 : 1.0) * (entity._cachedSlopeMultiplier || 1.0);
+        const moveSpeed = this._cachedConfig?.MOVE_SPEED ?? this._getConfig('MOVE_SPEED');
+        return moveSpeed * speedMultiplier;
+    }
+
+    _moveAlongPath(entity, deltaTime) {
+        const path = entity.path;
+        let pathIndex = entity.pathIndex;
+        const pathLength = path.length;
+
+        if (pathLength === 0 || pathIndex >= pathLength) {
+            return true;
+        }
+
+        // Debug: log first movement attempt per entity
+        if (!entity._debugMoveLogged) {
+            console.log(`[${this.constructor.name}] _moveAlongPath called for ${entity.buildingId}, pathLen=${pathLength}, pathIndex=${pathIndex}, deltaTime=${deltaTime}`);
+            entity._debugMoveLogged = true;
+        }
+
+        // OPTIMIZATION: Cache position reference
+        const pos = entity.position;
+        
+        let target = path[pathIndex];
+        let dx = target.x - pos.x;
+        let dz = target.z - pos.z;
+        let distSq = dx * dx + dz * dz;
+        let dist = Math.sqrt(distSq);
+        let dirX = dist > 0.01 ? dx / dist : 0;
+        let dirZ = dist > 0.01 ? dz / dist : 0;
+
+        const speed = this._calculateTerrainSpeed(entity, dirX, dirZ);
+        let remainingMove = speed * (deltaTime / 1000);
+
+        while (remainingMove > 0.001 && pathIndex < pathLength) {
+            target = path[pathIndex];
+            dx = target.x - pos.x;
+            dz = target.z - pos.z;
+            distSq = dx * dx + dz * dz;
+            dist = Math.sqrt(distSq);
+
+            if (dist <= remainingMove) {
+                pos.x = target.x;
+                pos.z = target.z;
+                remainingMove -= dist;
+                pathIndex++;
+            } else {
+                dirX = dx / dist;
+                dirZ = dz / dist;
+                pos.x += dirX * remainingMove;
+                pos.z += dirZ * remainingMove;
+                remainingMove = 0;
+                entity.rotation = Math.atan2(dx, dz);
+            }
+        }
+        
+        entity.pathIndex = pathIndex;
+
+        // Update terrain height
+        const getTerrainHeight = this.getTerrainHeight;
+        if (getTerrainHeight) {
+            pos.y = getTerrainHeight(pos.x, pos.z);
+        }
+
+        // Update mesh
+        const mesh = entity.mesh;
+        if (mesh) {
+            mesh.position.set(pos.x, pos.y, pos.z);
+            mesh.rotation.y = entity.rotation;
+        }
+
+        return pathIndex >= pathLength;
+    }
+
+    // =========================================================================
+    // ANIMATION
+    // =========================================================================
+
+    _setMoving(entity, isMoving) {
+        const visual = entity.visual;
+        if (!visual) return;
+        if (visual.isMoving === isMoving) return;
+
+        visual.isMoving = isMoving;
+        this._onMovingChanged(entity, isMoving);
+
+        if (isMoving) {
+            visual.idleAction?.stop();
+            visual.walkAction?.reset().play();
+        } else {
+            visual.walkAction?.stop();
+            if (visual.idleAction) {
+                visual.idleAction.reset().play();
+            } else if (visual.walkAction) {
+                visual.walkAction.play();
+                visual.mixer?.update(0.001);
+                visual.walkAction.stop();
+            }
+        }
+    }
+
+    _onMovingChanged(entity, isMoving) {}
+
+    /**
+     * OPTIMIZATION: Reduced object access depth, cached thresholds
+     */
+    _interpolateEntity(entity, deltaTime) {
+        const target = entity.targetPosition;
+        if (!target) return;
+
+        const pos = entity.position;
+        const dx = target.x - pos.x;
+        const dy = target.y - pos.y;
+        const dz = target.z - pos.z;
+        const distSq = dx * dx + dz * dz;
+
+        const cfg = this._cachedConfig;
+        let isMoving = false;
+
+        if (distSq > cfg.TELEPORT_THRESHOLD_SQ) {
+            pos.x = target.x;
+            pos.z = target.z;
+        } else if (distSq < cfg.SNAP_THRESHOLD_SQ) {
+            pos.x = target.x;
+            pos.z = target.z;
+        } else {
+            isMoving = true;
+            const dist = Math.sqrt(distSq);
+            const dirX = dx / dist;
+            const dirZ = dz / dist;
+
+            const baseSpeed = this._calculateTerrainSpeed(entity, dirX, dirZ);
+            const catchUpMultiplier = distSq > cfg.CATCHUP_THRESHOLD_SQ ? 1.5 : 1.0;
+            const speed = baseSpeed * catchUpMultiplier;
+            const deltaSeconds = deltaTime / 1000;
+            const moveDist = speed * deltaSeconds;
+            const actualMove = moveDist < dist ? moveDist : dist;
+
+            pos.x += dirX * actualMove;
+            pos.z += dirZ * actualMove;
+        }
+
+        // Y position
+        const getTerrainHeight = this.getTerrainHeight;
+        if (getTerrainHeight) {
+            const targetY = getTerrainHeight(pos.x, pos.z);
+            const yLerpFactor = 8.0 * (deltaTime / 1000);
+            const clampedLerp = yLerpFactor > 1.0 ? 1.0 : yLerpFactor;
+            pos.y += (targetY - pos.y) * clampedLerp;
+        }
+
+        // Rotation
+        let targetRotation;
+        if (isMoving) {
+            targetRotation = Math.atan2(dx, dz);
+        } else if (entity.targetRotation !== undefined) {
+            targetRotation = entity.targetRotation;
+        } else {
+            targetRotation = entity.rotation;
+        }
+
+        let rotDiff = targetRotation - entity.rotation;
+        // OPTIMIZATION: Pre-computed PI*2 = 6.283185307
+        while (rotDiff > 3.14159265) rotDiff -= 6.283185307;
+        while (rotDiff < -3.14159265) rotDiff += 6.283185307;
+
+        const maxRotation = 2.1 * (deltaTime / 1000);
+        if (rotDiff > maxRotation) rotDiff = maxRotation;
+        else if (rotDiff < -maxRotation) rotDiff = -maxRotation;
+        entity.rotation += rotDiff;
+
+        // Update mesh
+        const mesh = entity.mesh;
+        if (mesh) {
+            mesh.position.set(pos.x, pos.y, pos.z);
+            mesh.rotation.y = entity.rotation;
+        }
+
+        this._setMoving(entity, isMoving);
+    }
+
+    // =========================================================================
+    // AUTHORITY SYSTEM
+    // =========================================================================
+
+    _calculateAuthority(buildingId) {
+        const entity = this.entities.get(buildingId);
+        if (!entity) return this.clientId;
+
+        const pos = entity.position;
+        const { chunkX, chunkZ } = ChunkCoordinates.worldToChunk(pos.x, pos.z);
+        
+        // OPTIMIZATION: Fill pre-allocated array
+        let keyIdx = 0;
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dz = -1; dz <= 1; dz++) {
+                this._nearbyChunkKeys[keyIdx++] = `${chunkX + dx},${chunkZ + dz}`;
+            }
+        }
+
+        const players = this.getPlayersInChunks?.(this._nearbyChunkKeys);
+        if (!players || players.length === 0) return this.clientId;
+
+        let lowestId = this.clientId;
+        const isPlayerActive = this.isPlayerActive;
+        
+        for (let i = 0, len = players.length; i < len; i++) {
+            const playerId = players[i];
+            if (isPlayerActive && !isPlayerActive(playerId)) continue;
+            if (lowestId === null || playerId < lowestId) {
+                lowestId = playerId;
+            }
+        }
+
+        return lowestId;
+    }
+
+    _checkStaleAuthorities() {
+        const isPlayerActive = this.isPlayerActive;
+        if (!isPlayerActive) return;
+
+        const STATES = this._getStateEnum();
+        const clientId = this.clientId;
+
+        for (const [buildingId, entity] of this.entities) {
+            if (entity.authorityId === clientId) continue;
+            if (entity.state === STATES.STUCK) continue;
+
+            if (!isPlayerActive(entity.authorityId)) {
+                const newAuthority = this._calculateAuthority(buildingId);
+                if (newAuthority === clientId) {
+                    this._claimAuthority(buildingId, entity);
+                }
+                entity._pendingAuthorityCheck = false;
+            }
+        }
+    }
+
+    onPeerDisconnected(peerId) {
+        const clientId = this.clientId;
+        for (const [buildingId, entity] of this.entities) {
+            if (entity.authorityId === peerId) {
+                const newAuthority = this._calculateAuthority(buildingId);
+                if (newAuthority === clientId) {
+                    this._claimAuthority(buildingId, entity);
+                }
+            }
+        }
+    }
+
+    onPeerJoinedChunk(peerId, chunkKey) {
+        const [peerChunkX, peerChunkZ] = chunkKey.split(',').map(Number);
+        const clientId = this.clientId;
+        
+        for (const [buildingId, entity] of this.entities) {
+            const { chunkX, chunkZ } = ChunkCoordinates.worldToChunk(entity.homePosition.x, entity.homePosition.z);
+
+            const dx = peerChunkX - chunkX;
+            const dz = peerChunkZ - chunkZ;
+            
+            // OPTIMIZATION: Use comparison instead of Math.abs
+            if (dx >= -1 && dx <= 1 && dz >= -1 && dz <= 1) {
+                const newAuthority = this._calculateAuthority(buildingId);
+                if (newAuthority !== entity.authorityId) {
+                    if (newAuthority === clientId) {
+                        this._claimAuthority(buildingId, entity);
+                    } else {
+                        entity.authorityId = newAuthority;
+                    }
+                }
+            }
+        }
+    }
+
+    onPeerChunkChanged(peerId, oldChunkKey, newChunkKey) {
+        if (oldChunkKey) {
+            const [oldChunkX, oldChunkZ] = oldChunkKey.split(',').map(Number);
+            const clientId = this.clientId;
+            
+            for (const [buildingId, entity] of this.entities) {
+                const { chunkX, chunkZ } = ChunkCoordinates.worldToChunk(entity.homePosition.x, entity.homePosition.z);
+                const dx = oldChunkX - chunkX;
+                const dz = oldChunkZ - chunkZ;
+
+                if (dx >= -1 && dx <= 1 && dz >= -1 && dz <= 1) {
+                    if (entity.authorityId === peerId) {
+                        const newAuthority = this._calculateAuthority(buildingId);
+                        if (newAuthority === clientId) {
+                            this._claimAuthority(buildingId, entity);
+                        } else {
+                            entity.authorityId = newAuthority;
+                        }
+                    }
+                }
+            }
+        }
+
+        this.onPeerJoinedChunk(peerId, newChunkKey);
+    }
+
+    _claimAuthority(buildingId, entity) {
+        const newAuthority = this._calculateAuthority(buildingId);
+        if (newAuthority === this.clientId) {
+            entity.authorityId = this.clientId;
+            entity.authorityTerm = (entity.authorityTerm || 0) + 1;
+
+            entity.path = [];
+            entity.pathIndex = 0;
+            entity.pathPending = false;
+            entity.pathFailures = 0;
+            entity.lastPathTime = 0;
+
+            const target = entity.targetPosition;
+            if (target) {
+                entity.position.x = target.x;
+                entity.position.y = target.y;
+                entity.position.z = target.z;
+            }
+
+            const mesh = entity.mesh;
+            if (mesh) {
+                const pos = entity.position;
+                mesh.position.set(pos.x, pos.y, pos.z);
+            }
+
+            console.log(`[${this.constructor.name}] Claimed authority for ${buildingId} (term ${entity.authorityTerm})`);
+            this._broadcastSingleEntityState(buildingId, entity);
+        }
+    }
+
+    /**
+     * OPTIMIZATION: Consolidated broadcast logic to reduce duplication
+     */
+    _fillBroadcastMessage(buildingId, entity) {
+        const msg = this._broadcastMsg;
+        msg.buildingId = buildingId;
+        msg.term = entity.authorityTerm || 1;
+        msg.authorityTerm = entity.authorityTerm || 1;
+        msg.authorityId = entity.authorityId;
+        
+        const pos = entity.position;
+        msg.position.x = pos.x;
+        msg.position.y = pos.y;
+        msg.position.z = pos.z;
+        
+        msg.rotation = entity.rotation;
+        msg.state = entity.state;
+        msg.targetId = entity.targetId;
+        msg.moving = entity.visual?.isMoving || false;
+        msg.stuckReason = entity.stuckReason;
+
+        // OPTIMIZATION: Clear and fill array without creating new one
+        const msgCarrying = msg.carrying;
+        const entityCarrying = entity.carrying;
+        msgCarrying.length = 0;
+        for (let i = 0, len = entityCarrying.length; i < len; i++) {
+            msgCarrying.push(entityCarrying[i]);
+        }
+
+        this._addBroadcastExtraFields(entity, msg);
+    }
+
+    _broadcastSingleEntityState(buildingId, entity) {
+        if (!this.broadcastP2P) return;
+        this._fillBroadcastMessage(buildingId, entity);
+        this.broadcastP2P(this._broadcastMsg);
+    }
+
+    // =========================================================================
+    // P2P NETWORKING
+    // =========================================================================
+
+    _broadcastAuthorityState() {
+        if (!this.broadcastP2P) return;
+
+        this._checkStaleAuthorities();
+
+        const clientId = this.clientId;
+        const broadcastP2P = this.broadcastP2P;
+        
+        for (const [buildingId, entity] of this.entities) {
+            if (entity.authorityId !== clientId) continue;
+            
+            this._fillBroadcastMessage(buildingId, entity);
+            broadcastP2P(this._broadcastMsg);
+        }
+    }
+
+    _addBroadcastExtraFields(entity, msg) {}
+
+    handleStateMessage(message) {
+        const { buildingId, term, authorityTerm, authorityId, position, rotation, state, targetId, moving, carrying, stuckReason } = message;
+
+        const entity = this.entities.get(buildingId);
+        if (!entity) {
+            this.pendingStates.set(buildingId, message);
+            return;
+        }
+
+        const remoteTerm = term || authorityTerm || 0;
+        const localTerm = entity.authorityTerm || 0;
+        const remoteAuthority = authorityId || message.senderId;
+
+        if (remoteTerm > localTerm) {
+            entity.authorityTerm = remoteTerm;
+            entity.authorityId = remoteAuthority;
+        } else if (remoteTerm === localTerm && remoteAuthority && remoteAuthority !== entity.authorityId) {
+            if (remoteAuthority < entity.authorityId) {
+                entity.authorityId = remoteAuthority;
+            }
+        }
+
+        if (entity.authorityId === this.clientId) return;
+
+        let validY = position.y;
+        if (!Number.isFinite(validY) || validY <= 0) {
+            if (this.getTerrainHeight) {
+                validY = this.getTerrainHeight(position.x, position.z);
+            }
+            if (!Number.isFinite(validY) || validY <= 0) {
+                validY = entity.position?.y || 0;
+            }
+        }
+
+        entity.targetPosition = { x: position.x, y: validY, z: position.z };
+        entity.targetRotation = rotation;
+        entity.state = state;
+        entity.targetId = targetId;
+        entity.stuckReason = stuckReason;
+
+        if (carrying) {
+            entity.carrying = carrying;
+        }
+
+        this._setMoving(entity, moving);
+        this._applyExtraStateFields(entity, message);
+    }
+
+    _applyExtraStateFields(entity, message) {}
+
+    handleSpawnMessage(message) {
+        const { buildingId, position, rotation, homePosition, spawnedBy, spawnTime } = message;
+
+        if (this.entities.has(buildingId)) {
+            const existingEntity = this.entities.get(buildingId);
+
+            if (spawnedBy < existingEntity.spawnedBy) {
+                console.log(`[${this.constructor.name}] Spawn conflict for ${buildingId}: peer ${spawnedBy} wins over ${existingEntity.spawnedBy}`);
+                this._removeWorker(buildingId);
+            } else {
+                return;
+            }
+        }
+
+        const building = this.gameState?.getStructureById(buildingId);
+        if (!building) {
+            this.pendingStates.set(buildingId, message);
+            return;
+        }
+
+        const spawnY = this.getTerrainHeight?.(position.x, position.z) ?? position.y ?? 0;
+
+        const entity = this._createBaseEntityState(buildingId, homePosition, position.x, spawnY, position.z);
+        entity.rotation = rotation;
+        entity.targetRotation = rotation;
+        entity.spawnedBy = spawnedBy;
+        entity.spawnTime = spawnTime || Date.now();
+        entity.authorityId = spawnedBy;
+
+        Object.assign(entity, this._createWorkerSpecificState(building));
+        this._applySpawnMessageExtra(entity, message);
+
+        if (!this._createWorkerVisual(entity)) {
+            return;
+        }
+
+        this.entities.set(buildingId, entity);
+    }
+
+    _applySpawnMessageExtra(entity, message) {}
+
+    handleDespawnMessage(message) {
+        const { buildingId } = message;
+        this._removeWorker(buildingId);
+    }
+
+    _applyStateMessage(entity, message) {
+        entity.targetPosition = { ...message.position };
+        entity.targetRotation = message.rotation;
+        entity.state = message.state;
+        if (message.carrying) {
+            // Deep copy to avoid mutation issues
+            entity.carrying = message.carrying.map(c => ({ ...c }));
+        }
+        this._setMoving(entity, message.moving);
+        this._applyExtraStateFields(entity, message);
+    }
+
+    getActiveWorkersForSync() {
+        const result = [];
+        const clientId = this.clientId;
+        
+        for (const [buildingId, entity] of this.entities) {
+            if (entity.authorityId === clientId) {
+                result.push({
+                    buildingId,
+                    spawnedBy: entity.spawnedBy,
+                    spawnTime: entity.spawnTime,
+                    position: { ...entity.position },
+                    rotation: entity.rotation,
+                    homePosition: { ...entity.homePosition },
+                    state: entity.state,
+                    carrying: entity.carrying.slice(), // OPTIMIZATION: slice vs spread for arrays
+                    authorityId: entity.authorityId,
+                    authorityTerm: entity.authorityTerm || 1,
+                    moving: entity.visual?.isMoving || false,
+                    ...this._getSyncExtraFields(entity)
+                });
+            }
+        }
+        return result;
+    }
+
+    _getSyncExtraFields(entity) {
+        return {};
+    }
+
+    syncWorkersFromPeer(workerList, peerId) {
+        for (let i = 0, len = workerList.length; i < len; i++) {
+            const data = workerList[i];
+            if (!this.entities.has(data.buildingId)) {
+                this.handleSpawnMessage({
+                    ...data,
+                    spawnedBy: data.spawnedBy || peerId
+                });
+
+                const entity = this.entities.get(data.buildingId);
+                if (entity) {
+                    if (data.state) entity.state = data.state;
+                    if (data.carrying && Array.isArray(data.carrying)) {
+                        entity.carrying = data.carrying.slice();
+                    }
+                    if (data.authorityId) entity.authorityId = data.authorityId;
+                    if (data.authorityTerm) entity.authorityTerm = data.authorityTerm;
+                    if (data.rotation !== undefined) {
+                        entity.rotation = data.rotation;
+                        entity.targetRotation = data.rotation;
+                    }
+                    if (data.position && entity.mesh) {
+                        const pos = entity.position;
+                        pos.x = data.position.x;
+                        pos.y = data.position.y;
+                        pos.z = data.position.z;
+                        entity.targetPosition = { ...data.position };
+                        entity.mesh.position.set(pos.x, pos.y, pos.z);
+                        if (data.rotation !== undefined) {
+                            entity.mesh.rotation.y = data.rotation;
+                        }
+                    }
+                    if (data.moving !== undefined) {
+                        this._setMoving(entity, data.moving);
+                    }
+                    this._applyExtraStateFields(entity, data);
+                }
+            }
+        }
+    }
+
+    // =========================================================================
+    // MARKET & STRUCTURE HELPERS
+    // =========================================================================
+
+    _findMarketNearPosition(position, maxDist) {
+        const maxDistSq = maxDist * maxDist;
+        const { chunkX, chunkZ } = ChunkCoordinates.worldToChunk(position.x, position.z);
+        const gameState = this.gameState;
+
+        let nearest = null;
+        let nearestDistSq = maxDistSq;
+
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dz = -1; dz <= 1; dz++) {
+                const key = `${chunkX + dx},${chunkZ + dz}`;
+                const markets = gameState?.getMarketsInChunk(key) || [];
+
+                for (let i = 0, len = markets.length; i < len; i++) {
+                    const market = markets[i];
+                    const mdx = market.position.x - position.x;
+                    const mdz = market.position.z - position.z;
+                    const distSq = mdx * mdx + mdz * mdz;
+
+                    if (distSq < nearestDistSq) {
+                        nearestDistSq = distSq;
+                        nearest = market;
+                    }
+                }
+            }
+        }
+
+        return nearest;
+    }
+
+    _findMarketById(marketId) {
+        return this.gameState?.getStructureById(marketId);
+    }
+
+    _calculateApproachPosition(structure, fromPosition, approachDistance = 3.0) {
+        const centerX = structure.position?.x ?? structure.x;
+        const centerZ = structure.position?.z ?? structure.z;
+
+        const dx = fromPosition.x - centerX;
+        const dz = fromPosition.z - centerZ;
+        const distSq = dx * dx + dz * dz;
+
+        let dirX, dirZ;
+        if (distSq < 0.01) {
+            dirX = 1;
+            dirZ = 0;
+        } else {
+            const dist = Math.sqrt(distSq);
+            dirX = dx / dist;
+            dirZ = dz / dist;
+        }
+
+        let targetX = centerX + dirX * approachDistance;
+        let targetZ = centerZ + dirZ * approachDistance;
+
+        const isWalkable = this.isWalkable;
+        if (isWalkable && !isWalkable(targetX, targetZ)) {
+            // OPTIMIZATION: Pre-computed angle increment
+            for (let i = 1; i <= 8; i++) {
+                const angle = i * 0.785398163; // PI/4
+                const testX = centerX + Math.cos(angle) * approachDistance;
+                const testZ = centerZ + Math.sin(angle) * approachDistance;
+                if (isWalkable(testX, testZ)) {
+                    targetX = testX;
+                    targetZ = testZ;
+                    break;
+                }
+            }
+        }
+
+        return { x: targetX, z: targetZ };
+    }
+
+    // =========================================================================
+    // BASE DEPOSIT HANDLING
+    // =========================================================================
+
+    /**
+     * Base market deposit handler - fixes infinite loop bug
+     * Subclasses can use this for simple market deposits, or override for custom behavior
+     */
+    _handleMarketDeposit(entity) {
+        const market = this._findMarketById(entity.targetId);
+        const items = this._getCarriedItems(entity);
+
+        // FIX: Transition to IDLE if can't deposit (prevents infinite loop)
+        if (!market || !items || items.length === 0) {
+            entity.state = this._getStateEnum().IDLE;
+            entity.requestSentAt = null;
+            return;
+        }
+
+        if (entity.requestSentAt) {
+            if (Date.now() - entity.requestSentAt > 10000) {
+                entity.requestSentAt = null;
+                entity.state = this._getStateEnum().IDLE;
+            }
+            return;
+        }
+
+        this._sendMarketDepositRequest(entity, entity.targetId);
+    }
+
+    _sendMarketDepositRequest(entity, marketId) {
+        const market = this._findMarketById(marketId);
+        const items = this._getCarriedItems(entity);
+        if (!market || !items || items.length === 0) return;
+
+        const chunkKey = market.chunkKey || ChunkCoordinates.worldToChunkKey(
+            market.position.x, market.position.z
+        );
+
+        if (this.networkManager) {
+            this.networkManager.sendMessage('npc_deposit_to_market', {
+                npcType: this.workerType,
+                [this._getDepositIdField()]: entity.buildingId,
+                marketId: marketId,
+                chunkId: `chunk_${chunkKey}`,
+                items: items
+            });
+            entity.requestSentAt = Date.now();
+        }
+    }
+
+    /**
+     * Override in subclasses if using different field (e.g., chiseledStone)
+     */
+    _getCarriedItems(entity) {
+        return entity.carrying || [];
+    }
+
+    /**
+     * Override in subclasses if using different ID field name
+     */
+    _getDepositIdField() {
+        return `${this.workerType}Id`;
+    }
+
+    /**
+     * Base deposit response handler
+     * Subclasses should call this or override completely
+     */
+    _handleMarketDepositResponse(payload) {
+        const buildingId = payload[this._getDepositIdField()] || payload.npcId;
+        const entity = this.entities.get(buildingId);
+        if (!entity) return;
+
+        entity.requestSentAt = null;
+
+        if (payload.success) {
+            this._clearCarriedItems(entity);
+            entity.state = this._getStateEnum().RETURNING;
+            entity.path = [];
+            this._setMoving(entity, true);
+        } else {
+            entity.state = this._getStateEnum().IDLE;
+        }
+    }
+
+    /**
+     * Override in subclasses if using different field
+     */
+    _clearCarriedItems(entity) {
+        entity.carrying = [];
+    }
+
+    // =========================================================================
+    // CLEANUP
+    // =========================================================================
+
+    onBuildingDestroyed(buildingId) {
+        this._removeWorker(buildingId);
+
+        if (this.broadcastP2P) {
+            this.broadcastP2P({
+                type: `${this.workerType}_despawn`,
+                buildingId: buildingId
+            });
+        }
+    }
+
+    onMarketDestroyed(marketPosition) {
+        if (!marketPosition) return;
+
+        // OPTIMIZATION: Use cached squared distance (with fallback before init)
+        const maxDist = this._cachedConfig?.MARKET_MAX_DISTANCE ?? this._getConfig('MARKET_MAX_DISTANCE');
+        const maxDistSq = this._cachedConfig?.MARKET_MAX_DISTANCE_SQ ?? (maxDist * maxDist);
+        const toDespawn = [];
+
+        for (const [buildingId, entity] of this.entities) {
+            const dx = entity.homePosition.x - marketPosition.x;
+            const dz = entity.homePosition.z - marketPosition.z;
+            const distSq = dx * dx + dz * dz;
+
+            if (distSq <= maxDistSq) {
+                toDespawn.push(buildingId);
+            }
+        }
+
+        const broadcastP2P = this.broadcastP2P;
+        for (let i = 0, len = toDespawn.length; i < len; i++) {
+            const buildingId = toDespawn[i];
+            console.log(`[${this.constructor.name}] Despawning worker ${buildingId} - connected market destroyed`);
+            this._removeWorker(buildingId);
+
+            if (broadcastP2P) {
+                broadcastP2P({
+                    type: `${this.workerType}_despawn`,
+                    buildingId: buildingId
+                });
+            }
+        }
+    }
+
+    _removeWorker(buildingId) {
+        const entity = this.entities.get(buildingId);
+        if (!entity) return;
+
+        this._onWorkerRemoved(entity);
+
+        const mesh = entity.mesh;
+        const scene = this.game?.scene;
+        if (mesh && scene) {
+            scene.remove(mesh);
+            mesh.traverse((child) => {
+                if (child.geometry) child.geometry.dispose();
+            });
+        }
+
+        if (this.game?.nameTagManager) {
+            this.game.nameTagManager.unregisterEntity(buildingId);
+        }
+
+        this.entities.delete(buildingId);
+    }
+
+    _onWorkerRemoved(entity) {}
+
+    // =========================================================================
+    // ABSTRACT METHODS - Subclass MUST implement
+    // =========================================================================
+
+    _getStructuresInChunk(chunkKey) {
+        throw new Error(`${this.constructor.name} must implement _getStructuresInChunk()`);
+    }
+
+    _getStateEnum() {
+        throw new Error(`${this.constructor.name} must implement _getStateEnum()`);
+    }
+
+    _createWorkerSpecificState(buildingData) {
+        throw new Error(`${this.constructor.name} must implement _createWorkerSpecificState()`);
+    }
+
+    _handleIdleState(entity) {
+        throw new Error(`${this.constructor.name} must implement _handleIdleState()`);
+    }
+
+    _handleWorkerSpecificState(entity, deltaTime) {
+        throw new Error(`${this.constructor.name} must implement _handleWorkerSpecificState()`);
+    }
+
+    _getMovementTarget(entity) {
+        throw new Error(`${this.constructor.name} must implement _getMovementTarget()`);
+    }
+
+    _onArrival(entity) {
+        throw new Error(`${this.constructor.name} must implement _onArrival()`);
+    }
+}

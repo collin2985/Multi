@@ -1,0 +1,22 @@
+{
+  "players": [],
+  "objectChanges": [
+    {
+      "action": "add",
+      "id": "bearden_68,178",
+      "name": "bearden",
+      "position": [
+        3395,
+        30.815913617245148,
+        8900.25
+      ],
+      "rotation": 1.910666845823365,
+      "scale": 1,
+      "quality": 30,
+      "lastRepairTime": 1768525531200,
+      "chunkId": "chunk_68,178",
+      "isBrownBearStructure": true
+    }
+  ],
+  "seed": 12345
+}

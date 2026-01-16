@@ -1,0 +1,38 @@
+{
+  "players": [],
+  "objectChanges": [
+    {
+      "action": "add",
+      "id": "bearden_69,174",
+      "name": "bearden",
+      "position": [
+        3455.75,
+        23.599591448742284,
+        8700.75
+      ],
+      "rotation": 6.155992455075327,
+      "scale": 1,
+      "quality": 30,
+      "lastRepairTime": 1768525531200,
+      "chunkId": "chunk_69,174",
+      "isBrownBearStructure": true
+    },
+    {
+      "action": "add",
+      "id": "deertree_69,174",
+      "name": "deertree",
+      "position": [
+        3460.5,
+        21.855698400660604,
+        8702
+      ],
+      "rotation": 0.6700915338534978,
+      "scale": 1,
+      "quality": 100,
+      "lastRepairTime": 1768525531201,
+      "chunkId": "chunk_69,174",
+      "isDeerTreeStructure": true
+    }
+  ],
+  "seed": 12345
+}

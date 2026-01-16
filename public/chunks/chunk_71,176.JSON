@@ -1,0 +1,33 @@
+{
+  "players": [],
+  "objectChanges": [
+    {
+      "action": "add",
+      "id": "construction_1768525573524_kixmxm0n3",
+      "name": "10x4construction",
+      "position": [
+        3535.75,
+        1,
+        8776.5
+      ],
+      "quality": 50,
+      "lastRepairTime": 1768525573524,
+      "scale": 1,
+      "chunkId": "chunk_71,176",
+      "totalResources": null,
+      "remainingResources": null,
+      "harvestedBy": null,
+      "harvestStartTime": null,
+      "isConstructionSite": true,
+      "targetStructure": "dock",
+      "rotation": 1.5707963267948966,
+      "requiredMaterials": {
+        "chiseledlimestone": 1
+      },
+      "materials": {},
+      "finalFoundationY": 1,
+      "owner": "session_tc2mhfhsez"
+    }
+  ],
+  "seed": 12345
+}

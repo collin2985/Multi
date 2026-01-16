@@ -1,0 +1,4 @@
+{"ts":1768525512331,"action_type":7,"actor_id":"session_tc2mhfhsez","actor_account":null,"actor_name":null,"data":{"ip":"::1"}}
+{"ts":1768525512331,"action_type":9,"chunk_x":70,"chunk_z":176,"actor_id":"session_tc2mhfhsez","actor_account":null,"actor_name":null,"data":null}
+{"ts":1768525549706,"action_type":10,"obj_type":"sandstone","obj_id":"70,176_sandstone_49","chunk_x":70,"chunk_z":176,"actor_id":"session_tc2mhfhsez","actor_account":null,"actor_name":null,"data":{"remaining":19}}
+{"ts":1768525573526,"action_type":1,"obj_type":"10x4construction","obj_id":"construction_1768525573524_kixmxm0n3","chunk_x":71,"chunk_z":176,"actor_id":"session_tc2mhfhsez","actor_account":null,"actor_name":null,"owner_id":"session_tc2mhfhsez"}

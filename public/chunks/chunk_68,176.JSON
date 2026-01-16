@@ -1,0 +1,184 @@
+{
+  "players": [],
+  "objectChanges": [
+    {
+      "action": "add",
+      "id": "bandit_campfire_68,176_0",
+      "name": "campfire",
+      "position": [
+        3400,
+        22.525355603592256,
+        8800
+      ],
+      "rotation": 3.442667258098413,
+      "scale": 1,
+      "quality": 2,
+      "lastRepairTime": 1768525531198,
+      "chunkId": "chunk_68,176",
+      "inventory": {
+        "items": [
+          {
+            "id": "bandit_campfire_68,176_0_firewood",
+            "type": "oakfirewood",
+            "x": 0,
+            "y": 0,
+            "width": 2,
+            "height": 4,
+            "quality": 100,
+            "durability": 100
+          },
+          {
+            "id": "bandit_campfire_68,176_0_meat_0",
+            "type": "cookedmeat",
+            "x": 2,
+            "y": 0,
+            "width": 1,
+            "height": 1,
+            "quality": 50,
+            "durability": 40
+          },
+          {
+            "id": "bandit_campfire_68,176_0_meat_1",
+            "type": "cookedmeat",
+            "x": 3,
+            "y": 0,
+            "width": 1,
+            "height": 1,
+            "quality": 50,
+            "durability": 40
+          },
+          {
+            "id": "bandit_campfire_68,176_0_meat_2",
+            "type": "cookedmeat",
+            "x": 2,
+            "y": 1,
+            "width": 1,
+            "height": 1,
+            "quality": 50,
+            "durability": 40
+          },
+          {
+            "id": "bandit_campfire_68,176_0_meat_3",
+            "type": "cookedmeat",
+            "x": 3,
+            "y": 1,
+            "width": 1,
+            "height": 1,
+            "quality": 50,
+            "durability": 40
+          }
+        ]
+      },
+      "isBanditStructure": true,
+      "materialType": "limestone"
+    },
+    {
+      "action": "add",
+      "id": "bandit_tent_68,176_0",
+      "name": "tent",
+      "position": [
+        3399.75,
+        21.60763533449468,
+        8795.5
+      ],
+      "rotation": 2.8630393159594796,
+      "scale": 1,
+      "quality": 15,
+      "lastRepairTime": 1768525531199,
+      "chunkId": "chunk_68,176",
+      "inventory": {
+        "items": [
+          {
+            "id": "bandit_tent_68,176_0_coin",
+            "type": "coin",
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1,
+            "quantity": 22
+          }
+        ]
+      },
+      "isBanditStructure": true
+    },
+    {
+      "action": "add",
+      "id": "bandit_tent_68,176_1",
+      "name": "tent",
+      "position": [
+        3396.25,
+        20.49569448030121,
+        8801.25
+      ],
+      "rotation": 2.668624253128892,
+      "scale": 1,
+      "quality": 15,
+      "lastRepairTime": 1768525531199,
+      "chunkId": "chunk_68,176",
+      "inventory": {
+        "items": [
+          {
+            "id": "bandit_tent_68,176_1_coin",
+            "type": "coin",
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1,
+            "quantity": 48
+          }
+        ]
+      },
+      "isBanditStructure": true
+    },
+    {
+      "action": "add",
+      "id": "bandit_horse_68,176_0",
+      "name": "horse",
+      "position": [
+        3404.25,
+        25.529797011250558,
+        8802.25
+      ],
+      "rotation": -2.654693421778524,
+      "scale": 1,
+      "quality": 15,
+      "lastRepairTime": 1768525531200,
+      "chunkId": "chunk_68,176",
+      "owner": null,
+      "isBanditStructure": true
+    },
+    {
+      "action": "add",
+      "id": "bearden_68,176",
+      "name": "bearden",
+      "position": [
+        3397,
+        20.853915694290308,
+        8804
+      ],
+      "rotation": 5.260305127360066,
+      "scale": 1,
+      "quality": 30,
+      "lastRepairTime": 1768525531200,
+      "chunkId": "chunk_68,176",
+      "isBrownBearStructure": true
+    },
+    {
+      "action": "add",
+      "id": "deertree_68,176",
+      "name": "deertree",
+      "position": [
+        3398.75,
+        21.39563266150399,
+        8795.25
+      ],
+      "rotation": 0.028976533343208533,
+      "scale": 1,
+      "quality": 100,
+      "lastRepairTime": 1768525531200,
+      "chunkId": "chunk_68,176",
+      "isDeerTreeStructure": true
+    }
+  ],
+  "seed": 12345
+}
