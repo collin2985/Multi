@@ -1,0 +1,4706 @@
+
+self.onmessage @ NavigationWorker.js?v=1769906956010:698
+game.playerObject.position.set(-634,game.terrainGenerator.getWorldHeight(-634,11.6,-721),-721)
+Vector3 {x: -634, y: -19.264482930970356, z: -721}
+ChunkManager.js:862 [NavDiag] createNavMap chunk(-13,-14) | objects=0 walkableCells=40000/40000 blockedCells=0 obstacleObjects=0 (cyl=0 rect=0 small=0) 0.0ms
+createNavMapForChunk @ ChunkManager.js:862
+(anonymous) @ ChunkManager.js:1005
+processFrame @ ChunkTransitionQueue.js:199
+(anonymous) @ game.js:2514
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationManager.js:45 [NavDiag] addChunk chunk_-13,-14 | walkable=40000/40000 obstacle=0 workerReady=true
+addChunk @ NavigationManager.js:45
+createNavMapForChunk @ ChunkManager.js:876
+(anonymous) @ ChunkManager.js:1005
+processFrame @ ChunkTransitionQueue.js:199
+(anonymous) @ game.js:2514
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:698 [NavWorker] register_chunk chunk_-13,-14 | cells=40000 walkable=40000 obstacle=0 water=0 zero=0
+self.onmessage @ NavigationWorker.js?v=1769906956010:698
+ChunkManager.js:862 [NavDiag] createNavMap chunk(-14,-14) | objects=0 walkableCells=40000/40000 blockedCells=0 obstacleObjects=0 (cyl=0 rect=0 small=0) 0.0ms
+createNavMapForChunk @ ChunkManager.js:862
+(anonymous) @ ChunkManager.js:1005
+processFrame @ ChunkTransitionQueue.js:199
+(anonymous) @ game.js:2514
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationManager.js:45 [NavDiag] addChunk chunk_-14,-14 | walkable=40000/40000 obstacle=0 workerReady=true
+addChunk @ NavigationManager.js:45
+createNavMapForChunk @ ChunkManager.js:876
+(anonymous) @ ChunkManager.js:1005
+processFrame @ ChunkTransitionQueue.js:199
+(anonymous) @ game.js:2514
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:698 [NavWorker] register_chunk chunk_-14,-14 | cells=40000 walkable=40000 obstacle=0 water=0 zero=0
+self.onmessage @ NavigationWorker.js?v=1769906956010:698
+NavigationWorker.js?v=1769906956010:731 [NavWorker] update_chunk chunk_-13,-14 | walkable: 40000->39641 (-359) obstacle: 0->359 (+359) water: 0->0
+self.onmessage @ NavigationWorker.js?v=1769906956010:731
+NavigationWorker.js?v=1769906956010:731 [NavWorker] update_chunk chunk_-14,-14 | walkable: 39994->39881 (-113) obstacle: 6->119 (+113) water: 0->0
+self.onmessage @ NavigationWorker.js?v=1769906956010:731
+ChunkManager.js:862 [NavDiag] createNavMap chunk(-13,-15) | objects=167 walkableCells=39576/40000 blockedCells=424 obstacleObjects=167 (cyl=0 rect=3 small=164) 0.3ms
+createNavMapForChunk @ ChunkManager.js:862
+finalizeCurrentChunk @ ChunkObjectGenerator.js:338
+processNextFrame @ ChunkObjectGenerator.js:106
+(anonymous) @ game.js:3868
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationManager.js:45 [NavDiag] addChunk chunk_-13,-15 | walkable=39576/40000 obstacle=424 workerReady=true
+addChunk @ NavigationManager.js:45
+createNavMapForChunk @ ChunkManager.js:876
+finalizeCurrentChunk @ ChunkObjectGenerator.js:338
+processNextFrame @ ChunkObjectGenerator.js:106
+(anonymous) @ game.js:3868
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:698 [NavWorker] register_chunk chunk_-13,-15 | cells=40000 walkable=39576 obstacle=424 water=0 zero=0
+self.onmessage @ NavigationWorker.js?v=1769906956010:698
+ChunkManager.js:862 [NavDiag] createNavMap chunk(-13,-13) | objects=491 walkableCells=39509/40000 blockedCells=491 obstacleObjects=491 (cyl=0 rect=0 small=491) 0.1ms
+createNavMapForChunk @ ChunkManager.js:862
+finalizeCurrentChunk @ ChunkObjectGenerator.js:338
+processNextFrame @ ChunkObjectGenerator.js:106
+(anonymous) @ game.js:3868
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationManager.js:45 [NavDiag] addChunk chunk_-13,-13 | walkable=39509/40000 obstacle=491 workerReady=true
+addChunk @ NavigationManager.js:45
+createNavMapForChunk @ ChunkManager.js:876
+finalizeCurrentChunk @ ChunkObjectGenerator.js:338
+processNextFrame @ ChunkObjectGenerator.js:106
+(anonymous) @ game.js:3868
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:698 [NavWorker] register_chunk chunk_-13,-13 | cells=40000 walkable=39509 obstacle=491 water=0 zero=0
+self.onmessage @ NavigationWorker.js?v=1769906956010:698
+NavigationWorker.js?v=1769906956010:731 [NavWorker] update_chunk chunk_-13,-13 | walkable: 39487->39375 (-112) obstacle: 513->625 (+112) water: 0->0
+self.onmessage @ NavigationWorker.js?v=1769906956010:731
+ChunkManager.js:862 [NavDiag] createNavMap chunk(-12,-14) | objects=212 walkableCells=39788/40000 blockedCells=212 obstacleObjects=212 (cyl=0 rect=0 small=212) 0.1ms
+createNavMapForChunk @ ChunkManager.js:862
+finalizeCurrentChunk @ ChunkObjectGenerator.js:338
+processNextFrame @ ChunkObjectGenerator.js:106
+(anonymous) @ game.js:3868
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationManager.js:45 [NavDiag] addChunk chunk_-12,-14 | walkable=39788/40000 obstacle=212 workerReady=true
+addChunk @ NavigationManager.js:45
+createNavMapForChunk @ ChunkManager.js:876
+finalizeCurrentChunk @ ChunkObjectGenerator.js:338
+processNextFrame @ ChunkObjectGenerator.js:106
+(anonymous) @ game.js:3868
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:698 [NavWorker] register_chunk chunk_-12,-14 | cells=40000 walkable=39788 obstacle=212 water=0 zero=0
+self.onmessage @ NavigationWorker.js?v=1769906956010:698
+ChunkManager.js:862 [NavDiag] createNavMap chunk(-14,-15) | objects=72 walkableCells=39805/40000 blockedCells=195 obstacleObjects=72 (cyl=2 rect=0 small=70) 0.1ms
+createNavMapForChunk @ ChunkManager.js:862
+finalizeCurrentChunk @ ChunkObjectGenerator.js:338
+processNextFrame @ ChunkObjectGenerator.js:106
+(anonymous) @ game.js:3868
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationManager.js:45 [NavDiag] addChunk chunk_-14,-15 | walkable=39805/40000 obstacle=195 workerReady=true
+addChunk @ NavigationManager.js:45
+createNavMapForChunk @ ChunkManager.js:876
+finalizeCurrentChunk @ ChunkObjectGenerator.js:338
+processNextFrame @ ChunkObjectGenerator.js:106
+(anonymous) @ game.js:3868
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:698 [NavWorker] register_chunk chunk_-14,-15 | cells=40000 walkable=39805 obstacle=195 water=0 zero=0
+self.onmessage @ NavigationWorker.js?v=1769906956010:698
+ChunkManager.js:862 [NavDiag] createNavMap chunk(-14,-13) | objects=328 walkableCells=39503/40000 blockedCells=497 obstacleObjects=328 (cyl=4 rect=3 small=321) 0.2ms
+createNavMapForChunk @ ChunkManager.js:862
+finalizeCurrentChunk @ ChunkObjectGenerator.js:338
+processNextFrame @ ChunkObjectGenerator.js:106
+(anonymous) @ game.js:3868
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationManager.js:45 [NavDiag] addChunk chunk_-14,-13 | walkable=39503/40000 obstacle=497 workerReady=true
+addChunk @ NavigationManager.js:45
+createNavMapForChunk @ ChunkManager.js:876
+finalizeCurrentChunk @ ChunkObjectGenerator.js:338
+processNextFrame @ ChunkObjectGenerator.js:106
+(anonymous) @ game.js:3868
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:698 [NavWorker] register_chunk chunk_-14,-13 | cells=40000 walkable=39503 obstacle=497 water=0 zero=0
+self.onmessage @ NavigationWorker.js?v=1769906956010:698
+ChunkManager.js:862 [NavDiag] createNavMap chunk(-12,-15) | objects=0 walkableCells=40000/40000 blockedCells=0 obstacleObjects=0 (cyl=0 rect=0 small=0) 0.1ms
+createNavMapForChunk @ ChunkManager.js:862
+finalizeCurrentChunk @ ChunkObjectGenerator.js:338
+processNextFrame @ ChunkObjectGenerator.js:106
+(anonymous) @ game.js:3868
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationManager.js:45 [NavDiag] addChunk chunk_-12,-15 | walkable=40000/40000 obstacle=0 workerReady=true
+addChunk @ NavigationManager.js:45
+createNavMapForChunk @ ChunkManager.js:876
+finalizeCurrentChunk @ ChunkObjectGenerator.js:338
+processNextFrame @ ChunkObjectGenerator.js:106
+(anonymous) @ game.js:3868
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:698 [NavWorker] register_chunk chunk_-12,-15 | cells=40000 walkable=40000 obstacle=0 water=0 zero=0
+self.onmessage @ NavigationWorker.js?v=1769906956010:698
+ChunkManager.js:862 [NavDiag] createNavMap chunk(-12,-13) | objects=377 walkableCells=39623/40000 blockedCells=377 obstacleObjects=377 (cyl=0 rect=0 small=377) 0.2ms
+createNavMapForChunk @ ChunkManager.js:862
+finalizeCurrentChunk @ ChunkObjectGenerator.js:338
+processNextFrame @ ChunkObjectGenerator.js:106
+(anonymous) @ game.js:3868
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationManager.js:45 [NavDiag] addChunk chunk_-12,-13 | walkable=39623/40000 obstacle=377 workerReady=true
+addChunk @ NavigationManager.js:45
+createNavMapForChunk @ ChunkManager.js:876
+finalizeCurrentChunk @ ChunkObjectGenerator.js:338
+processNextFrame @ ChunkObjectGenerator.js:106
+(anonymous) @ game.js:3868
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:698 [NavWorker] register_chunk chunk_-12,-13 | cells=40000 walkable=39623 obstacle=377 water=0 zero=0
+self.onmessage @ NavigationWorker.js?v=1769906956010:698
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-631.0,-711.9) chunk(-13,-14) -> goal=(-629.8,-725.8) chunk(-13,-15) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-631.0,-711.9) -> (-629.8,-725.8), startChunk chunk_-13,-14: true, goalChunk chunk_-13,-15: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+GardenerController.js:793 [GardenerPlant] buildingId=gardener_1769881793142_i10qur6ji type=pine pos=(-624.3,-713.6) auth=session_pu0wai0sy client=session_pu0wai0sy state=planting_tree t=1769907118618
+_plantTree @ GardenerController.js:793
+_handlePlantingTree @ GardenerController.js:678
+_handleWorkerSpecificState @ GardenerController.js:284
+_updateEntity @ BaseWorkerController.js:747
+update @ BaseWorkerController.js:711
+(anonymous) @ game.js:3741
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-633.0,-712.6) chunk(-13,-14) -> goal=(-626.7,-726.9) chunk(-13,-15) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-633.0,-712.6) -> (-626.7,-726.9), startChunk chunk_-13,-14: true, goalChunk chunk_-13,-15: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-629.8,-725.0) chunk(-13,-14) -> goal=(-639.5,-714.3) chunk(-13,-14) exists=true | closedSet=5000
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+2NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-629.8,-725.0) -> (-639.5,-714.3), startChunk chunk_-13,-14: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-629.8,-725.0) chunk(-13,-14) -> goal=(-639.5,-714.3) chunk(-13,-14) exists=true | closedSet=5000
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-629.8,-725.0) -> (-639.5,-714.3), startChunk chunk_-13,-14: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+BaseWorkerController.js:922 [WorkerStuck] woodcutter | state=seeking_tree | pos=(-629.8,-725.0) chunk(-13,-14) | target=(-639.5,-714.3) chunk(-13,-14) | dist=14.5 | building=woodcutter_1769881146503_ahxwrt2mm
+(anonymous) @ BaseWorkerController.js:922
+Promise.then
+_handleMovementState @ BaseWorkerController.js:887
+_updateEntity @ BaseWorkerController.js:745
+update @ BaseWorkerController.js:711
+(anonymous) @ game.js:3746
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.3,-719.7) chunk(-13,-14) -> goal=(-634.3,-709.7) chunk(-13,-14) exists=true | closedSet=5000
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.3,-719.7) -> (-634.3,-709.7), startChunk chunk_-13,-14: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+GardenerController.js:793 [GardenerPlant] buildingId=gardener_1769881793142_i10qur6ji type=pine pos=(-629.7,-719.3) auth=session_pu0wai0sy client=session_pu0wai0sy state=planting_tree t=1769907430616
+_plantTree @ GardenerController.js:793
+_handlePlantingTree @ GardenerController.js:678
+_handleWorkerSpecificState @ GardenerController.js:284
+_updateEntity @ BaseWorkerController.js:747
+update @ BaseWorkerController.js:711
+(anonymous) @ game.js:3741
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-633.0,-712.7) chunk(-13,-14) -> goal=(-626.7,-726.9) chunk(-13,-15) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-633.0,-712.7) -> (-626.7,-726.9), startChunk chunk_-13,-14: true, goalChunk chunk_-13,-15: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+ChunkManager.js:862 [NavDiag] createNavMap chunk(-13,-16) | objects=11 walkableCells=39989/40000 blockedCells=11 obstacleObjects=11 (cyl=0 rect=0 small=11) 0.0ms
+createNavMapForChunk @ ChunkManager.js:862
+(anonymous) @ ChunkManager.js:1005
+processFrame @ ChunkTransitionQueue.js:199
+(anonymous) @ game.js:2514
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationManager.js:45 [NavDiag] addChunk chunk_-13,-16 | walkable=39989/40000 obstacle=11 workerReady=true
+addChunk @ NavigationManager.js:45
+createNavMapForChunk @ ChunkManager.js:876
+(anonymous) @ ChunkManager.js:1005
+processFrame @ ChunkTransitionQueue.js:199
+(anonymous) @ game.js:2514
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ChunkManager.js:862 [NavDiag] createNavMap chunk(-14,-16) | objects=23 walkableCells=39977/40000 blockedCells=23 obstacleObjects=23 (cyl=0 rect=0 small=23) 0.1ms
+createNavMapForChunk @ ChunkManager.js:862
+(anonymous) @ ChunkManager.js:1005
+processFrame @ ChunkTransitionQueue.js:199
+(anonymous) @ game.js:2514
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationManager.js:45 [NavDiag] addChunk chunk_-14,-16 | walkable=39977/40000 obstacle=23 workerReady=true
+addChunk @ NavigationManager.js:45
+createNavMapForChunk @ ChunkManager.js:876
+(anonymous) @ ChunkManager.js:1005
+processFrame @ ChunkTransitionQueue.js:199
+(anonymous) @ game.js:2514
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:698 [NavWorker] register_chunk chunk_-13,-16 | cells=40000 walkable=39989 obstacle=11 water=0 zero=0
+self.onmessage @ NavigationWorker.js?v=1769906956010:698
+NavigationWorker.js?v=1769906956010:698 [NavWorker] register_chunk chunk_-14,-16 | cells=40000 walkable=39977 obstacle=23 water=0 zero=0
+self.onmessage @ NavigationWorker.js?v=1769906956010:698
+ChunkManager.js:862 [NavDiag] createNavMap chunk(-12,-16) | objects=0 walkableCells=40000/40000 blockedCells=0 obstacleObjects=0 (cyl=0 rect=0 small=0) 0.1ms
+createNavMapForChunk @ ChunkManager.js:862
+(anonymous) @ ChunkManager.js:1005
+processFrame @ ChunkTransitionQueue.js:199
+(anonymous) @ game.js:2514
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationManager.js:45 [NavDiag] addChunk chunk_-12,-16 | walkable=40000/40000 obstacle=0 workerReady=true
+addChunk @ NavigationManager.js:45
+createNavMapForChunk @ ChunkManager.js:876
+(anonymous) @ ChunkManager.js:1005
+processFrame @ ChunkTransitionQueue.js:199
+(anonymous) @ game.js:2514
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:698 [NavWorker] register_chunk chunk_-12,-16 | cells=40000 walkable=40000 obstacle=0 water=0 zero=0
+self.onmessage @ NavigationWorker.js?v=1769906956010:698
+ChunkManager.js:862 [NavDiag] createNavMap chunk(-13,-13) | objects=501 walkableCells=39370/40000 blockedCells=630 obstacleObjects=501 (cyl=8 rect=2 small=491) 0.2ms
+createNavMapForChunk @ ChunkManager.js:862
+(anonymous) @ ChunkManager.js:1005
+processFrame @ ChunkTransitionQueue.js:199
+(anonymous) @ game.js:2514
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationManager.js:45 [NavDiag] addChunk chunk_-13,-13 | walkable=39370/40000 obstacle=630 workerReady=true
+addChunk @ NavigationManager.js:45
+createNavMapForChunk @ ChunkManager.js:876
+(anonymous) @ ChunkManager.js:1005
+processFrame @ ChunkTransitionQueue.js:199
+(anonymous) @ game.js:2514
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:698 [NavWorker] register_chunk chunk_-13,-13 | cells=40000 walkable=39370 obstacle=630 water=0 zero=0
+self.onmessage @ NavigationWorker.js?v=1769906956010:698
+ChunkManager.js:862 [NavDiag] createNavMap chunk(-14,-13) | objects=335 walkableCells=39503/40000 blockedCells=497 obstacleObjects=335 (cyl=8 rect=6 small=321) 0.1ms
+createNavMapForChunk @ ChunkManager.js:862
+(anonymous) @ ChunkManager.js:1005
+processFrame @ ChunkTransitionQueue.js:199
+(anonymous) @ game.js:2514
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationManager.js:45 [NavDiag] addChunk chunk_-14,-13 | walkable=39503/40000 obstacle=497 workerReady=true
+addChunk @ NavigationManager.js:45
+createNavMapForChunk @ ChunkManager.js:876
+(anonymous) @ ChunkManager.js:1005
+processFrame @ ChunkTransitionQueue.js:199
+(anonymous) @ game.js:2514
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:698 [NavWorker] register_chunk chunk_-14,-13 | cells=40000 walkable=39503 obstacle=497 water=0 zero=0
+self.onmessage @ NavigationWorker.js?v=1769906956010:698
+ChunkManager.js:862 [NavDiag] createNavMap chunk(-12,-13) | objects=377 walkableCells=39623/40000 blockedCells=377 obstacleObjects=377 (cyl=0 rect=0 small=377) 0.1ms
+createNavMapForChunk @ ChunkManager.js:862
+(anonymous) @ ChunkManager.js:1005
+processFrame @ ChunkTransitionQueue.js:199
+(anonymous) @ game.js:2514
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationManager.js:45 [NavDiag] addChunk chunk_-12,-13 | walkable=39623/40000 obstacle=377 workerReady=true
+addChunk @ NavigationManager.js:45
+createNavMapForChunk @ ChunkManager.js:876
+(anonymous) @ ChunkManager.js:1005
+processFrame @ ChunkTransitionQueue.js:199
+(anonymous) @ game.js:2514
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:698 [NavWorker] register_chunk chunk_-12,-13 | cells=40000 walkable=39623 obstacle=377 water=0 zero=0
+self.onmessage @ NavigationWorker.js?v=1769906956010:698
+GardenerController.js:793 [GardenerPlant] buildingId=gardener_1769881793142_i10qur6ji type=apple pos=(-625.6,-716.8) auth=session_pu0wai0sy client=session_pu0wai0sy state=planting_tree t=1769907732878
+_plantTree @ GardenerController.js:793
+_handlePlantingTree @ GardenerController.js:678
+_handleWorkerSpecificState @ GardenerController.js:284
+_updateEntity @ BaseWorkerController.js:747
+update @ BaseWorkerController.js:711
+(anonymous) @ game.js:3741
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+GardenerController.js:793 [GardenerPlant] buildingId=gardener_1769881793142_i10qur6ji type=pine pos=(-623.2,-717.7) auth=session_pu0wai0sy client=session_pu0wai0sy state=planting_tree t=1769907761491
+_plantTree @ GardenerController.js:793
+_handlePlantingTree @ GardenerController.js:678
+_handleWorkerSpecificState @ GardenerController.js:284
+_updateEntity @ BaseWorkerController.js:747
+update @ BaseWorkerController.js:711
+(anonymous) @ game.js:3741
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+GardenerController.js:793 [GardenerPlant] buildingId=gardener_1769881793142_i10qur6ji type=pine pos=(-641.8,-716.4) auth=session_pu0wai0sy client=session_pu0wai0sy state=planting_tree t=1769907810849
+_plantTree @ GardenerController.js:793
+_handlePlantingTree @ GardenerController.js:678
+_handleWorkerSpecificState @ GardenerController.js:284
+_updateEntity @ BaseWorkerController.js:747
+update @ BaseWorkerController.js:711
+(anonymous) @ game.js:3741
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-641.8,-716.5) chunk(-13,-14) -> goal=(-629.9,-722.9) chunk(-13,-14) exists=true | closedSet=5000
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+2NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-641.8,-716.5) -> (-629.9,-722.9), startChunk chunk_-13,-14: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-641.8,-716.5) chunk(-13,-14) -> goal=(-629.9,-722.9) chunk(-13,-14) exists=true | closedSet=5000
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-641.8,-716.5) -> (-629.9,-722.9), startChunk chunk_-13,-14: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+BaseWorkerController.js:922 [WorkerStuck] gardener | state=returning | pos=(-641.8,-716.5) chunk(-13,-14) | target=(-629.9,-722.9) chunk(-13,-14) | dist=13.5 | building=gardener_1769881793142_i10qur6ji
+(anonymous) @ BaseWorkerController.js:922
+Promise.then
+_handleMovementState @ BaseWorkerController.js:887
+_updateEntity @ BaseWorkerController.js:745
+update @ BaseWorkerController.js:711
+(anonymous) @ game.js:3741
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-633.0,-729.0) chunk(-13,-15) -> goal=(-634.9,-706.7) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+2NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-633.0,-729.0) -> (-634.9,-706.7), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-633.0,-729.0) chunk(-13,-15) -> goal=(-634.9,-706.7) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-633.0,-729.0) -> (-634.9,-706.7), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+BaseWorkerController.js:922 [WorkerStuck] miner | state=seeking_rock | pos=(-633.0,-729.0) chunk(-13,-15) | target=(-634.9,-706.7) chunk(-13,-14) | dist=22.4 | building=miner_1769881297762_396apus12
+(anonymous) @ BaseWorkerController.js:922
+Promise.then
+_handleMovementState @ BaseWorkerController.js:887
+_updateEntity @ BaseWorkerController.js:745
+update @ BaseWorkerController.js:711
+(anonymous) @ game.js:3751
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-633.0,-729.0) -> (-634.9,-706.7), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-633.0,-729.0) chunk(-13,-15) -> goal=(-634.9,-706.7) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+2NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-633.0,-729.0) -> (-634.9,-706.7), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+2NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+BaseWorkerController.js:922 [WorkerStuck] woodcutter | state=seeking_tree | pos=(-632.0,-726.3) chunk(-13,-15) | target=(-640.6,-719.4) chunk(-13,-14) | dist=11.0 | building=woodcutter_1769881146503_ahxwrt2mm
+(anonymous) @ BaseWorkerController.js:922
+Promise.then
+_handleMovementState @ BaseWorkerController.js:887
+_updateEntity @ BaseWorkerController.js:745
+update @ BaseWorkerController.js:711
+(anonymous) @ game.js:3746
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+GardenerController.js:793 [GardenerPlant] buildingId=gardener_1769881793142_i10qur6ji type=pine pos=(-640.8,-731.2) auth=session_pu0wai0sy client=session_pu0wai0sy state=planting_tree t=1769908360770
+_plantTree @ GardenerController.js:793
+_handlePlantingTree @ GardenerController.js:678
+_handleWorkerSpecificState @ GardenerController.js:284
+_updateEntity @ BaseWorkerController.js:747
+update @ BaseWorkerController.js:711
+(anonymous) @ game.js:3741
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+2NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+2NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+BaseWorkerController.js:922 [WorkerStuck] woodcutter | state=seeking_tree | pos=(-632.0,-726.3) chunk(-13,-15) | target=(-640.6,-719.4) chunk(-13,-14) | dist=11.0 | building=woodcutter_1769881146503_ahxwrt2mm
+(anonymous) @ BaseWorkerController.js:922
+Promise.then
+_handleMovementState @ BaseWorkerController.js:887
+_updateEntity @ BaseWorkerController.js:745
+update @ BaseWorkerController.js:711
+(anonymous) @ game.js:3746
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+2NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+2NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+BaseWorkerController.js:922 [WorkerStuck] woodcutter | state=seeking_tree | pos=(-632.0,-726.3) chunk(-13,-15) | target=(-640.6,-719.4) chunk(-13,-14) | dist=11.0 | building=woodcutter_1769881146503_ahxwrt2mm
+(anonymous) @ BaseWorkerController.js:922
+Promise.then
+_handleMovementState @ BaseWorkerController.js:887
+_updateEntity @ BaseWorkerController.js:745
+update @ BaseWorkerController.js:711
+(anonymous) @ game.js:3746
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+2NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+2NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+BaseWorkerController.js:922 [WorkerStuck] woodcutter | state=seeking_tree | pos=(-632.0,-726.3) chunk(-13,-15) | target=(-640.6,-719.4) chunk(-13,-14) | dist=11.0 | building=woodcutter_1769881146503_ahxwrt2mm
+(anonymous) @ BaseWorkerController.js:922
+Promise.then
+_handleMovementState @ BaseWorkerController.js:887
+_updateEntity @ BaseWorkerController.js:745
+update @ BaseWorkerController.js:711
+(anonymous) @ game.js:3746
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+GardenerController.js:793 [GardenerPlant] buildingId=gardener_1769881793142_i10qur6ji type=apple pos=(-626.7,-721.5) auth=session_pu0wai0sy client=session_pu0wai0sy state=planting_tree t=1769908477573
+_plantTree @ GardenerController.js:793
+_handlePlantingTree @ GardenerController.js:678
+_handleWorkerSpecificState @ GardenerController.js:284
+_updateEntity @ BaseWorkerController.js:747
+update @ BaseWorkerController.js:711
+(anonymous) @ game.js:3741
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+2NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+BaseWorkerController.js:922 [WorkerStuck] woodcutter | state=seeking_tree | pos=(-632.0,-726.3) chunk(-13,-15) | target=(-640.6,-719.4) chunk(-13,-14) | dist=11.0 | building=woodcutter_1769881146503_ahxwrt2mm
+(anonymous) @ BaseWorkerController.js:922
+Promise.then
+_handleMovementState @ BaseWorkerController.js:887
+_updateEntity @ BaseWorkerController.js:745
+update @ BaseWorkerController.js:711
+(anonymous) @ game.js:3746
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+h
+VM3308:1 Uncaught ReferenceError: h is not defined
+    at <anonymous>:1:1
+(anonymous) @ VM3308:1
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+515
+515
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+2NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+BaseWorkerController.js:922 [WorkerStuck] woodcutter | state=seeking_tree | pos=(-632.0,-726.3) chunk(-13,-15) | target=(-640.6,-719.4) chunk(-13,-14) | dist=11.0 | building=woodcutter_1769881146503_ahxwrt2mm
+(anonymous) @ BaseWorkerController.js:922
+Promise.then
+_handleMovementState @ BaseWorkerController.js:887
+_updateEntity @ BaseWorkerController.js:745
+update @ BaseWorkerController.js:711
+(anonymous) @ game.js:3746
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+GardenerController.js:793 [GardenerPlant] buildingId=gardener_1769881793142_i10qur6ji type=pine pos=(-639.8,-721.7) auth=session_pu0wai0sy client=session_pu0wai0sy state=planting_tree t=1769908546933
+_plantTree @ GardenerController.js:793
+_handlePlantingTree @ GardenerController.js:678
+_handleWorkerSpecificState @ GardenerController.js:284
+_updateEntity @ BaseWorkerController.js:747
+update @ BaseWorkerController.js:711
+(anonymous) @ game.js:3741
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+2NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+2NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+BaseWorkerController.js:922 [WorkerStuck] woodcutter | state=seeking_tree | pos=(-632.0,-726.3) chunk(-13,-15) | target=(-640.6,-719.4) chunk(-13,-14) | dist=11.0 | building=woodcutter_1769881146503_ahxwrt2mm
+(anonymous) @ BaseWorkerController.js:922
+Promise.then
+_handleMovementState @ BaseWorkerController.js:887
+_updateEntity @ BaseWorkerController.js:745
+update @ BaseWorkerController.js:711
+(anonymous) @ game.js:3746
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+ChunkManager.js:862 [NavDiag] createNavMap chunk(-13,-16) | objects=11 walkableCells=39989/40000 blockedCells=11 obstacleObjects=11 (cyl=0 rect=0 small=11) 0.0ms
+createNavMapForChunk @ ChunkManager.js:862
+(anonymous) @ ChunkManager.js:1005
+processFrame @ ChunkTransitionQueue.js:199
+(anonymous) @ game.js:2514
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationManager.js:45 [NavDiag] addChunk chunk_-13,-16 | walkable=39989/40000 obstacle=11 workerReady=true
+addChunk @ NavigationManager.js:45
+createNavMapForChunk @ ChunkManager.js:876
+(anonymous) @ ChunkManager.js:1005
+processFrame @ ChunkTransitionQueue.js:199
+(anonymous) @ game.js:2514
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:698 [NavWorker] register_chunk chunk_-13,-16 | cells=40000 walkable=39989 obstacle=11 water=0 zero=0
+self.onmessage @ NavigationWorker.js?v=1769906956010:698
+ChunkManager.js:862 [NavDiag] createNavMap chunk(-14,-16) | objects=23 walkableCells=39977/40000 blockedCells=23 obstacleObjects=23 (cyl=0 rect=0 small=23) 0.1ms
+createNavMapForChunk @ ChunkManager.js:862
+(anonymous) @ ChunkManager.js:1005
+processFrame @ ChunkTransitionQueue.js:199
+(anonymous) @ game.js:2514
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationManager.js:45 [NavDiag] addChunk chunk_-14,-16 | walkable=39977/40000 obstacle=23 workerReady=true
+addChunk @ NavigationManager.js:45
+createNavMapForChunk @ ChunkManager.js:876
+(anonymous) @ ChunkManager.js:1005
+processFrame @ ChunkTransitionQueue.js:199
+(anonymous) @ game.js:2514
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:698 [NavWorker] register_chunk chunk_-14,-16 | cells=40000 walkable=39977 obstacle=23 water=0 zero=0
+self.onmessage @ NavigationWorker.js?v=1769906956010:698
+ChunkManager.js:862 [NavDiag] createNavMap chunk(-12,-16) | objects=0 walkableCells=40000/40000 blockedCells=0 obstacleObjects=0 (cyl=0 rect=0 small=0) 0.1ms
+createNavMapForChunk @ ChunkManager.js:862
+(anonymous) @ ChunkManager.js:1005
+processFrame @ ChunkTransitionQueue.js:199
+(anonymous) @ game.js:2514
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationManager.js:45 [NavDiag] addChunk chunk_-12,-16 | walkable=40000/40000 obstacle=0 workerReady=true
+addChunk @ NavigationManager.js:45
+createNavMapForChunk @ ChunkManager.js:876
+(anonymous) @ ChunkManager.js:1005
+processFrame @ ChunkTransitionQueue.js:199
+(anonymous) @ game.js:2514
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:698 [NavWorker] register_chunk chunk_-12,-16 | cells=40000 walkable=40000 obstacle=0 water=0 zero=0
+self.onmessage @ NavigationWorker.js?v=1769906956010:698
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+2NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+BaseWorkerController.js:922 [WorkerStuck] woodcutter | state=seeking_tree | pos=(-632.0,-726.3) chunk(-13,-15) | target=(-640.6,-719.4) chunk(-13,-14) | dist=11.0 | building=woodcutter_1769881146503_ahxwrt2mm
+(anonymous) @ BaseWorkerController.js:922
+Promise.then
+_handleMovementState @ BaseWorkerController.js:887
+_updateEntity @ BaseWorkerController.js:745
+update @ BaseWorkerController.js:711
+(anonymous) @ game.js:3746
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+2NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+GardenerController.js:793 [GardenerPlant] buildingId=gardener_1769881793142_i10qur6ji type=pine pos=(-635.2,-718.9) auth=session_pu0wai0sy client=session_pu0wai0sy state=planting_tree t=1769908638161
+_plantTree @ GardenerController.js:793
+_handlePlantingTree @ GardenerController.js:678
+_handleWorkerSpecificState @ GardenerController.js:284
+_updateEntity @ BaseWorkerController.js:747
+update @ BaseWorkerController.js:711
+(anonymous) @ game.js:3741
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+2NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+BaseWorkerController.js:922 [WorkerStuck] woodcutter | state=seeking_tree | pos=(-632.0,-726.3) chunk(-13,-15) | target=(-640.6,-719.4) chunk(-13,-14) | dist=11.0 | building=woodcutter_1769881146503_ahxwrt2mm
+(anonymous) @ BaseWorkerController.js:922
+Promise.then
+_handleMovementState @ BaseWorkerController.js:887
+_updateEntity @ BaseWorkerController.js:745
+update @ BaseWorkerController.js:711
+(anonymous) @ game.js:3746
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+2NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+2NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+BaseWorkerController.js:922 [WorkerStuck] woodcutter | state=seeking_tree | pos=(-632.0,-726.3) chunk(-13,-15) | target=(-640.6,-719.4) chunk(-13,-14) | dist=11.0 | building=woodcutter_1769881146503_ahxwrt2mm
+(anonymous) @ BaseWorkerController.js:922
+Promise.then
+_handleMovementState @ BaseWorkerController.js:887
+_updateEntity @ BaseWorkerController.js:745
+update @ BaseWorkerController.js:711
+(anonymous) @ game.js:3746
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+2NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+2NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+GardenerController.js:793 [GardenerPlant] buildingId=gardener_1769881793142_i10qur6ji type=pine pos=(-640.2,-724.2) auth=session_pu0wai0sy client=session_pu0wai0sy state=planting_tree t=1769908728972
+_plantTree @ GardenerController.js:793
+_handlePlantingTree @ GardenerController.js:678
+_handleWorkerSpecificState @ GardenerController.js:284
+_updateEntity @ BaseWorkerController.js:747
+update @ BaseWorkerController.js:711
+(anonymous) @ game.js:3741
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+BaseWorkerController.js:922 [WorkerStuck] woodcutter | state=seeking_tree | pos=(-632.0,-726.3) chunk(-13,-15) | target=(-640.6,-719.4) chunk(-13,-14) | dist=11.0 | building=woodcutter_1769881146503_ahxwrt2mm
+(anonymous) @ BaseWorkerController.js:922
+Promise.then
+_handleMovementState @ BaseWorkerController.js:887
+_updateEntity @ BaseWorkerController.js:745
+update @ BaseWorkerController.js:711
+(anonymous) @ game.js:3746
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+2NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+2NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+BaseWorkerController.js:922 [WorkerStuck] woodcutter | state=seeking_tree | pos=(-632.0,-726.3) chunk(-13,-15) | target=(-640.6,-719.4) chunk(-13,-14) | dist=11.0 | building=woodcutter_1769881146503_ahxwrt2mm
+(anonymous) @ BaseWorkerController.js:922
+Promise.then
+_handleMovementState @ BaseWorkerController.js:887
+_updateEntity @ BaseWorkerController.js:745
+update @ BaseWorkerController.js:711
+(anonymous) @ game.js:3746
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+2NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+2NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+NavigationWorker.js?v=1769906956010:578 [NavWorker:DIAG] A* exhausted 5000 iterations | start=(-632.0,-726.3) chunk(-13,-15) -> goal=(-640.6,-719.4) chunk(-13,-14) exists=true | closedSet=5000 CROSS-CHUNK
+findPath @ NavigationWorker.js?v=1769906956010:578
+self.onmessage @ NavigationWorker.js?v=1769906956010:739
+NavigationWorker.js?v=1769906956010:759 [NavWorker] 1 path failures. Last: (-632.0,-726.3) -> (-640.6,-719.4), startChunk chunk_-13,-15: true, goalChunk chunk_-13,-14: true, total chunks: 12
+self.onmessage @ NavigationWorker.js?v=1769906956010:759
+BaseWorkerController.js:922 [WorkerStuck] woodcutter | state=seeking_tree | pos=(-632.0,-726.3) chunk(-13,-15) | target=(-640.6,-719.4) chunk(-13,-14) | dist=11.0 | building=woodcutter_1769881146503_ahxwrt2mm
+(anonymous) @ BaseWorkerController.js:922
+Promise.then
+_handleMovementState @ BaseWorkerController.js:887
+_updateEntity @ BaseWorkerController.js:745
+update @ BaseWorkerController.js:711
+(anonymous) @ game.js:3746
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

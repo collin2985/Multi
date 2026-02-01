@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guns Horses & Ships</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: Georgia, serif;
+            background: url('images/background.webp') center center / cover no-repeat fixed;
+            color: #f5f1e8;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 700px;
+            text-align: center;
+        }
+        h1 {
+            font-size: 3em;
+            color: #f5f1e8;
+            margin-bottom: 0;
+            text-shadow:
+                2px 2px 4px #000,
+                -2px -2px 4px #000,
+                2px -2px 4px #000,
+                -2px 2px 4px #000,
+                0 0 20px #000,
+                0 0 40px rgba(0,0,0,0.8);
+        }
+        .beta-badge {
+            display: inline-block;
+            font-size: 0.35em;
+            background: #8b7355;
+            color: #1a1510;
+            padding: 4px 10px;
+            border-radius: 4px;
+            vertical-align: super;
+            margin-left: 10px;
+            text-shadow: none;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+        .tagline {
+            font-size: 1.4em;
+            color: #8b7355;
+            font-style: italic;
+            margin-bottom: 40px;
+        }
+        .buttons {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin-top: 50px;
+            margin-bottom: 50px;
+            flex-wrap: wrap;
+        }
+        .btn {
+            display: inline-block;
+            padding: 18px 50px;
+            font-size: 1.3em;
+            font-family: Georgia, serif;
+            text-decoration: none;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            border: 2px solid;
+        }
+        .btn-play {
+            background: rgba(92, 74, 50, 0.9);
+            color: #f5f1e8;
+            border-color: #8b7355;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+        .btn-play:hover {
+            background: rgba(139, 115, 85, 0.95);
+            border-color: #f5f1e8;
+            transform: scale(1.05);
+        }
+        .btn-wiki {
+            background: rgba(0, 0, 0, 0.4);
+            color: #f5f1e8;
+            border-color: #8b7355;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+        .btn-wiki:hover {
+            background: rgba(139, 115, 85, 0.9);
+            border-color: #f5f1e8;
+            transform: scale(1.05);
+        }
+        .speech {
+            max-width: 600px;
+            line-height: 1.8;
+        }
+        .speech p {
+            margin-bottom: 20px;
+            font-size: 1.15em;
+            color: #f5f1e8;
+            text-shadow:
+                1px 1px 3px #000,
+                -1px -1px 3px #000,
+                1px -1px 3px #000,
+                -1px 1px 3px #000,
+                0 0 15px #000,
+                0 0 30px rgba(0,0,0,0.7);
+        }
+        .speech p:first-child {
+            font-size: 1.3em;
+            color: #f5f1e8;
+            font-weight: bold;
+            text-shadow:
+                2px 2px 4px #000,
+                -2px -2px 4px #000,
+                2px -2px 4px #000,
+                -2px 2px 4px #000,
+                0 0 20px #000,
+                0 0 35px rgba(0,0,0,0.8);
+        }
+        .speech .final {
+            font-size: 1.4em;
+            color: #f5f1e8;
+            font-style: italic;
+            margin-top: 30px;
+            border-top: 1px solid rgba(255,255,255,0.3);
+            padding-top: 20px;
+            text-shadow:
+                2px 2px 4px #000,
+                -2px -2px 4px #000,
+                2px -2px 4px #000,
+                -2px 2px 4px #000,
+                0 0 20px #000,
+                0 0 35px rgba(0,0,0,0.8);
+        }
+        .donate-section {
+            margin-bottom: 40px;
+        }
+        .donate-title {
+            font-size: 1.5em;
+            color: #8b7355;
+            margin-bottom: 15px;
+            text-shadow:
+                2px 2px 0 #000,
+                -2px -2px 0 #000,
+                2px -2px 0 #000,
+                -2px 2px 0 #000,
+                1px 1px 0 #000,
+                -1px -1px 0 #000,
+                1px -1px 0 #000,
+                -1px 1px 0 #000;
+        }
+        .donate-toggle {
+            display: flex;
+            justify-content: center;
+            gap: 0;
+            margin-bottom: 15px;
+        }
+        .donate-toggle button {
+            padding: 8px 20px;
+            font-family: Georgia, serif;
+            font-size: 0.95em;
+            border: 1px solid #8b7355;
+            background: #2a2218;
+            color: #8b7355;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .donate-toggle button:first-child {
+            border-radius: 5px 0 0 5px;
+        }
+        .donate-toggle button:last-child {
+            border-radius: 0 5px 5px 0;
+            border-left: none;
+        }
+        .donate-toggle button.active {
+            background: #5c4a32;
+            color: #f5f1e8;
+        }
+        .donate-amounts {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+        .donate-amounts a {
+            padding: 10px 22px;
+            font-family: Georgia, serif;
+            font-size: 1em;
+            border: 1px solid #8b7355;
+            border-radius: 5px;
+            background: #2a2218;
+            color: #f5f1e8;
+            text-decoration: none;
+            transition: all 0.2s ease;
+        }
+        .donate-amounts a:hover {
+            background: #5c4a32;
+            transform: scale(1.05);
+        }
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 2em;
+            }
+            .tagline {
+                font-size: 1.1em;
+            }
+            .btn {
+                padding: 15px 35px;
+                font-size: 1.1em;
+            }
+            .speech p {
+                font-size: 1em;
+            }
+            .speech .final {
+                font-size: 1.2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Guns Horses & Ships<span class="beta-badge">BETA</span></h1>
+
+        <div class="buttons">
+            <a href="client.html" class="btn btn-play">Play Now</a>
+            <a href="wiki.html" class="btn btn-wiki">Game Wiki</a>
+            <a href="https://discord.gg/duRJ3GzvwF" target="_blank" class="btn btn-wiki">Discord</a>
+        </div>
+
+        <div class="donate-section">
+            <div class="donate-title">Support Development</div>
+            <div class="donate-toggle">
+                <button onclick="setDonateMode('onetime')">One-time</button>
+                <button class="active" onclick="setDonateMode('monthly')">Monthly</button>
+            </div>
+            <div class="donate-amounts" id="donate-onetime" style="display: none;">
+                <a href="https://buy.stripe.com/bJe28kdbH9te0SCfIVefC0b" target="_blank">$25</a>
+                <a href="https://buy.stripe.com/4gM3co9Zv7l658S8gtefC0a" target="_blank">$10</a>
+                <a href="https://buy.stripe.com/aFa00cgnT6h26cW8gtefC09" target="_blank">$5</a>
+            </div>
+            <div class="donate-amounts" id="donate-monthly">
+                <a href="https://buy.stripe.com/fZu5kwc7D9te58SdANefC0c" target="_blank">$25/mo</a>
+                <a href="https://buy.stripe.com/5kQdR23B77l61WG1S5efC0d" target="_blank">$10/mo</a>
+                <a href="https://buy.stripe.com/6oU28k1sZgVG9p87cpefC0e" target="_blank">$5/mo</a>
+            </div>
+        </div>
+
+        <div class="speech">
+            <p>The year is 1840. The old world has nothing left for you.</p>
+            <p>Here, on shores untouched by kings and emperors, you will carve your name into the wilderness itself. Fell the ancient pines. Raise walls from raw stone. Trade with ships that sail from lands you'll never see.</p>
+            <p>But beware - you are not alone. Bandits lurk in the hills. Bears prowl the forests. And across the great divide, another faction watches for the breath of your chimneys.</p>
+            <p class="final">This land will not be given. It must be taken.</p>
+        </div>
+    </div>
+
+    <script>
+        function setDonateMode(mode) {
+            const buttons = document.querySelectorAll('.donate-toggle button');
+            const onetime = document.getElementById('donate-onetime');
+            const monthly = document.getElementById('donate-monthly');
+
+            buttons.forEach(b => b.classList.remove('active'));
+            if (mode === 'onetime') {
+                buttons[0].classList.add('active');
+                onetime.style.display = 'flex';
+                monthly.style.display = 'none';
+            } else {
+                buttons[1].classList.add('active');
+                onetime.style.display = 'none';
+                monthly.style.display = 'flex';
+            }
+        }
+    </script>
+
+    <script>
+        // Version check - clear cache if server has restarted
+        (function() {
+            const SERVER_URL = 'https://multiplayer-game-dcwy.onrender.com';
+            fetch(SERVER_URL + '/version')
+                .then(r => r.json())
+                .then(data => {
+                    const cached = localStorage.getItem('serverVersion');
+                    if (cached && cached !== String(data.version)) {
+                        localStorage.clear();
+                        location.reload(true);
+                    }
+                })
+                .catch(() => {}); // Fail silently if server unreachable
+        })();
+    </script>
+</body>
+</html>
