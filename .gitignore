@@ -1,0 +1,16 @@
+node_modules/
+.env
+*.log
+.grepai/
+grepai/
+.mcp.json
+DEPLOY.md
+ALL_CODE.txt
+cheating2.txt
+export-ai-code.js
+export-code.js
+generate-docs.js
+generate-terrain-map.js
+optimize-models.js
+reoptimize.sh
+public/visualize-navigation.js

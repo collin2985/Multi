@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guns Horses & Ships Wiki</title>
+    <style>
+        body {
+            font-family: Georgia, serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f1e8;
+            color: #333;
+        }
+        h1 {
+            text-align: center;
+            border-bottom: 2px solid #8b7355;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #5c4a32;
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 5px;
+            margin-top: 40px;
+        }
+        nav {
+            background: #8b7355;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 30px;
+        }
+        nav a {
+            color: #f5f1e8;
+            text-decoration: none;
+            margin-right: 20px;
+        }
+        nav a:hover {
+            text-decoration: underline;
+        }
+        .section {
+            margin-bottom: 30px;
+        }
+        .placeholder {
+            color: #999;
+            font-style: italic;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            background: #fff;
+        }
+        th, td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background: #8b7355;
+            color: #f5f1e8;
+        }
+        td img {
+            width: 32px;
+            height: 32px;
+            vertical-align: middle;
+        }
+        .table-note {
+            font-size: 0.9em;
+            color: #666;
+            font-style: italic;
+            margin-top: 5px;
+        }
+        #back-to-top {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 50px;
+            height: 50px;
+            background: #8b7355;
+            color: #f5f1e8;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 24px;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s, visibility 0.3s;
+            z-index: 1000;
+        }
+        #back-to-top:hover {
+            background: #5c4a32;
+        }
+        #back-to-top.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+    </style>
+</head>
+<body>
+    <button id="back-to-top" title="Back to top">&#8593;</button>
+    <h1>Guns Horses & Ships Wiki</h1>
+
+    <nav>
+        <a href="#getting-started">Getting Started</a>
+        <a href="#progression">Game Progression</a>
+        <a href="#survival">Survival</a>
+        <a href="#resources">Resources</a>
+        <a href="#building">Building</a>
+        <a href="#crafting">Crafting</a>
+        <a href="#combat">Combat</a>
+        <a href="#trading">Trading</a>
+        <a href="#npcs">NPCs</a>
+        <a href="#transportation">Transportation</a>
+        <a href="#world">World</a>
+    </nav>
+
+    <section id="getting-started" class="section">
+        <h2>Getting Started</h2>
+        <p>Guns Horses & Ships is a multiplayer survival game set in the 18th century. You play as a settler in a vast wilderness where you'll gather resources, find food, craft tools, and build a settlement to survive. A controls tutorial appears when you first spawn explaining the basics.</p>
+        <p>Move using the WASD keys. Double-tap W to toggle auto-run for continuous forward movement - tap W again to stop. Rotate the camera by clicking and dragging left/right, and drag up/down to adjust the overhead angle. Scroll to zoom in or out. On-screen buttons for zoom and rotate are also available. A compass in the corner shows your facing direction - north is toward positive Z (Northmen territory). When you're near something you can interact with, buttons will appear at the top of your screen. Press Enter to open the chat, type your message, and press Enter again to send. Press Escape to close chat without sending. Chat is local - only players near you will see your messages.</p>
+        <p>When you first join, you can create an account or play as a guest. Guests can explore and learn the game, but your progress won't be saved between sessions. With an account, you can set a home spawn point by building a tent or house. Your personal inventory is lost when you die, but anything stored in tents or houses persists.</p>
+        <h3>Tutorial</h3>
+        <p>A task list in the corner of your screen guides you through the basics. Complete tasks to earn coins and learn the game's systems. Your first priorities should be finding food and gathering vines from grass patches to craft rope, which you'll need for tools and fishing.</p>
+        <h3>Settings</h3>
+        <p>Click the Settings button to access game options. A volume slider controls the master audio level. Debug Info toggle shows technical details like your exact position, speed, region coordinates, and food timer. These preferences are saved between sessions.</p>
+        <h3>Graphics Quality</h3>
+        <p>Before spawning, you can select a graphics quality preset: HIGH, MEDIUM, or LOW. High quality includes full water effects, fog, and terrain detail. Medium reduces some effects for better performance. Low uses simplified graphics for older hardware. Your choice is saved between sessions.</p>
+        <h3>Inventory</h3>
+        <p>Click the Backpack button to open your inventory. Drag items to rearrange them. While dragging an item, scroll the mouse wheel to rotate it between horizontal and vertical orientations - this helps fit more items. To discard an item, drag it outside the inventory panel. When transferring coins between your backpack and storage, a dialog lets you choose how many to move rather than transferring the entire stack. Double-click an item to bulk transfer all items of that type between your backpack and an open structure or crate.</p>
+    </section>
+
+    <section id="progression" class="section">
+        <h2>Game Progression</h2>
+        <p>The game offers two distinct paths: join a faction and engage in territorial warfare, or stay neutral and focus on peaceful survival. Here's how the game typically progresses for each path.</p>
+
+        <h3>Early Game: Survival</h3>
+        <p>Your first priority is not starving. Find apple trees for immediate food, forage mushrooms from grass, and gather vegetables you spot in the world. Collect vines from grass patches to craft rope, which you'll need for fishing nets and tools. Once you have basic food sources, focus on gathering limestone and wood to build your first structures.</p>
+
+        <h3>Building a Settlement</h3>
+        <p>Build a tent first - it gives you storage and a respawn point. Gather materials to build a house, which provides better storage and lets you cook food. Place crates near resource areas for convenient storage while gathering. As your settlement grows, add worker structures like woodcutters and miners that automatically harvest and sell to your market.</p>
+
+        <h3>Establishing Trade</h3>
+        <p>Build a market to enable buying and selling. Stock it by selling gathered resources. Build a dock on the shoreline near your market to attract merchant ships. Ships arrive every 30 minutes and will trade with any market within 20 units of your dock - they buy raw materials and sell tools, weapons, and horses.</p>
+
+        <h3>Pursuing Quality</h3>
+        <p>Resource quality varies by location - explore to find areas with higher quality trees, rocks, and food. Quality affects how long tools last and how much food sustains you. The center of continents tends to have better quality resources than coastal areas. Higher quality items also fetch better prices at markets.</p>
+
+        <h3>The Faction Path: Earning Influence</h3>
+        <p>If you've joined a faction (Southguard or Northmen), you can earn influence by stocking your market with 100% quality materials. When merchant ships take these items, you gain 1 influence per item. Influence is the currency for building your faction's military power.</p>
+
+        <h3>Securing Territory with Militia</h3>
+        <p>Spend influence to spawn militia at structures you own. Tent militia patrol and chase enemies. Outpost militia stand guard in elevated towers with better range and accuracy. Artillery militia man cannons and automatically fire at threats within 28 units. Use militia to defend your settlement and secure territory for your faction.</p>
+
+        <h3>Faction Warfare</h3>
+        <p>Seek out enemy faction settlements to raid. Enemy markets can be looted for free - no coins required. Use artillery to destroy enemy structures from a safe distance. Coordinate with fellow faction members (identifiable by their shirt color) to mount larger attacks. Destroying enemy tents removes their respawn points; destroying their markets cripples their economy.</p>
+
+        <h3>The Neutral Path</h3>
+        <p>Alternatively, stay neutral and avoid the chaos of faction warfare. Neutral players can build anywhere without being targeted by militia. Focus on perfecting your settlement, exploring the vast world, hunting and fishing, or simply enjoying a peaceful life in the wilderness. You won't earn influence or spawn militia, but you also won't be drawn into territorial conflicts. This path suits players who prefer building and survival over combat.</p>
+    </section>
+
+    <section id="survival" class="section">
+        <h2>Survival</h2>
+        <h3>Hunger</h3>
+        <p>Your hunger drains continuously while playing. Food in your backpack is consumed automatically - you don't need to click anything. The status bar on the right side of your screen shows how many minutes until you start starving.</p>
+        <h3>Food Sources</h3>
+        <p>Food can be found in several ways. Apples grow on apple trees - walk up to a tree and open its inventory. When you stop on grass, there's a 5% chance a mushroom appears to gather, a 2.5% chance for vegetable seeds, a 2.5% chance for hemp seeds, and a 10% chance for limestone. Vegetables are visible in the world and can be gathered by walking up to them. You can also find vegetable seeds and plant them from the build menu. Fish must be cooked before eating - raw fish cannot be consumed.</p>
+        <table>
+            <tr>
+                <th>Food</th>
+                <th></th>
+                <th>Duration (100% quality)</th>
+                <th>How to Obtain</th>
+            </tr>
+            <tr>
+                <td>Apple</td>
+                <td><img src="images/apple.png" alt="Apple"></td>
+                <td>10 minutes</td>
+                <td>Apple trees</td>
+            </tr>
+            <tr>
+                <td>Mushroom</td>
+                <td><img src="images/mushroom.png" alt="Mushroom"></td>
+                <td>10 minutes</td>
+                <td>Foraging on grass</td>
+            </tr>
+            <tr>
+                <td>Vegetables</td>
+                <td><img src="images/vegetables.png" alt="Vegetables"></td>
+                <td>20 minutes</td>
+                <td>Gathering or planting</td>
+            </tr>
+            <tr>
+                <td>Roasted Vegetables</td>
+                <td><img src="images/roastedvegetables.png" alt="Roasted Vegetables"></td>
+                <td>40 minutes</td>
+                <td>Cook vegetables</td>
+            </tr>
+            <tr>
+                <td>Apple Tart</td>
+                <td><img src="images/appletart.png" alt="Apple Tart"></td>
+                <td>30 minutes</td>
+                <td>Buy from market</td>
+            </tr>
+            <tr>
+                <td>Cooked Fish</td>
+                <td><img src="images/cookedfish.png" alt="Cooked Fish"></td>
+                <td>60 minutes</td>
+                <td>Cook raw fish</td>
+            </tr>
+            <tr>
+                <td>Cooked Meat</td>
+                <td><img src="images/cookedmeat.png" alt="Cooked Meat"></td>
+                <td>80 minutes</td>
+                <td>Cook raw meat</td>
+            </tr>
+            <tr>
+                <td>Raw Fish</td>
+                <td><img src="images/fish.png" alt="Raw Fish"></td>
+                <td>Cannot eat</td>
+                <td>Fishing</td>
+            </tr>
+            <tr>
+                <td>Raw Meat</td>
+                <td><img src="images/rawmeat.png" alt="Raw Meat"></td>
+                <td>Cannot eat</td>
+                <td>Hunting</td>
+            </tr>
+        </table>
+        <p class="table-note">Duration scales with quality. A 50% quality apple lasts 5 minutes instead of 10.</p>
+        <h3>Variety Bonus</h3>
+        <p>Carrying different types of food slows your hunger. Each unique food type gives a 10% bonus, up to 40% with four different types. For example, carrying apples, cooked fish, roasted vegetables, and mushrooms together will make your food last nearly twice as long as carrying just one type.</p>
+        <h3>Cooking</h3>
+        <p>Raw fish and vegetables can be cooked at campfires or houses. Place the raw food and some firewood in the structure's inventory, and after one minute the food will be cooked. Cooked food lasts much longer - cooked meat provides 80 minutes of sustenance compared to raw food which cannot be eaten at all. Structures with firewood emit visible smoke, making active cooking spots easy to spot from a distance.</p>
+        <h3>Starvation</h3>
+        <p>When you run out of food, you begin starving. A warning appears showing how long until you die. If you starve for six minutes without finding food, you die. While starving, you accumulate hunger debt - any food you pick up must first pay off this debt before providing sustenance. You can't survive by briefly grabbing food and dropping it.</p>
+        <h3>Hunting</h3>
+        <p>Deer and bears roam the wilderness. Deer are passive and will flee if you get too close or fire a shot nearby. Bears are extremely dangerous - they spawn from bear dens and will aggressively chase you if you enter their territory. Bears attack in melee range and are fast, so keep your distance and use a rifle.</p>
+        <h3>Fishing</h3>
+        <p>To fish, craft a fishing net from 2 rope and stand in shallow water or aboard a boat. Each cast takes 10 seconds and uses 1 net durability. Your catch chance equals your net's quality as a percentage (minimum 25%) - a quality 50 net catches fish 50% of the time, while a quality 100 net never fails.</p>
+        <h3>Meat</h3>
+        <p>Killing a deer or bear drops raw meat. Get close to the corpse and interact with it to collect the meat before the body despawns after about two minutes. Raw meat cannot be eaten - you must cook it at a campfire or house with firewood. Cooked meat provides 80 minutes of sustenance, making it the most nutritious food in the game.</p>
+        <h3>Food Quality</h3>
+        <p>All food has a quality rating that affects how long it lasts. Higher quality food provides more minutes of sustenance. Different regions of the world have different resource qualities - exploring further from where you started may lead you to better or worse quality food sources.</p>
+    </section>
+
+    <section id="resources" class="section">
+        <h2>Resources</h2>
+        <h3>Trees and Logs</h3>
+        <p>Pine <img src="images/pinetree.png" alt="Pine" style="width:24px;height:24px;vertical-align:middle;"> and apple <img src="images/appletree.png" alt="Apple" style="width:24px;height:24px;vertical-align:middle;"> trees grow throughout the wilderness. Chop down a tree with an axe <img src="images/axe.png" alt="Axe" style="width:24px;height:24px;vertical-align:middle;"> and it drops a log. Each log can be harvested five times, giving you either firewood (using an axe) or planks (using a saw <img src="images/saw.png" alt="Saw" style="width:24px;height:24px;vertical-align:middle;">). Firewood is used for cooking, while planks are used for building.</p>
+        <table>
+            <tr>
+                <th>Resource</th>
+                <th></th>
+                <th>Tool</th>
+                <th>Products</th>
+            </tr>
+            <tr>
+                <td>Pine Tree</td>
+                <td><img src="images/pinetree.png" alt="Pine"></td>
+                <td>Axe <img src="images/axe.png" alt="Axe"></td>
+                <td>Pine Plank <img src="images/pineplank.png" alt="Plank">, Pine Firewood <img src="images/pinefirewood.png" alt="Firewood"></td>
+            </tr>
+            <tr>
+                <td>Apple Tree</td>
+                <td><img src="images/appletree.png" alt="Apple"></td>
+                <td>Axe <img src="images/axe.png" alt="Axe"></td>
+                <td>Apple Plank <img src="images/appleplank.png" alt="Plank">, Apple Firewood <img src="images/applefirewood.png" alt="Firewood"></td>
+            </tr>
+        </table>
+        <h3>Stone</h3>
+        <p>Four types of stone can be mined with a pickaxe <img src="images/pickaxe.png" alt="Pickaxe" style="width:24px;height:24px;vertical-align:middle;">: limestone, sandstone, clay, and iron. Limestone and sandstone are common building materials - structures built with sandstone have a warmer color tint compared to grey limestone. Clay can be processed into tiles - it takes one minute at a tileworks or five minutes at a campfire. Iron is rare and only found in high mountains - it must be smelted into ingots at an ironworks before use.</p>
+        <table>
+            <tr>
+                <th>Stone</th>
+                <th></th>
+                <th>Location</th>
+                <th>Processed Form</th>
+            </tr>
+            <tr>
+                <td>Limestone</td>
+                <td><img src="images/limestone.png" alt="Limestone"></td>
+                <td>Common, all elevations</td>
+                <td>Chiseled Limestone <img src="images/chiseledlimestone.png" alt="Chiseled"></td>
+            </tr>
+            <tr>
+                <td>Sandstone</td>
+                <td><img src="images/sandstone.png" alt="Sandstone"></td>
+                <td>Common, all elevations</td>
+                <td>Chiseled Sandstone <img src="images/chiseledsandstone.png" alt="Chiseled"></td>
+            </tr>
+            <tr>
+                <td>Clay</td>
+                <td><img src="images/clay.png" alt="Clay"></td>
+                <td>Common, lower areas</td>
+                <td>Tile <img src="images/tile.png" alt="Tile"></td>
+            </tr>
+            <tr>
+                <td>Iron</td>
+                <td><img src="images/iron.png" alt="Iron"></td>
+                <td>Rare, mountains only</td>
+                <td>Iron Ingot <img src="images/ironingot.png" alt="Ingot"></td>
+            </tr>
+        </table>
+        <h3>Hemp</h3>
+        <p>Hemp grows naturally at low elevations (height 3-10) and can also be planted from hemp seeds. Walk up to a hemp plant and click the Gather Hemp button - gathering takes 6 seconds and produces hemp fiber. Two hemp fibers can be combined in your inventory to craft fabric, a material used in construction. Hemp seeds can be found while foraging on grass (2.5% chance) or gathered from mature hemp plants (40% chance).</p>
+        <h3>Harvesting</h3>
+        <p>Most harvesting actions take 10 seconds. Walk up to a resource and a button will appear at the top of your screen. Each harvest uses one point of your tool's durability. When durability reaches zero, the tool breaks. Higher quality tools last longer - a quality 50 axe can chop 50 times before breaking.</p>
+        <h3>Quality</h3>
+        <p>All resources have a quality rating from 1 to 100. Quality affects how long food lasts, how many uses you get from a tool, and how much an item sells for. Different regions of the world have different quality ranges. You can pay a trapper NPC to reveal the quality of resources in your area.</p>
+        <h3>Seed Planting</h3>
+        <p>Seeds let you grow new trees, vegetables, and hemp. When gathering resources on grass, there's a small chance (about 2.5%) to find seeds. You can also sometimes gather seeds directly from parent plants - apple seeds from apple trees, pine seeds from pine trees, vegetable seeds from vegetable patches, and hemp seeds from hemp plants.</p>
+        <p>To plant a seed, open the Build menu and select the seed type. Place it on valid terrain like you would any other structure. Vegetable seeds grow into harvestable vegetables. Hemp seeds grow into hemp plants that yield hemp fiber. Apple seeds grow into apple trees that produce fruit. Pine seeds grow into pine trees that can be chopped for wood. Planted resources inherit the quality of the region where they're planted.</p>
+    </section>
+
+    <section id="building" class="section">
+        <h2>Building</h2>
+        <h3>Construction</h3>
+        <p>Click the Build button at the top of your screen to open the build menu. Select a structure and click to place it. While placing, use Q and E keys to rotate the structure, or scroll the mouse wheel. Simple structures like tents, campfires, crates, carts, walls, roads, and boats build instantly when you have the materials. Larger structures like houses, markets, and worker buildings require placing a construction site first, then gathering materials and using a hammer <img src="images/hammer.png" alt="Hammer" style="width:24px;height:24px;vertical-align:middle;"> to complete the build.</p>
+        <h3>Structures</h3>
+        <p>Tents <img src="images/tent.png" alt="Tent" style="width:24px;height:24px;vertical-align:middle;"> and houses <img src="images/house.png" alt="House" style="width:24px;height:24px;vertical-align:middle;"> store your items and serve as respawn points. You can only have one spawn point at a time - building a new tent or house makes it your new home, replacing any previous spawn point. Tents are shared - any player can open them. Houses are private - only the owner can access the inventory. Campfires <img src="images/campfire.png" alt="Campfire" style="width:24px;height:24px;vertical-align:middle;"> cook food using firewood. Markets <img src="images/market.png" alt="Market" style="width:24px;height:24px;vertical-align:middle;"> enable trading when paired with a dock <img src="images/dock.png" alt="Dock" style="width:24px;height:24px;vertical-align:middle;">, which must be placed on a shoreline with deep water ahead. Worker buildings like bakeries, woodcutters, and miners can be sold to NPC proprietors who will run them automatically.</p>
+        <table>
+            <tr>
+                <th>Structure</th>
+                <th></th>
+                <th>Purpose</th>
+                <th>Build Type</th>
+            </tr>
+            <tr>
+                <td>Tent</td>
+                <td><img src="images/tent.png" alt="Tent"></td>
+                <td>Storage, respawn point</td>
+                <td>Instant</td>
+            </tr>
+            <tr>
+                <td>House</td>
+                <td><img src="images/house.png" alt="House"></td>
+                <td>Storage, respawn, cooking</td>
+                <td>Construction site</td>
+            </tr>
+            <tr>
+                <td>Campfire</td>
+                <td><img src="images/campfire.png" alt="Campfire"></td>
+                <td>Cooking food</td>
+                <td>Instant</td>
+            </tr>
+            <tr>
+                <td>Crate</td>
+                <td><img src="images/crate.png" alt="Crate"></td>
+                <td>Portable storage (100 slots)</td>
+                <td>Instant</td>
+            </tr>
+            <tr>
+                <td>Market</td>
+                <td><img src="images/market.png" alt="Market"></td>
+                <td>Trading hub</td>
+                <td>Construction site</td>
+            </tr>
+            <tr>
+                <td>Dock</td>
+                <td><img src="images/dock.png" alt="Dock"></td>
+                <td>Ship trading</td>
+                <td>Construction site</td>
+            </tr>
+            <tr>
+                <td>Wall</td>
+                <td><img src="images/wall.png" alt="Wall"></td>
+                <td>Defense</td>
+                <td>Instant</td>
+            </tr>
+            <tr>
+                <td>Road</td>
+                <td><img src="images/road.png" alt="Road"></td>
+                <td>1.5x movement speed</td>
+                <td>Instant</td>
+            </tr>
+            <tr>
+                <td>Outpost</td>
+                <td><img src="images/outpost.png" alt="Outpost"></td>
+                <td>Lookout tower</td>
+                <td>Instant</td>
+            </tr>
+        </table>
+        <h3>Structure Inventories</h3>
+        <p>Some structures have restricted inventories that only accept specific items. This prevents accidentally storing random items in processing structures.</p>
+        <table>
+            <tr>
+                <th>Structure</th>
+                <th>Accepts Only</th>
+            </tr>
+            <tr>
+                <td>Apple Tree</td>
+                <td>Nothing (read-only, apples spawn naturally)</td>
+            </tr>
+            <tr>
+                <td>Ironworks</td>
+                <td>Iron ore, iron ingots, firewood</td>
+            </tr>
+            <tr>
+                <td>Blacksmith</td>
+                <td>Iron ingots, parts, firewood</td>
+            </tr>
+            <tr>
+                <td>Bakery</td>
+                <td>Apples, apple tarts, firewood</td>
+            </tr>
+            <tr>
+                <td>Tileworks</td>
+                <td>Clay, tiles, firewood</td>
+            </tr>
+            <tr>
+                <td>Fisherman</td>
+                <td>Fish, cooked fish, firewood</td>
+            </tr>
+            <tr>
+                <td>Artillery</td>
+                <td>Shells only</td>
+            </tr>
+        </table>
+        <h3>Decay</h3>
+        <p>All structures decay over time based on the quality of materials used to build them. Higher quality materials make structures last dramatically longer. However, some structure types have a quality cap that limits their maximum lifespan regardless of material quality.</p>
+        <table>
+            <tr>
+                <th>Structure Type</th>
+                <th>Quality Cap</th>
+                <th>Maximum Lifespan</th>
+            </tr>
+            <tr>
+                <td>Campfire</td>
+                <td>2</td>
+                <td>~2.7 hours</td>
+            </tr>
+            <tr>
+                <td>Tent, Crate, Cart, Horse, Boat, Sailboat, Ship</td>
+                <td>15</td>
+                <td>~2 days</td>
+            </tr>
+            <tr>
+                <td>House, Market, Dock, Outpost, Wall, Artillery, Worker Structures</td>
+                <td>None</td>
+                <td>Up to ~30 days (quality 100)</td>
+            </tr>
+            <tr>
+                <td>Road</td>
+                <td>-</td>
+                <td>Never decays</td>
+            </tr>
+        </table>
+        <p>For uncapped structures, lifespan scales with quality: quality 15 lasts about 2 days, quality 50 lasts about 11 days, and quality 100 lasts about 30 days. Construction sites expire after 1 hour if not completed. Worker structures sold to a proprietor stop decaying entirely.</p>
+        <p>When a structure has less than 1 hour of durability remaining, it begins smoking and emitting a fire sound as a visual and audio warning. You can check any structure's current durability by approaching it - the info panel shows durability, percentage remaining, and hours until it becomes a ruin.</p>
+        <h3>Ruins and Item Loss</h3>
+        <p>When a structure reaches zero durability, it becomes a ruin. Any items stored inside are permanently lost - this includes the contents of tents, houses, crates, and artillery shell storage. Militia assigned to the structure are also removed. Ruins persist for about an hour, during which you can rebuild in the same spot. After an hour, ruins disappear automatically.</p>
+        <h3>Repair</h3>
+        <p>Structures can be repaired before they fully decay. Stand near a structure and click the Repair button. You must have the structure's original build materials in your backpack. Repairing resets the decay timer completely and updates the structure's quality to a weighted average of its current quality and the quality of your repair materials. For example, repairing a quality 30 structure with two quality 90 materials results in a new quality of about 70. Quality caps still apply - repairing a tent with quality 100 materials will still cap it at quality 15.</p>
+        <h3>Combat Damage</h3>
+        <p>Artillery hits deal 50 durability damage to structures per shot, which can rapidly destroy them. A low-quality structure can be destroyed in a single hit. Each shot fired also wears the artillery itself by 1 durability. Rifles and other player weapons do not damage structures.</p>
+        <p>When an enemy faction player loots items from your market, the market's remaining lifespan is reduced to 15 minutes if it currently has more time remaining. This forces you to repair or lose the market quickly after a raid.</p>
+        <h3>Materials</h3>
+        <p>Most structures require planks, chiseled stone, or tiles. Planks come from processing logs with a saw. Chiseled stone is made by using a chisel on raw limestone or sandstone. Tiles are made by cooking clay with firewood at a tileworks or campfire. Some structures also require fabric, which is crafted by combining two hemp fibers in your inventory.</p>
+    </section>
+
+    <section id="crafting" class="section">
+        <h2>Crafting</h2>
+        <h3>Combining Items</h3>
+        <p>Open your backpack and drag one item onto another to combine them. Combining takes 6 seconds and you must stand still.</p>
+        <table>
+            <tr>
+                <th>Result</th>
+                <th></th>
+                <th>Recipe</th>
+                <th>Time</th>
+            </tr>
+            <tr>
+                <td>Rope</td>
+                <td><img src="images/rope.png" alt="Rope"></td>
+                <td>2 Vines <img src="images/vines.png" alt="Vines"></td>
+                <td>6 sec</td>
+            </tr>
+            <tr>
+                <td>Fishing Net</td>
+                <td><img src="images/fishingnet.png" alt="Fishing Net"></td>
+                <td>2 Rope <img src="images/rope.png" alt="Rope"></td>
+                <td>6 sec</td>
+            </tr>
+            <tr>
+                <td>Improvised Tool</td>
+                <td><img src="images/improvisedtool.png" alt="Improvised Tool"></td>
+                <td>Limestone <img src="images/limestone.png" alt="Limestone"> + Rope <img src="images/rope.png" alt="Rope"></td>
+                <td>6 sec</td>
+            </tr>
+            <tr>
+                <td>Fabric</td>
+                <td><img src="images/fabric.png" alt="Fabric"></td>
+                <td>2 Hemp Fiber <img src="images/hempfiber.png" alt="Hemp Fiber"></td>
+                <td>6 sec</td>
+            </tr>
+        </table>
+        <h3>Chiseling</h3>
+        <p>To make chiseled stone, you need a chisel <img src="images/chisel.png" alt="Chisel" style="width:24px;height:24px;vertical-align:middle;">. Select the chisel in your inventory, then click on stone. Chiseling takes 6 seconds and uses one point of your chisel's durability.</p>
+        <table>
+            <tr>
+                <th>Result</th>
+                <th></th>
+                <th>Input</th>
+                <th>Time</th>
+            </tr>
+            <tr>
+                <td>Chiseled Limestone</td>
+                <td><img src="images/chiseledlimestone.png" alt="Chiseled Limestone"></td>
+                <td>Limestone <img src="images/limestone.png" alt="Limestone"></td>
+                <td>6 sec</td>
+            </tr>
+            <tr>
+                <td>Chiseled Sandstone</td>
+                <td><img src="images/chiseledsandstone.png" alt="Chiseled Sandstone"></td>
+                <td>Sandstone <img src="images/sandstone.png" alt="Sandstone"></td>
+                <td>6 sec</td>
+            </tr>
+        </table>
+        <h3>Tool Quality</h3>
+        <p>When you craft a tool, its quality is the average of the materials used. Higher quality tools last longer before breaking. All crafted tools have a minimum quality of 25, so even low-quality materials will produce a usable tool.</p>
+    </section>
+
+    <section id="combat" class="section">
+        <h2>Combat</h2>
+        <h3>Rifles</h3>
+        <p>Combat happens automatically when enemies are nearby. If you have a rifle <img src="images/rifle.png" alt="Rifle" style="width:24px;height:24px;vertical-align:middle;"> with ammo <img src="images/ammo.png" alt="Ammo" style="width:24px;height:24px;vertical-align:middle;">, you'll shoot every 6 seconds. Each shot uses one ammo and one rifle durability. When durability reaches zero, the rifle breaks. Your shooting range is normally 10 units but can extend to 15 if you have height advantage over your target. Ammo stacks up to 20 per slot - when transferring from storage, it automatically fills existing stacks first.</p>
+        <p>Your backpack has a dedicated rifle sling slot in the header. Drag a rifle there to free up inventory space while keeping it equipped. Only rifles can be placed in the sling slot.</p>
+        <p>A Hold Fire button appears in the combat display when you have a rifle. Click it to pause automatic shooting - useful when you want to avoid alerting nearby enemies or wasting ammo. Click again to resume firing. You can also collapse the combat stats display to reduce screen clutter while keeping the hold fire toggle visible.</p>
+        <p>When enemies are nearby, a red glow appears at the edge of the screen in their direction. This helps you locate threats before they surprise you.</p>
+        <h3>Accuracy</h3>
+        <p>Your base hit chance is 35% and can reach 80% maximum. Standing higher than your target gives 15% bonus per unit of height - this is the biggest accuracy factor. Getting very close (under 4 units) also dramatically improves accuracy. Rifle quality provides a small bonus: quality 100 adds 10%, quality 50 is neutral, quality 1 subtracts 10%.</p>
+        <h3>Outpost Climbing</h3>
+        <p>Outposts <img src="images/outpost.png" alt="Outpost" style="width:24px;height:24px;vertical-align:middle;"> provide elevated shooting positions. When near an outpost, a Climb button appears at the top of your screen. While at the top, you can aim and shoot but cannot move - the height advantage significantly improves your accuracy and range. Click Climb Down to descend. Only one person can occupy an outpost at a time. If you've recruited outpost militia, they occupy the tower instead.</p>
+        <h3>Bandits</h3>
+        <p>Bandits spawn from tents scattered throughout the wilderness. They detect you at 30 units and will chase and shoot. Destroying a bandit's tent prevents them from respawning. Bandit tents contain loot like coins and ammo - interact with the tent to access its inventory.</p>
+        <h3>Bears</h3>
+        <p>Brown bears spawn from bear dens and are extremely dangerous. They attack in melee range and move fast. Keep your distance and use a rifle - if a bear reaches you, it will maul you quickly. Bears flee from structures, so buildings offer some protection.</p>
+        <h3>Death</h3>
+        <p>When you die, you lose everything in your inventory including your rifle, tools, and coins. Your structures remain - anything stored in tents or houses is safe. After a short countdown, you can choose how to respawn:</p>
+        <table>
+            <tr>
+                <th>Spawn Option</th>
+                <th>Location</th>
+                <th>Inventory</th>
+            </tr>
+            <tr>
+                <td>Resume Last Session</td>
+                <td>Where you last played</td>
+                <td>Restored (syncs every 60 seconds)</td>
+            </tr>
+            <tr>
+                <td>Random Spawn</td>
+                <td>Random in your faction territory</td>
+                <td>Starter items (food, basic gear)</td>
+            </tr>
+            <tr>
+                <td>Home</td>
+                <td>Near your tent or house</td>
+                <td>Empty</td>
+            </tr>
+            <tr>
+                <td>Near Friend</td>
+                <td>Near an online friend</td>
+                <td>Empty</td>
+            </tr>
+        </table>
+        <p>Resume Last Session is only available for registered players whose session was synced before death. If you die shortly after spawning, this option may not appear.</p>
+        <h3>Spawn Protection</h3>
+        <p>After respawning, you have 60 seconds of protection from bandits and bears. A "Protected: Xs" counter appears in your status bar showing how many seconds remain. During this time, enemies will not attack you, giving you a chance to get your bearings and find safety.</p>
+        <h3>Friends</h3>
+        <p>Open the Friends panel from the Settings menu to manage your friends list. Type a player's username and click Add to send a friend request. When you receive a request, you can accept or decline it. Accepted friends appear in your list with a green dot if they're online or grey if offline. After dying, you can choose to respawn near an online friend instead of at home or a random location.</p>
+        <h3>Artillery</h3>
+        <p>Artillery <img src="images/artillery.png" alt="Artillery" style="width:24px;height:24px;vertical-align:middle;"> is a powerful cannon that can be towed by horses. To load it, click the artillery button and place shells <img src="images/shell.png" alt="Shell" style="width:24px;height:24px;vertical-align:middle;"> inside its inventory. To fire, click the man artillery button to take position behind the cannon. Use A and D to rotate, then press F to fire. Artillery has a 28-unit range and 12-second cooldown between shots. It can destroy enemy faction structures and bandit camps.</p>
+        <h3>Militia</h3>
+        <p>Militia are AI defenders you can recruit to protect your structures. Approach a tent, outpost, or artillery you own and click the Request Militia button. Recruiting costs 1 influence and requires faction membership - guests cannot recruit militia.</p>
+        <p>Three types of militia are available:</p>
+        <table>
+            <tr>
+                <th>Type</th>
+                <th>Structure</th>
+                <th>Behavior</th>
+            </tr>
+            <tr>
+                <td>Tent Militia</td>
+                <td>Tent</td>
+                <td>Patrols near tent, attacks enemies on foot</td>
+            </tr>
+            <tr>
+                <td>Outpost Militia</td>
+                <td>Outpost</td>
+                <td>Elevated shooter stationed in the tower</td>
+            </tr>
+            <tr>
+                <td>Artillery Gunner</td>
+                <td>Artillery</td>
+                <td>Automatically fires the cannon at enemies</td>
+            </tr>
+        </table>
+        <p>Militia attack enemy faction players, bandits, and bears within range. They are more effective than bandits - militia have 45% base accuracy (vs 35% for bandits), longer range (15-20 units vs 10-15), and faster fire rate (every 4 seconds vs 6). When a militia is killed, it does not respawn - you must spend another influence to recruit a replacement. Militia persist across sessions as long as their structure exists.</p>
+        <h3>Influence</h3>
+        <p>Influence is a currency earned through high-quality trade. When trade ships collect 100-quality items from your market, you earn 1 influence per item collected. Only faction players can earn and spend influence - guests cannot participate in the militia system. Your influence total is shown in the upper right of the market interface for markets you own.</p>
+    </section>
+
+    <section id="trading" class="section">
+        <h2>Trading</h2>
+        <h3>Markets</h3>
+        <p>Build a market <img src="images/market.png" alt="Market" style="width:24px;height:24px;vertical-align:middle;"> to create a trading hub. Markets start empty - you must stock them by selling items to them, or set up automated production with worker NPCs. Open a market's inventory to buy and sell. To quickly buy or sell many of the same item, click the Buy or Sell button once, then press Enter repeatedly to confirm and continue the transaction.</p>
+        <h3>Pricing</h3>
+        <p>Market prices are calculated from three factors: base price, supply level, and item condition. Low stock increases prices by up to 50%, while overstocked items drop to 10% of base value. Quality scales linearly - a quality 100 item sells for full price, quality 50 for half. For tools and weapons, the price uses the average of quality and durability, so a worn tool sells for less even if it started high quality.</p>
+        <p>Enemy faction markets can be looted for free - the buy button changes to "Loot" and all items cost 0 coins. This makes raiding enemy territory profitable even without destroying anything. You can sell items to enemy markets normally.</p>
+        <h3>Stocking Your Market</h3>
+        <p>Stock a market by selling items to it - this adds them to the market's inventory and gives you coins <img src="images/coin.png" alt="Coin" style="width:24px;height:24px;vertical-align:middle;">. You can also build worker structures nearby and sell them to proprietors. When you sell a structure like a woodcutter or miner to a proprietor, you receive 10 coins and a worker NPC spawns to gather resources and sell them to your market automatically. Once sold, the structure stops decaying but you lose access to its inventory.</p>
+        <h3>Worker Structures</h3>
+        <p>Nine structure types can be sold to proprietors: bakery, woodcutter, gardener, miner, stonemason, blacksmith, ironworks, tileworks, and fisherman. Each produces different goods - woodcutters deliver planks and firewood, miners deliver stone, bakers convert apples to tarts. Build these near your market, then click the Seek Proprietor button to sell them.</p>
+        <h3>Docks and Ship Trading</h3>
+        <p>Build a dock on a shoreline and place a market within 20 units. Trade ships arrive periodically and automatically trade with your market. Ships buy your materials (stone, planks, firewood, rope) leaving only 10 of each type behind. Ships also restock tools, weapons, and horses at fixed prices - 60 coins for tools, 200 for rifles and horses. The quality of delivered tools depends on your market's region, the same as local resources - a market in a high-quality area receives better tools. All ship-delivered tools have a minimum quality of 25.</p>
+        <h3>Pausing Shipments</h3>
+        <p>Use the pause shipments button in the market interface to control ship trading. Allow shipments if you want cheap tools and weapons - the increased supply lowers prices. Pause shipments if you want to keep your materials for building or crafting.</p>
+    </section>
+
+    <section id="npcs" class="section">
+        <h2>NPCs</h2>
+        <h3>Wildlife</h3>
+        <p>Deer and bears roam the wilderness and can be hunted for meat. Deer spawn from special trees and are passive - they flee when you approach within 10 units, hear gunshots within 50 units, or see man-made structures within 10 units. If a deer spots a bear, it flees at 25 units. When killed, a deer corpse remains for about 2 minutes before despawning - interact with it quickly to collect raw meat. After harvesting a deer, that tree won't spawn another for about an hour.</p>
+        <p>Brown bears spawn from bear dens and are extremely aggressive. They chase anything that moves - players, bandits, even deer. Bears move at 2.75 units per second, faster than you can run, and their melee attacks are nearly instant kills. However, bears will flee from buildings and structures, so staying near your settlement offers protection. Killed bears don't respawn until all players leave the area and the chunk unloads. To permanently clear the area, destroy the bear den.</p>
+        <h3>Bandits</h3>
+        <p>Bandits live in camps scattered throughout the world, typically with 1-3 tents and sometimes an outpost. They spawn when you get within 50 units of their tent and will chase you up to 30 units from home. Bandits carry rifles and shoot every 6 seconds with the same accuracy rules as players - about 35% base chance, up to 80% with height advantage.</p>
+        <p>Bandits return to their tent if you retreat beyond 30 units. If you kill a bandit, they respawn after 2 minutes as long as their structure stands. Both tents and outposts spawn bandits - to clear a camp permanently, destroy all tents and outposts. Bandit tents contain valuable loot including coins, ammo, and sometimes tools - interact with the tent to access its inventory. Artillery can destroy bandit camps from a safe distance.</p>
+        <h3>Workers</h3>
+        <p>Nine types of worker NPCs can run your structures automatically. Build a worker structure near your market (within 20 units), then click the Seek Proprietor button. You'll receive 10 coins and lose control of the structure, but a worker spawns who gathers resources and sells them to your market. The structure stops decaying once sold. You can talk to any worker NPC - a Talk button appears when you're nearby, and they'll explain what they do.</p>
+        <p><img src="images/woodcutter.png" alt="Woodcutter" style="width:24px;height:24px;vertical-align:middle;"> <strong>Woodcutter</strong> - Finds pine trees within 50 units, chops them down, and processes each log into firewood and planks. Delivers materials to your market.</p>
+        <p><img src="images/miner.png" alt="Miner" style="width:24px;height:24px;vertical-align:middle;"> <strong>Miner</strong> - Searches for rocks within 50 units and mines them 5 times per rock. Delivers raw stone to your market - limestone, sandstone, clay, or iron depending on what's nearby.</p>
+        <p><img src="images/gardener.png" alt="Gardener" style="width:24px;height:24px;vertical-align:middle;"> <strong>Gardener</strong> - Plants up to 23 vegetables in rows, waits 30 minutes for harvest, then collects and sells them. During downtime, gardeners plant trees nearby (mostly pine, some apple).</p>
+        <p><img src="images/bakery.png" alt="Bakery" style="width:24px;height:24px;vertical-align:middle;"> <strong>Baker</strong> - Collects apples from nearby gardens, brings them to the bakery, and bakes them into apple tarts. Apple tarts sell well and provide 30 minutes of food each.</p>
+        <p><img src="images/stonemason.png" alt="Stonemason" style="width:24px;height:24px;vertical-align:middle;"> <strong>Stonemason</strong> - Collects raw stone from your market, chisels it (6 seconds per piece), and sells the chiseled stone back. Turns your miners' output into building materials.</p>
+        <p><img src="images/fisherman.png" alt="Fisherman" style="width:24px;height:24px;vertical-align:middle;"> <strong>Fisherman</strong> - Walks to nearby water, catches 8 fish, returns to cook them with firewood, and sells cooked fish to your market. Cooked fish provides 60 minutes of food.</p>
+        <p><img src="images/ironworks.png" alt="Ironworks" style="width:24px;height:24px;vertical-align:middle;"> <strong>Ironworker</strong> - Collects iron ore and firewood from your market, smelts the iron into ingots at the ironworks, and sells the ingots. Iron can only be smelted at an ironworks, not a campfire.</p>
+        <p><img src="images/tileworks.png" alt="Tileworks" style="width:24px;height:24px;vertical-align:middle;"> <strong>Tileworker</strong> - Collects clay and firewood, fires the clay into tiles, and sells them. Tiles are required for building houses and most worker structures.</p>
+        <p><img src="images/blacksmith.png" alt="Blacksmith" style="width:24px;height:24px;vertical-align:middle;"> <strong>Blacksmith</strong> - Collects iron ingots and firewood, forges them into metal parts, and sells the parts. Parts are needed for artillery.</p>
+        <h3>Trappers</h3>
+        <p>Trappers live in tents in forested areas throughout the world - one per region. Walk up to a trapper and for 5 coins, they'll tell you the quality ranges of all resources in that area: trees (pine, apple), rocks (limestone, sandstone, clay, iron), and gatherables (vines, mushrooms, vegetables, hemp, seeds, fish, deer, bears). This helps you find regions with higher quality materials worth the travel.</p>
+        <h3>Merchants</h3>
+        <p>Merchants appear on docks when trade ships visit. They can tell you when the next ship will arrive and explain how dock trading works. Ships arrive approximately every 30 minutes at functioning docks. The merchant stays on the dock between ship visits, providing a visual indicator that your dock is working.</p>
+    </section>
+
+    <section id="transportation" class="section">
+        <h2>Transportation</h2>
+        <h3>Horses</h3>
+        <p><img src="images/horse.png" alt="Horse" style="width:32px;height:32px;vertical-align:middle;"> Horses are the fastest way to travel on land. Build one from the build menu using 1 vegetable. Walk within 2 units and click Mount Horse - mounting takes about 1 second. While mounted, you move at 1.75 units per second, 40% faster than walking. Press W to accelerate, A/D to turn. Horses cannot move backward - the S key slows you down instead of reversing.</p>
+        <p>Roads increase your speed by 50%, bringing horses to about 2.6 units per second. Steep slopes (over 50 degrees) reduce your speed dramatically but won't completely stop you. Dismounting requires relatively flat terrain nearby - you can't jump off on a cliff face.</p>
+        <p>Horses can tow carts and artillery. Approach what you want to tow while mounted and it attaches automatically. Towing an empty cart reduces your speed by 10%. A cart loaded with a crate reduces speed by 33%. Artillery also reduces speed by 33%. Roads help offset these penalties. Turning while towing is slower (40-50% reduction) and requires forward motion - you cannot spin in place.</p>
+        <h3>Carts</h3>
+        <p><img src="images/cart.png" alt="Cart" style="width:32px;height:32px;vertical-align:middle;"> Carts are mobile storage that can be towed by players on foot or by mounted horses. Build one using 1 plank. Carts can hold one crate at a time, providing 100 inventory slots for hauling materials.</p>
+        <p>Players on foot can tow carts but move slowly - empty carts reduce speed by 10%, loaded carts by 50%. You must move forward to turn while towing. Horses handle carts better: only 33% speed penalty when loaded, compared to 50% on foot. Roads increase your towing speed by 50% whether walking or mounted.</p>
+        <p>To load a crate onto a cart, approach the crate while near the cart. To unload, the crate drops behind the cart onto valid terrain.</p>
+        <h3>Boats</h3>
+        <p>Three boat types let you cross water. All use WASD controls - W accelerates forward, S reverses, A and D turn. Unlike horses, boats can move backward. Boats drift slowly to a stop rather than braking instantly.</p>
+        <p><strong>Warning:</strong> All water vehicles are destroyed if you die, disconnect, or close the browser while aboard. Unlike horses and carts which remain in the world, boats cannot be safely left in water. Always return to shore and disembark before logging out. The only exception is multi-crew ships - if other crew members are still aboard, the ship persists when one person leaves.</p>
+        <p><img src="images/boat.png" alt="Rowboat" style="width:32px;height:32px;vertical-align:middle;"> <strong>Rowboat</strong> - The basic boat moves at 1 unit per second (walking speed). It can operate in shallow water right up to the shore edge. Full rotation takes 12 seconds. Build cost: 1 plank.</p>
+        <p><img src="images/sailboat.png" alt="Sailboat" style="width:32px;height:32px;vertical-align:middle;"> <strong>Sailboat</strong> - Faster at 1.5 units per second. Requires water at least 0.3 units deep, so you'll need to find a slightly deeper spot to board. Turns slower - 16 seconds for full rotation. Build cost: 1 plank.</p>
+        <p><strong>Ship</strong> - The largest vessel at 1.25 units per second. Requires deep water (1.0 units depth) and has the slowest turning at 20 seconds per rotation. Best for crossing open water. Build cost: 1 plank.</p>
+        <h3>Ship Cargo</h3>
+        <p>Large ships can carry cargo for transporting goods and equipment across water. A ship can hold up to 4 crates, 2 artillery pieces, and 3 horses. Approach cargo while piloting the ship to load it aboard. Cargo is positioned on the deck and travels with you. To unload, you must be near a dock or shallow water.</p>
+        <h3>Ship Crew Positions</h3>
+        <p>Large ships have multiple crew positions for naval combat. The pilot controls movement from the helm using WASD. Two cannon positions are available - port (left side) and starboard (right side). While piloting, buttons appear to man either cannon. Gunners can fire the ship's cannons, switch to the other cannon, or return to the helm.</p>
+        <p>Only faction players can crew a ship together - guests cannot join crews. To have gunners, artillery must be loaded into the ship's cannon slots first. There are no passenger seats - everyone aboard must have a role (pilot or gunner).</p>
+        <p>Crew coordination is important in combat. Gunners can switch between port and starboard cannons to engage targets on either side. If the pilot leaves or dies, a gunner can take the helm to keep the ship moving. The pilot position can also be passed to another crew member voluntarily.</p>
+        <p>To exit a boat, you must stop completely near land or a dock. The game checks 8 points around you for valid dismount locations. Docks let you disembark directly onto the platform even when the water below is deep.</p>
+        <h3>Artillery</h3>
+        <p><img src="images/artillery.png" alt="Artillery" style="width:32px;height:32px;vertical-align:middle;"> Artillery can only be towed by horses - players on foot cannot move it. While mounted, approach artillery and it attaches. Towing reduces your speed by 33% with roads providing a 1.5x bonus. Your turn rate drops by 50% when towing artillery.</p>
+        <p>To operate artillery, you must dismount and click Man Artillery. See the Combat section for firing details. When done, step away and remount your horse to continue moving.</p>
+        <h3>Roads</h3>
+        <p><img src="images/road.png" alt="Road" style="width:32px;height:32px;vertical-align:middle;"> Roads increase movement speed by 50% for all land transportation - walking, horses, and towing. A horse normally moves at 1.75 units per second but travels at about 2.6 on roads. Even a horse pulling a loaded cart moves faster on roads than an unloaded horse off-road.</p>
+        <p>Roads are built using 1 chiseled limestone each and never decay. Connecting your settlement to distant resources with roads is one of the best investments you can make.</p>
+    </section>
+
+    <section id="world" class="section">
+        <h2>World</h2>
+        <h3>Terrain</h3>
+        <p>The world is procedurally generated with large continents separated by ocean. Continents are roughly circular landmasses about 500 units in radius, spaced approximately 2000 units apart. Between continents lies open ocean with a depth of 30 units below the surface. Beaches form the transition between land and water, with shallow areas near shorelines.</p>
+        <p>Elevation determines what you'll find. Beaches and low coastal areas (below 7.5 units elevation) have sand and limited resources. Most trees, rocks, and wildlife spawn on elevated land between 7.5 and 22 units high. Higher elevations become rocky with sparser vegetation. Iron ore is most common in mountainous terrain.</p>
+        <h3>Factions</h3>
+        <p>Two factions divide the world: Southguard controls territory south of the equator (negative Z coordinates), while Northmen control the north (positive Z coordinates). When you create an account, you choose a faction and spawn in your faction's territory.</p>
+        <p>Faction determines your shirt color - maroon for Southguard, dark blue for Northmen. You can set home spawn points anywhere, including enemy territory - useful for forward bases. Structures you build in enemy territory can be attacked by opposing faction members. Artillery is particularly effective for destroying enemy settlements.</p>
+        <p>A third option is Neutral - you can play without faction allegiance. Neutral players spawn randomly, cannot claim faction territory, and cannot recruit militia. Guests are always neutral.</p>
+        <p>Changing factions is possible but has serious consequences. If you change factions while in enemy territory, you die immediately, lose all tent, house, and market ownership (they become abandoned), and must wait 24 hours before changing again. However, if you travel to your target faction's territory first and change there, you avoid death and keep your structures. Only change factions if you're certain - there's no way to recover abandoned structures.</p>
+        <h3>Quality Regions</h3>
+        <p>Resource quality varies dramatically across the world. Each region (chunk) has fixed quality ranges for different resources - one area might have excellent pine but poor limestone, while a nearby region has the opposite. Quality ranges from 1 to 100 and affects how long tools last, how much food sustains you, and how much items sell for. Regions also vary in resource density by up to 25% - some areas are richer with more trees and rocks, while others are sparser.</p>
+        <p>The most important factor is distance from the coast. Resources found deep inland on continent centers can be 20-30 quality points higher than those near beaches. This continent bonus makes exploring toward the interior worthwhile despite the longer travel times.</p>
+        <p>Trappers scattered throughout the wilderness will reveal quality ranges for 5 coins. Use this information to find regions worth settling. A settlement built near quality 80+ resources will produce dramatically better goods than one stuck with quality 30 materials.</p>
+        <h3>World Size</h3>
+        <p>The world spans 100,000 units in each direction - far more than you could ever explore. The chunk system loads terrain and objects as you travel, with about 21 chunks visible around you at any time. Each chunk is 50 units across.</p>
+        <p>There are no invisible walls at the world's edge, but the procedural generation ensures you'll always find more ocean and continents in any direction. The world is persistent across sessions - structures you build remain until they decay or are destroyed.</p>
+    </section>
+
+    <script>
+        const backToTop = document.getElementById('back-to-top');
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > 300) {
+                backToTop.classList.add('visible');
+            } else {
+                backToTop.classList.remove('visible');
+            }
+        });
+        backToTop.addEventListener('click', () => {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+    </script>
+</body>
+</html>

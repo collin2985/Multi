@@ -1,27 +1,30 @@
+<!-- File: public/client.html -->
+<!-- Location: C:\Users\colli\Desktop\test Horses\Horses\public\client.html -->
 
-
-
-<!-- client.html -->
-
-><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multiplayer Game - Server/P2P Hybrid</title>
+    <title>Guns Horses & Ships</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #1a1a1a; }
+        body { margin: 0; overflow: hidden; background: #2A2520; }
         canvas { display: block; }
         .controls {
             position: absolute;
             top: 10px;
             left: 10px;
             z-index: 100;
+            display: flex;
+            flex-wrap: wrap;
+            column-gap: 8px;
+            row-gap: 12px;
+            max-width: 80%;
+            align-items: flex-start;
         }
         button {
-            margin-right: 10px;
             padding: 10px 15px;
-            background: #4CAF50;
+            background: #6B7F5C;
             color: white;
             border: none;
             border-radius: 4px;
@@ -29,87 +32,2720 @@
             font-size: 14px;
         }
         button:hover {
-            background: #45a049;
+            background: #5A6E4B;
         }
         button:disabled {
-            background: #666;
+            background: #5A5247;
             cursor: not-allowed;
         }
-        #status {
-            position: absolute;
-            bottom: 10px;
-            left: 10px;
-            background: rgba(0,0,0,0.8);
-            color: white;
-            padding: 10px;
-            border-radius: 4px;
-            font-family: monospace;
-            max-width: 500px;
-            max-height: 200px;
-            overflow-y: auto;
-            font-size: 12px;
+        #settingsToggleBtn {
+            background: #6B6B6B !important;
+            position: relative !important;
+        }
+        #settingsToggleBtn:hover {
+            background: #5A5A5A !important;
+        }
+        #inventoryToggleBtn {
+            display: inline-block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            background: #5B6F7A !important;
+            position: relative !important;
+        }
+        #inventoryToggleBtn:hover {
+            background: #4A5E69 !important;
+        }
+        #inventoryToggleBtn:disabled {
+            background: #5B6F7A !important;
+            opacity: 0.8 !important;
+            cursor: pointer !important;
+        }
+        #buildMenuToggleBtn {
+            display: inline-block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            background: #B8825C !important;
+            position: relative !important;
+        }
+        #buildMenuToggleBtn:hover {
+            background: #A7714B !important;
+        }
+        #buildMenuToggleBtn:disabled {
+            background: #B8825C !important;
+            opacity: 0.8 !important;
+            cursor: pointer !important;
+        }
+        #createAccountBtn {
+            background: #8B7A5C !important;
+        }
+        #createAccountBtn:hover {
+            background: #7A6949 !important;
         }
         #connectionStatus {
             position: absolute;
-            top: 10px;
-            right: 10px;
-            padding: 8px 12px;
-            border-radius: 20px;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 8px 20px;
+            border-radius: 0 0 8px 8px;
             font-weight: bold;
             font-size: 14px;
-            z-index: 100;
+            z-index: 10002;  /* Above login/spawn overlays (10000) */
             transition: all 0.3s ease;
+            text-align: center;
+            min-width: 200px;
         }
         .status-connecting {
-            background: #ff9800;
+            background: #B8825C;
             color: white;
             animation: pulse 1.5s infinite;
         }
         .status-connected {
-            background: #4caf50;
+            background: #6B7F5C;
             color: white;
         }
         .status-disconnected {
-            background: #f44336;
+            background: #8B5A5A;
             color: white;
+        }
+        .status-reconnecting {
+            background: #B8825C;
+            color: white;
+            animation: pulse 1.5s infinite;
+        }
+        .status-failed {
+            background: #8B5A5A;
+            color: white;
+            cursor: pointer;
+            border: 2px solid #FFD700;
+        }
+        .status-failed:hover {
+            background: #A06A6A;
         }
         @keyframes pulse {
             0% { opacity: 1; }
             50% { opacity: 0.5; }
             100% { opacity: 1; }
         }
-        #peerInfo {
+        /* P2P Connection Status Banner (below server status) */
+        #p2pConnectionStatus {
             position: absolute;
-            top: 70px;
+            top: 36px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 6px 16px;
+            border-radius: 0 0 6px 6px;
+            font-weight: bold;
+            font-size: 13px;
+            z-index: 999;
+            transition: all 0.3s ease;
+            text-align: center;
+            min-width: 180px;
+            display: none;
+        }
+        #p2pConnectionStatus.p2p-retrying {
+            display: block;
+            background: #6B5A8A;
+            color: white;
+            animation: pulse 1.5s infinite;
+        }
+        #p2pConnectionStatus.p2p-failed {
+            display: block;
+            background: #8B5A5A;
+            color: white;
+        }
+        /* Spawn Screen Kick Banner (shown when player kicked due to P2P failure) */
+        .spawn-kick-banner {
+            background: linear-gradient(90deg, #6B3A3A, #8B5A5A);
+            border: 2px solid #C44;
+            border-radius: 8px;
+            padding: 14px 20px;
+            margin-bottom: 16px;
+            color: #FFB0B0;
+            text-align: center;
+            font-weight: bold;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        /* Legacy P2P Status Banner (top-right, for degraded mode) */
+        #p2pStatus {
+            position: absolute;
+            top: 0;
             right: 10px;
-            background: rgba(0,0,0,0.7);
+            padding: 6px 12px;
+            border-radius: 0 0 6px 6px;
+            font-weight: bold;
+            font-size: 12px;
+            z-index: 999;
+            background: #B8825C;
+            color: white;
+            display: none;
+        }
+        #p2pStatus.degraded {
+            display: block;
+            animation: pulse 2s infinite;
+        }
+        #debugInfoContainer {
+            position: absolute;
+            top: 50px;
+            right: 10px;
+            display: none; /* Hidden by default */
+        }
+        #debugInfoContainer.visible {
+            display: block;
+        }
+        #fpsCounter {
+            background: rgba(42,37,32,0.85);
+            color: #7A9060;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 14px;
+            font-weight: bold;
+            min-width: 80px;
+            text-align: center;
+            margin-bottom: 4px;
+        }
+        #physicsStats {
+            background: rgba(42,37,32,0.85);
+            color: #7A9060;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 11px;
+            min-width: 150px;
+            text-align: center;
+            display: none; /* Hidden by default, shown when content exists */
+            margin-bottom: 4px;
+        }
+        #playerSpeedLine {
+            background: rgba(42,37,32,0.85);
+            color: #FFD700;
+            padding: 5px 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 10px;
+            min-width: 150px;
+            text-align: left;
+            margin-bottom: 4px;
+        }
+        #playerPositionLine {
+            background: rgba(42,37,32,0.85);
+            color: #FFD700;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 11px;
+            min-width: 150px;
+            text-align: left;
+            margin-bottom: 4px;
+        }
+        #playerRegionLine {
+            background: rgba(42,37,32,0.85);
+            color: #FFD700;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 11px;
+            min-width: 150px;
+            text-align: left;
+        }
+        #foodStatusLine {
+            position: absolute;
+            top: 220px;
+            right: 10px;
+            background: rgba(42,37,32,0.85);
+            color: #7CB342;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 11px;
+            min-width: 150px;
+            text-align: left;
+            white-space: pre-line;
+        }
+        #foodStatusLine.warning {
+            color: #FFA726;
+        }
+        #foodStatusLine.critical {
+            color: #FF6B6B;
+            text-shadow: 0 0 4px rgba(255, 100, 100, 0.5);
+        }
+        #foodStatusLine.urgent {
+            color: #FF4444;
+            font-size: 14px;
+            font-weight: bold;
+            padding: 8px 12px;
+            text-shadow: 0 0 6px rgba(255, 50, 50, 0.7);
+        }
+        #foodStatusLine.urgent-flash {
+            color: #FF4444;
+            font-size: 14px;
+            font-weight: bold;
+            padding: 8px 12px;
+            text-shadow: 0 0 6px rgba(255, 50, 50, 0.7);
+            animation: urgentFlash 0.4s ease-in-out 3;
+        }
+        @keyframes urgentFlash {
+            0%, 100% { background: rgba(42,37,32,0.85); }
+            50% { background: rgba(200,50,50,0.95); }
+        }
+        #spawnImmunityLine {
+            position: absolute;
+            top: 254px;
+            right: 10px;
+            background: rgba(32,42,52,0.9);
+            color: #4FC3F7;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 11px;
+            min-width: 150px;
+            text-align: left;
+            display: none;
+            border: 1px solid rgba(79, 195, 247, 0.3);
+        }
+        #inventoryStatusLine {
+            position: absolute;
+            top: 290px;
+            right: 10px;
+            background: rgba(42,37,32,0.85);
+            color: #FF6B6B;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 11px;
+            min-width: 150px;
+            text-align: left;
+            display: none;
+        }
+        #inventoryStatusLine.full {
+            display: block;
+            color: #FF4444;
+            font-weight: bold;
+        }
+        #inventoryStatusLine.full-flash {
+            display: block;
+            color: #FF4444;
+            font-weight: bold;
+            animation: urgentFlash 0.4s ease-in-out 3;
+        }
+        #zoomControls, #rotateControls {
+            position: absolute;
+            right: 20px;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 8px;
+            z-index: 100;
+            background: rgba(42,37,32,0.85);
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 2px solid #6B7F5C;
+        }
+        #zoomControls {
+            bottom: 20px;
+        }
+        #rotateControls {
+            bottom: 72px;
+        }
+        #compass {
+            position: absolute;
+            bottom: 72px;
+            right: 185px;
+            width: 60px;
+            height: 60px;
+            background: rgba(42,37,32,0.85);
+            border: 2px solid #6B7F5C;
+            border-radius: 50%;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #compass-direction {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 2px;
+            height: 14px;
+            background: #EF5350;
+            transform: translate(-50%, -100%);
+            border-radius: 1px;
+        }
+        #compass-inner {
+            --rot: 0rad;
+            position: relative;
+            width: 100%;
+            height: 100%;
+            transform: rotate(var(--rot));
+            transition: transform 0.1s ease-out;
+        }
+        #compass .compass-dir {
+            position: absolute;
+            color: white;
+            font-size: 11px;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px black;
+            transform: rotate(calc(-1 * var(--rot)));
+            transition: transform 0.1s ease-out;
+        }
+        #compass .compass-n { top: 4px; left: 50%; margin-left: -5px; color: #EF5350; }
+        #compass .compass-s { bottom: 4px; left: 50%; margin-left: -4px; }
+        #compass .compass-e { right: 4px; top: 50%; margin-top: -7px; }
+        #compass .compass-w { left: 6px; top: 50%; margin-top: -7px; }
+        #zoomControls .control-label, #rotateControls .control-label {
+            color: white;
+            font-size: 14px;
+            font-weight: bold;
+            margin-right: 4px;
+            text-transform: lowercase;
+            width: 42px;
+        }
+        #zoomControls button, #rotateControls button {
+            width: 32px;
+            height: 32px;
+            background: rgba(107, 127, 92, 0.3);
+            color: white;
+            border: 2px solid #6B7F5C;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            margin: 0;
+        }
+        #zoomControls button:hover, #rotateControls button:hover {
+            background: rgba(107, 127, 92, 0.5);
+            border-color: #7A9060;
+        }
+        #zoomControls button:active, #rotateControls button:active {
+            background: rgba(107, 127, 92, 0.7);
+        }
+    </style>
+    <link rel="stylesheet" href="./ui/LoginModal.css">
+</head>
+<body>
+    <div class="controls">
+<button id="settingsToggleBtn">Settings</button>
+<button id="inventoryToggleBtn">Backpack</button>
+<button id="buildMenuToggleBtn">Build</button>
+<button id="createAccountBtn" style="display: none;">Create Account</button>
+<button id="constructionInventoryBtn" style="display: none;">Construction</button>
+<button id="crateInventoryBtn" style="display: none;">Crate</button>
+<button id="addBoxBtn" disabled>Add Tree</button>
+<button id="removeBoxBtn" disabled>Remove Tree</button>
+<button id="sawPlanksBtn" disabled>Saw Planks</button>
+<button id="repairStructureBtn" style="display: none;">Repair Structure</button>
+<button id="demolishStructureBtn" style="display: none;">Demolish Structure</button>
+<button id="fishingBtn" style="display: none;">Fish</button>
+<button id="gatherVinesBtn" style="display: none;">Gather Vines</button>
+<button id="gatherMushroomBtn" style="display: none;">Gather Mushroom</button>
+<button id="gatherVegetableSeedsBtn" style="display: none;">Gather Vegetable Seeds</button>
+<button id="gatherLimestoneBtn" style="display: none;">Gather Limestone</button>
+<button id="gatherSeedsBtn" style="display: none;">Gather Seeds</button>
+<button id="gatherVegetablesBtn" style="display: none;">Gather Vegetables</button>
+<button id="gatherHempSeedsBtn" style="display: none;">Gather Hemp Seeds</button>
+<button id="gatherHempBtn" style="display: none;">Gather Hemp</button>
+<button id="harvestDeerBtn" style="display: none;">Harvest Animal</button>
+<button id="harvestBrownbearBtn" style="display: none;">Harvest Animal</button>
+<button id="climbBtn" style="display: none;">Climb</button>
+<button id="climbDownBtn" style="display: none;">Climb Down</button>
+<button id="enterMobileEntityBtn" style="display: none;">Enter Boat</button>
+<button id="enterMobileEntityBtn2" style="display: none;">Mount Horse</button>
+<button id="attachCartBtn" style="display: none;">Attach Cart</button>
+<button id="releaseCartBtn" style="display: none;">Release Cart</button>
+<button id="loadCrateBtn" style="display: none;">Load Crate</button>
+<button id="unloadCrateBtn" style="display: none;">Unload Crate</button>
+<button id="loadShipArtilleryBtn" style="display: none;">Load Artillery</button>
+<button id="unloadShipArtilleryBtn" style="display: none;">Unload Artillery</button>
+<button id="loadShipHorseBtn" style="display: none;">Load Horse</button>
+<button id="unloadShipHorseBtn" style="display: none;">Unload Horse</button>
+<button id="manPortCannonBtn" style="display: none;">Man Port Cannon</button>
+<button id="manStarboardCannonBtn" style="display: none;">Man Starboard Cannon</button>
+<button id="takeHelmBtn" style="display: none;">Take Helm</button>
+<button id="manArtilleryBtn" style="display: none;">Man Artillery</button>
+<button id="leaveArtilleryBtn" style="display: none;">Leave Artillery</button>
+<button id="fireArtilleryBtn" style="display: none;">Fire</button>
+<button id="talkMerchantBtn" style="display: none;">Talk to Merchant</button>
+<button id="talkTrapperBtn" style="display: none;">Trapper</button>
+<button id="talkBakerBtn" style="display: none;">Baker</button>
+<button id="talkGardenerBtn" style="display: none;">Gardener</button>
+<button id="talkWoodcutterBtn" style="display: none;">Woodcutter</button>
+<button id="talkMinerBtn" style="display: none;">Miner</button>
+<button id="talkFishermanBtn" style="display: none;">Fisherman</button>
+<button id="talkBlacksmithBtn" style="display: none;">Blacksmith</button>
+<button id="talkIronWorkerBtn" style="display: none;">Iron Worker</button>
+<button id="talkTileWorkerBtn" style="display: none;">Tile Worker</button>
+<button id="talkStoneMasonBtn" style="display: none;">Stone Mason</button>
+<button id="seekProprietorBtn" style="display: none;">Seek Proprietor</button>
+<button id="requestMilitiaBtn" style="display: none;">Request Militia (1)</button>
+    </div>
+
+    <div id="nearestObject" style="display: none;"></div>
+
+    <!-- ACTION BUTTON TOOLTIP (hover info for interaction buttons) -->
+    <div id="actionTooltip" style="display: none;"></div>
+
+    <!-- STRUCTURE INFO PANEL (persistent when near structures) -->
+    <div id="structurePanel">
+        <div id="structureName"></div>
+        <div id="structureDurability"></div>
+        <div id="structureOwner"></div>
+    </div>
+
+    <!-- TOAST NOTIFICATIONS (temporary messages that stack) -->
+    <div id="toastContainer"></div>
+
+    <!-- CHAT INPUT (Enter to open, type message, Enter to send) -->
+    <div id="chatInputContainer">
+        <input type="text" id="chatInput" placeholder="Type a message..." maxlength="100" autocomplete="off">
+    </div>
+
+    <!-- PLACEMENT STATUS -->
+    <div id="placementStatus"></div>
+    <div id="placementCancelHint">Hit ESC to cancel</div>
+
+    <style>
+        /* Chat Input - bottom center, hidden by default */
+        #chatInputContainer {
+            position: absolute;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: none;
+            z-index: 200;
+        }
+        #chatInputContainer.visible {
+            display: block;
+        }
+        #chatInput {
+            width: 300px;
+            padding: 10px 15px;
+            background: rgba(42, 37, 32, 0.95);
+            border: 2px solid #6B7F5C;
+            border-radius: 6px;
+            color: #E8DCC4;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            outline: none;
+        }
+        #chatInput:focus {
+            border-color: #8BA870;
+        }
+        #chatInput::placeholder {
+            color: #8A8479;
+        }
+
+        #nearestObject {
+            position: absolute;
+            top: 100px;
+            left: 10px;
+            background: rgba(42, 37, 32, 0.85);
             color: white;
             padding: 8px;
             border-radius: 4px;
             font-family: monospace;
             font-size: 12px;
-            min-width: 200px;
+            min-width: 150px;
+        }
+
+        /* Action Button Tooltip - shows on button hover */
+        #actionTooltip {
+            position: absolute;
+            top: 140px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(42, 37, 32, 0.95);
+            border: 1px solid #5a4a3a;
+            color: #E8DCC4;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 11px;
+            pointer-events: none;
+            z-index: 150;
+            line-height: 1.5;
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        #actionTooltip .tooltip-warning {
+            color: #D4A855;
+            font-style: italic;
+        }
+
+        /* Structure Panel - shows when near structures */
+        #structurePanel {
+            position: absolute;
+            top: 150px;
+            left: 10px;
+            background: rgba(42, 37, 32, 0.9);
+            border: 1px solid #5a4a3a;
+            border-radius: 6px;
+            padding: 10px 12px;
+            font-family: monospace;
+            font-size: 12px;
+            min-width: 180px;
+            max-width: 280px;
+            display: none;
+            z-index: 100;
+        }
+
+        #structureName {
+            color: #E8DCC4;
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        #structureDurability {
+            color: #B89F5C;
+            margin-bottom: 2px;
+        }
+
+        #structureOwner {
+            color: #C8B898;
+            font-size: 11px;
+        }
+
+        /* Toast Container - holds stacking notifications */
+        #toastContainer {
+            position: absolute;
+            bottom: 130px;
+            right: 20px;
+            display: flex;
+            flex-direction: column-reverse;
+            gap: 8px;
+            z-index: 1001;
+            pointer-events: none;
+        }
+
+        .toast {
+            background: rgba(42, 37, 32, 0.9);
+            border-left: 3px solid #7A9060;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            color: #E8DCC4;
+            max-width: 300px;
+            animation: toastSlideIn 0.2s ease-out;
+            pointer-events: auto;
+        }
+
+        .toast.warning {
+            border-left-color: #D4A855;
+            color: #FFD700;
+        }
+
+        .toast.error {
+            border-left-color: #C44;
+            color: #FF6B6B;
+        }
+
+        .toast.success {
+            border-left-color: #7A9060;
+            color: #9ACD32;
+        }
+
+        .toast.fadeOut {
+            animation: toastFadeOut 0.3s ease-out forwards;
+        }
+
+        @keyframes toastSlideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes toastFadeOut {
+            from {
+                opacity: 1;
+                transform: translateX(0);
+            }
+            to {
+                opacity: 0;
+                transform: translateX(20px);
+            }
+        }
+
+        #placementStatus {
+            position: absolute;
+            top: 300px;
+            left: 10px;
+            background: rgba(42, 37, 32, 0.9);
+            color: #7CB342;
+            padding: 10px 14px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 15px;
+            font-weight: bold;
+            min-width: 150px;
+            max-width: 400px;
+            display: none;
+        }
+
+        #placementStatus.invalid {
+            color: #FF6B6B; /* Red for invalid placement */
+        }
+
+        #placementCancelHint {
+            position: absolute;
+            top: 340px;
+            left: 10px;
+            background: rgba(42, 37, 32, 0.9);
+            color: #A8A8A8;
+            padding: 6px 14px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 13px;
+            display: none;
         }
     </style>
-</head>
-<body>
-    <div class="controls">
-<button id="addBoxBtn" disabled>Add Tree</button>
-<button id="removeBoxBtn" disabled>Remove Tree</button>
+
+    <div id="connectionStatus" class="status-connecting">Connecting...</div>
+    <div id="p2pConnectionStatus"></div>
+    <div id="p2pStatus"></div>
+    <div id="debugInfoContainer">
+        <div id="fpsCounter">FPS: --</div>
+        <div id="physicsStats"></div>
+        <div id="playerSpeedLine"></div>
+        <div id="playerPositionLine"></div>
+        <div id="playerRegionLine"></div>
     </div>
-    <div id="connectionStatus" class="status-connecting">🔄 Connecting...</div>
-    <div id="peerInfo">P2P Connections: 0</div>
-    <div id="status">Initializing...</div>
-    
+    <div id="foodStatusLine"></div>
+    <div id="spawnImmunityLine"></div>
+    <div id="inventoryStatusLine">Backpack is now full</div>
+
+    <!-- Compass -->
+    <div id="compass">
+        <div id="compass-direction"></div>
+        <div id="compass-inner">
+            <span class="compass-dir compass-n">N</span>
+            <span class="compass-dir compass-e">E</span>
+            <span class="compass-dir compass-s">S</span>
+            <span class="compass-dir compass-w">W</span>
+        </div>
+    </div>
+
+    <!-- INVENTORY SYSTEM -->
+    <div id="inventoryOverlay" class="inventory-overlay" style="display: none;">
+        <div class="inventory-panel">
+            <div class="inventory-header">
+                <h2>Inventory</h2>
+                <button id="inventoryCloseBtn" class="inventory-close-btn">✕</button>
+            </div>
+            <div class="inventory-content-wrapper">
+                <div class="backpack-container">
+                    <div class="backpack-section-header">
+                        <h3>Backpack</h3>
+                        <div class="sling-slot-container">
+                            <div id="slingSlot" class="sling-slot">
+                                <div id="slingItem" class="sling-item-wrapper">
+                                    <!-- Rifle item rendered here when present -->
+                                </div>
+                                <span class="sling-slot-label">Rifle Sling</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="inventory-grid-container">
+                        <div id="inventoryGrid" class="inventory-grid">
+                            <!-- 5x10 grid slots (50 total) -->
+                        </div>
+                        <div id="inventoryItems" class="inventory-items">
+                            <!-- Items positioned absolutely over grid -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CONSTRUCTION SECTION (appears when near construction site and stopped) -->
+                <div id="constructionSection" class="construction-section" style="display: none;">
+                    <div class="construction-section-header">
+                        <h3>Construction Site</h3>
+                    </div>
+                    <div class="construction-building-info">
+                        <h4>Building: <span id="constructionBuildingType">Foundation</span></h4>
+                    </div>
+                    <div class="construction-requirements">
+                        <h4>Required Materials:</h4>
+                        <div id="constructionRequirements"></div>
+                    </div>
+                    <div class="construction-slots-container">
+                        <div id="constructionSlots" class="construction-slots">
+                            <!-- Material slots will be dynamically created -->
+                        </div>
+                    </div>
+                    <button id="constructionBuildBtn" class="construction-build-btn" disabled>Build</button>
+                </div>
+
+                <!-- CRATE SECTION (appears when near crate and stopped) -->
+                <div id="crateSection" class="crate-section" style="display: none;">
+                    <div class="crate-section-header">
+                        <h3 id="crateTitle">Crate</h3>
+                        <span id="marketInfluenceDisplay" class="market-influence" style="display: none;">Influence: 0</span>
+                        <button id="marketMerchantBtn" class="market-merchant-btn">Harbour Closed</button>
+                    </div>
+                    <!-- Grid view for crates/houses/gardens -->
+                    <div id="crateGridContainer" class="crate-grid-container">
+                        <div id="crateGrid" class="crate-grid">
+                            <!-- 10x10 grid slots (100 total) -->
+                        </div>
+                        <div id="crateItems" class="crate-items">
+                            <!-- Items positioned absolutely over grid -->
+                        </div>
+                    </div>
+
+                    <!-- List view for markets -->
+                    <div id="marketListContainer" class="market-list-container" style="display: none;">
+                        <div class="market-sort-toggle">
+                            <button id="marketSortBest" class="market-sort-btn active">Best Quality</button>
+                            <button id="marketSortCheap" class="market-sort-btn">Cheapest</button>
+                        </div>
+                        <div class="market-list-header">
+                            <div class="market-header-item">Item</div>
+                            <div class="market-header-buy">Buy</div>
+                            <div class="market-header-sell">Sell</div>
+                            <div class="market-header-qty">Stock</div>
+                        </div>
+                        <div id="marketList" class="market-list">
+                            <!-- Market items will be rendered here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- INVENTORY TOOLTIP -->
+    <div id="inventoryTooltip" class="inventory-tooltip" style="display: none;">
+        <div class="tooltip-title"></div>
+        <div class="tooltip-stat">Quality: <span class="tooltip-quality"></span></div>
+        <div class="tooltip-stat">Durability: <span class="tooltip-durability"></span></div>
+        <div class="tooltip-stat tooltip-processing-row" style="display: none;">Processing: <span class="tooltip-processing-time"></span></div>
+        <div class="tooltip-tip-section" style="display: none;">
+            <div class="tooltip-divider"></div>
+            <div class="tooltip-tip"></div>
+        </div>
+        <div class="tooltip-sell-section" style="display: none;">
+            <div class="tooltip-divider"></div>
+            <div class="tooltip-sell-title">Sell Price Breakdown:</div>
+            <div class="tooltip-sell-detail">Base: <span class="tooltip-sell-base"></span></div>
+            <div class="tooltip-sell-detail">Supply/Demand: <span class="tooltip-sell-supply"></span></div>
+            <div class="tooltip-sell-detail">Quality/Dur: <span class="tooltip-sell-quality"></span></div>
+            <div class="tooltip-sell-final">Final Price: <span class="tooltip-sell-price"></span></div>
+        </div>
+    </div>
+
+    <!-- DISCARD CONFIRMATION MODAL -->
+    <div id="discardModal" class="discard-modal" style="display: none;">
+        <div class="discard-modal-content">
+            <p id="discardMessage">Are you sure you want to trash this item?</p>
+            <div class="discard-buttons">
+                <button id="discardCancel" class="discard-btn discard-cancel">Cancel</button>
+                <button id="discardConfirm" class="discard-btn discard-confirm">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- GENERIC CONFIRMATION DIALOG -->
+    <div id="confirmDialog" class="discard-modal" style="display: none;">
+        <div class="discard-modal-content">
+            <p id="confirmDialogMessage">Are you sure?</p>
+            <div class="discard-buttons">
+                <button id="confirmDialogCancel" class="discard-btn discard-cancel">Cancel</button>
+                <button id="confirmDialogOk" class="discard-btn discard-confirm">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MARKET TRANSACTION CONFIRMATION DIALOG -->
+    <div id="marketConfirmDialog" class="buy-dialog-modal" style="display: none;">
+        <div class="buy-dialog-content">
+            <h3 id="marketConfirmTitle">Confirm Transaction</h3>
+            <p id="marketConfirmMessage">Buy Oak Plank (Q:95) for 🪙42?</p>
+            <div id="marketConfirmBreakdown" class="buy-price-breakdown">
+                <div class="price-breakdown-row">
+                    <span>Base Price:</span>
+                    <span id="marketConfirmBase">🪙30</span>
+                </div>
+                <div class="price-breakdown-row">
+                    <span>Quality:</span>
+                    <span id="marketConfirmQuality">×0.95</span>
+                </div>
+                <div class="price-breakdown-row" id="marketConfirmDurRow" style="display: none;">
+                    <span>Durability:</span>
+                    <span id="marketConfirmDurability">×0.90</span>
+                </div>
+                <div class="price-breakdown-row">
+                    <span>Supply/Demand:</span>
+                    <span id="marketConfirmSupply">×1.25</span>
+                </div>
+                <div class="price-breakdown-row price-final">
+                    <span>Final Price:</span>
+                    <span id="marketConfirmFinal">🪙42</span>
+                </div>
+            </div>
+            <div class="buy-dialog-buttons">
+                <button id="marketConfirmCancel" class="buy-dialog-btn buy-dialog-cancel">Cancel</button>
+                <button id="marketConfirmOk" class="buy-dialog-btn buy-dialog-confirm">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- COIN TRANSFER DIALOG MODAL -->
+    <div id="coinTransferDialog" class="buy-dialog-modal" style="display: none;">
+        <div class="buy-dialog-content">
+            <h3>Transfer Coins to Storage</h3>
+            <p id="coinTransferInfo">Current coins in backpack: 🪙 <span id="coinTransferCurrent">0</span></p>
+            <div class="buy-dialog-quantity">
+                <label for="coinTransferInput">Amount to transfer:</label>
+                <input type="number" id="coinTransferInput" min="1" value="1" />
+                <span id="coinTransferMax">(Max: 0)</span>
+            </div>
+            <p id="coinTransferError" class="buy-dialog-error" style="display: none;"></p>
+            <div class="buy-dialog-buttons">
+                <button id="coinTransferCancel" class="buy-dialog-btn buy-dialog-cancel">Cancel</button>
+                <button id="coinTransferConfirm" class="buy-dialog-btn buy-dialog-confirm">Transfer</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- BUILD MENU SYSTEM -->
+    <div id="buildMenuOverlay" class="build-menu-overlay" style="display: none;">
+        <div class="build-menu-panel">
+            <div class="build-menu-header">
+                <h2>Build</h2>
+                <button id="buildMenuCloseBtn" class="build-menu-close-btn">✕</button>
+            </div>
+            <div class="build-menu-grid-container">
+                <div id="buildMenuGrid" class="build-menu-grid">
+                    <!-- 5x10 grid slots (50 total) -->
+                </div>
+                <div id="buildMenuStructures" class="build-menu-structures">
+                    <!-- Structures positioned absolutely over grid -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- BUILD MENU TOOLTIP -->
+    <div id="buildMenuTooltip" class="build-menu-tooltip" style="display: none;">
+        <div class="tooltip-title"></div>
+    </div>
+
+    <!-- DEATH SCREEN OVERLAY -->
+    <div id="deathScreenOverlay" class="death-screen-overlay" style="display: none;">
+        <div class="death-screen-content">
+            <h1 class="death-screen-title">YOU ARE DEAD</h1>
+            <p id="deathMessage" class="death-screen-message">Unknown cause</p>
+            <button id="respawnButton" class="death-screen-respawn-btn" disabled>
+                RESPAWN (<span id="respawnCountdown">10</span>s)
+            </button>
+        </div>
+    </div>
+
+    <!-- STARVATION WARNING OVERLAY -->
+    <div id="starvationWarningOverlay">
+        <div class="warning-text">2 MINUTES TIL STARVATION</div>
+    </div>
+
+    <!-- PRE-SPAWN LINKS - Visible until player spawns -->
+    <div id="preSpawnLinks" class="pre-spawn-links">
+        <a href="index.html" target="_blank" class="pre-spawn-link pre-spawn-donate">Support Developer</a>
+        <a href="wiki.html" target="_blank" class="pre-spawn-link pre-spawn-wiki">Game Wiki</a>
+        <a href="https://discord.gg/duRJ3GzvwF" target="_blank" class="pre-spawn-link pre-spawn-discord">Discord</a>
+    </div>
+
+    <!-- LOADING SCREEN OVERLAY - Visible immediately on page load -->
+    <div id="loadingScreenOverlay" class="loading-screen-overlay">
+        <div class="loading-screen-content">
+            <h1 class="loading-screen-title" id="loadingScreenTitle">CONNECTING</h1>
+            <div class="loading-progress-container">
+                <div id="loadingProgressBar" class="loading-progress-bar"></div>
+            </div>
+            <p id="loadingProgressText" class="loading-progress-text">Connecting to server...</p>
+        </div>
+    </div>
+
+    <!-- MERCHANT DIALOGUE MODAL -->
+    <div id="merchantDialogueModal" class="merchant-dialogue-modal" style="display: none;">
+        <div class="merchant-dialogue-content">
+            <h3 class="merchant-dialogue-title">Trading Merchant</h3>
+            <p id="merchantDialogueText" class="merchant-dialogue-text"></p>
+            <div class="merchant-dialogue-buttons">
+                <button id="merchantDialogueClose" class="merchant-dialogue-btn">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TRAPPER DIALOGUE MODAL -->
+    <div id="trapperDialogueModal" class="trapper-dialogue-modal" style="display: none;">
+        <div class="trapper-dialogue-content">
+            <h3 class="trapper-dialogue-title">Regional Trapper</h3>
+            <p id="trapperDialogueText" class="trapper-dialogue-text"></p>
+            <div id="trapperResourceList" class="trapper-resource-list" style="display: none;"></div>
+            <div class="trapper-dialogue-buttons">
+                <button id="trapperPayBtn" class="trapper-dialogue-btn trapper-pay-btn">5 Coins</button>
+                <button id="trapperNoBtn" class="trapper-dialogue-btn">No</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- BAKER DIALOGUE MODAL -->
+    <div id="bakerDialogueModal" class="baker-dialogue-modal" style="display: none;">
+        <div class="baker-dialogue-content">
+            <h3 class="baker-dialogue-title">Baker</h3>
+            <p id="bakerDialogueText" class="baker-dialogue-text"></p>
+            <div class="baker-dialogue-buttons">
+                <button id="bakerDismissBtn" class="baker-dialogue-btn">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- GARDENER DIALOGUE MODAL -->
+    <div id="gardenerDialogueModal" class="baker-dialogue-modal" style="display: none;">
+        <div class="baker-dialogue-content">
+            <h3 class="baker-dialogue-title">Gardener</h3>
+            <p id="gardenerDialogueText" class="baker-dialogue-text"></p>
+            <div class="baker-dialogue-buttons">
+                <button id="gardenerDismissBtn" class="baker-dialogue-btn">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- WOODCUTTER DIALOGUE MODAL -->
+    <div id="woodcutterDialogueModal" class="baker-dialogue-modal" style="display: none;">
+        <div class="baker-dialogue-content">
+            <h3 class="baker-dialogue-title">Woodcutter</h3>
+            <p id="woodcutterDialogueText" class="baker-dialogue-text"></p>
+            <div class="baker-dialogue-buttons">
+                <button id="woodcutterDismissBtn" class="baker-dialogue-btn">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MINER DIALOGUE MODAL -->
+    <div id="minerDialogueModal" class="baker-dialogue-modal" style="display: none;">
+        <div class="baker-dialogue-content">
+            <h3 class="baker-dialogue-title">Miner</h3>
+            <p id="minerDialogueText" class="baker-dialogue-text"></p>
+            <div class="baker-dialogue-buttons">
+                <button id="minerDismissBtn" class="baker-dialogue-btn">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- FISHERMAN DIALOGUE MODAL -->
+    <div id="fishermanDialogueModal" class="baker-dialogue-modal" style="display: none;">
+        <div class="baker-dialogue-content">
+            <h3 class="baker-dialogue-title">Fisherman</h3>
+            <p id="fishermanDialogueText" class="baker-dialogue-text"></p>
+            <div class="baker-dialogue-buttons">
+                <button id="fishermanDismissBtn" class="baker-dialogue-btn">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- BLACKSMITH DIALOGUE MODAL -->
+    <div id="blacksmithDialogueModal" class="baker-dialogue-modal" style="display: none;">
+        <div class="baker-dialogue-content">
+            <h3 class="baker-dialogue-title">Blacksmith</h3>
+            <p id="blacksmithDialogueText" class="baker-dialogue-text"></p>
+            <div class="baker-dialogue-buttons">
+                <button id="blacksmithDismissBtn" class="baker-dialogue-btn">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- IRON WORKER DIALOGUE MODAL -->
+    <div id="ironWorkerDialogueModal" class="baker-dialogue-modal" style="display: none;">
+        <div class="baker-dialogue-content">
+            <h3 class="baker-dialogue-title">Iron Worker</h3>
+            <p id="ironWorkerDialogueText" class="baker-dialogue-text"></p>
+            <div class="baker-dialogue-buttons">
+                <button id="ironWorkerDismissBtn" class="baker-dialogue-btn">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TILE WORKER DIALOGUE MODAL -->
+    <div id="tileWorkerDialogueModal" class="baker-dialogue-modal" style="display: none;">
+        <div class="baker-dialogue-content">
+            <h3 class="baker-dialogue-title">Tile Worker</h3>
+            <p id="tileWorkerDialogueText" class="baker-dialogue-text"></p>
+            <div class="baker-dialogue-buttons">
+                <button id="tileWorkerDismissBtn" class="baker-dialogue-btn">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- STONE MASON DIALOGUE MODAL -->
+    <div id="stoneMasonDialogueModal" class="baker-dialogue-modal" style="display: none;">
+        <div class="baker-dialogue-content">
+            <h3 class="baker-dialogue-title">Stone Mason</h3>
+            <p id="stoneMasonDialogueText" class="baker-dialogue-text"></p>
+            <div class="baker-dialogue-buttons">
+                <button id="stoneMasonDismissBtn" class="baker-dialogue-btn">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PROPRIETOR DIALOGUE MODAL -->
+    <div id="proprietorDialogueModal" class="trapper-dialogue-modal" style="display: none;">
+        <div class="trapper-dialogue-content">
+            <h3 class="trapper-dialogue-title">Seek Proprietor</h3>
+            <p id="proprietorDialogueText" class="trapper-dialogue-text"></p>
+            <div class="trapper-dialogue-buttons">
+                <button id="proprietorSellBtn" class="trapper-dialogue-btn trapper-pay-btn">Sell (+10 Coins)</button>
+                <button id="proprietorNoBtn" class="trapper-dialogue-btn">No</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MILITIA CONFIRMATION DIALOGUE -->
+    <div id="militiaDialogueModal" class="trapper-dialogue-modal" style="display: none;">
+        <div class="trapper-dialogue-content">
+            <h3 class="trapper-dialogue-title">Request Militia</h3>
+            <p id="militiaDialogueText" class="trapper-dialogue-text"></p>
+            <div class="trapper-dialogue-buttons">
+                <button id="militiaConfirmBtn" class="trapper-dialogue-btn trapper-pay-btn">Confirm (-1 Influence)</button>
+                <button id="militiaNoBtn" class="trapper-dialogue-btn">No</button>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        /* INVENTORY STYLES */
+        .inventory-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            padding-left: 50px;
+            cursor: pointer; /* Clicking background closes menu */
+        }
+
+        .inventory-panel {
+            background: #3A342D;
+            cursor: default; /* Normal cursor on panel */
+            border: 3px solid #4A443D;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+            z-index: 1010; /* Above overlay background */
+            position: relative;
+        }
+
+        .inventory-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #4A443D;
+        }
+
+        .inventory-header h2 {
+            margin: 0;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            font-size: 24px;
+        }
+
+        .inventory-close-btn {
+            background: #8B5A5A;
+            color: white;
+            border: none;
+            width: 30px;
+            height: 30px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            margin: 0;
+        }
+
+        .inventory-close-btn:hover {
+            background: #7A4949;
+        }
+
+        .inventory-content-wrapper {
+            display: flex;
+            flex-direction: row;
+            gap: 0;
+        }
+
+        .inventory-grid-container {
+            position: relative;
+            width: fit-content;
+            flex-shrink: 0;
+        }
+
+        .inventory-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 60px);
+            grid-template-rows: repeat(10, 60px);
+            gap: 2px;
+            background: #2A2520;
+            padding: 2px;
+            border: 2px solid #5A5449;
+        }
+
+        .inventory-slot {
+            width: 60px;
+            height: 60px;
+            background: #3D3730;
+            border: 1px solid #6A6459;
+            box-sizing: border-box;
+        }
+
+        .inventory-slot:hover {
+            background: #4A443D;
+            border-color: #8A8479;
+        }
+
+        .inventory-items {
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            pointer-events: none;
+        }
+
+        .inventory-item-wrapper {
+            position: absolute;
+            pointer-events: all;
+            cursor: grab;
+        }
+
+        .inventory-item {
+            position: relative;
+            display: block;
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+
+        .inventory-item:active {
+            cursor: grabbing;
+        }
+
+        .inventory-item-wrapper.dragging {
+            opacity: 0.8;
+            z-index: 1001;
+            cursor: grabbing;
+        }
+
+        .inventory-item-wrapper.invalid-placement {
+            outline: 3px solid #ff0000;
+            outline-offset: -3px;
+        }
+
+        .inventory-item-wrapper.chisel-target {
+            outline: 5px solid #00ff00 !important;
+            outline-offset: -5px;
+            box-shadow: 0 0 15px #00ff00 !important;
+        }
+
+        /* INVENTORY TOOLTIP */
+        .inventory-tooltip {
+            position: fixed;
+            background: rgba(42, 37, 32, 0.95);
+            border: 2px solid #5A5247;
+            border-radius: 6px;
+            padding: 10px 12px;
+            pointer-events: none;
+            z-index: 2000;
+            font-family: Arial, sans-serif;
+            min-width: 150px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.8);
+        }
+
+        .tooltip-title {
+            color: #fff;
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 6px;
+            text-transform: capitalize;
+        }
+
+        .tooltip-stat {
+            color: #ccc;
+            font-size: 12px;
+            margin: 3px 0;
+        }
+
+        .tooltip-quality,
+        .tooltip-durability {
+            font-weight: bold;
+        }
+
+        .stat-good {
+            color: #6B7F5C;
+        }
+
+        .stat-worn {
+            color: #B89F5C;
+        }
+
+        .stat-poor {
+            color: #8B5A5A;
+        }
+
+        .tooltip-tip-section {
+            margin-top: 6px;
+        }
+
+        .tooltip-tip {
+            color: #8BC4E8;
+            font-size: 11px;
+            font-style: italic;
+            line-height: 1.4;
+        }
+
+        .tooltip-divider {
+            border-top: 1px solid #555;
+            margin: 8px 0 6px 0;
+        }
+
+        .tooltip-sell-section {
+            margin-top: 6px;
+        }
+
+        .tooltip-sell-title {
+            color: #C9A861;
+            font-size: 12px;
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        .tooltip-sell-detail {
+            color: #ccc;
+            font-size: 11px;
+            margin: 2px 0;
+            padding-left: 8px;
+        }
+
+        .tooltip-sell-final {
+            color: #6B7F5C;
+            font-size: 12px;
+            font-weight: bold;
+            margin-top: 4px;
+        }
+
+        /* DISCARD CONFIRMATION MODAL */
+        .discard-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 10001;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .discard-modal-content {
+            background: #3A342D;
+            border: 3px solid #5A5247;
+            border-radius: 8px;
+            padding: 30px;
+            min-width: 280px;
+            max-width: 320px;
+            text-align: center;
+        }
+
+        .discard-modal-content p {
+            color: #fff;
+            font-size: 16px;
+            margin: 0 0 20px 0;
+            white-space: pre-wrap;
+            text-align: left;
+        }
+
+        .discard-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .discard-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .discard-cancel {
+            background: #5A5247;
+            color: #fff;
+        }
+
+        .discard-cancel:hover {
+            background: #6A6257;
+        }
+
+        .discard-confirm {
+            background: #8B5A5A;
+            color: #fff;
+        }
+
+        .discard-confirm:hover {
+            background: #7A4949;
+        }
+
+        /* BUY DIALOG MODAL */
+        .buy-dialog-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 3000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .buy-dialog-content {
+            background: #3A342D;
+            border: 3px solid #B8825C;
+            border-radius: 8px;
+            padding: 30px;
+            min-width: 350px;
+            text-align: center;
+        }
+
+        .buy-dialog-content h3 {
+            color: #B8825C;
+            margin: 0 0 15px 0;
+        }
+
+        .buy-dialog-content p {
+            color: #fff;
+            font-size: 16px;
+            margin: 10px 0;
+        }
+
+        .buy-price-breakdown {
+            background: #2A2520;
+            border: 1px solid #4A443D;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            font-size: 14px;
+        }
+
+        .price-breakdown-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 3px 0;
+            color: #D4C4A8;
+        }
+
+        .buy-dialog-quantity {
+            margin: 20px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .buy-dialog-quantity label {
+            color: #fff;
+            font-weight: bold;
+        }
+
+        .buy-dialog-quantity input {
+            width: 80px;
+            padding: 8px;
+            font-size: 16px;
+            border: 2px solid #B8825C;
+            border-radius: 4px;
+            background: #2A2520;
+            color: #fff;
+            text-align: center;
+        }
+
+        .buy-dialog-quantity span {
+            color: #D4C4A8;
+            font-size: 14px;
+        }
+
+        .buy-dialog-error {
+            color: #8B5A5A;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        .buy-dialog-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .buy-dialog-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .buy-dialog-cancel {
+            background: #5A5247;
+            color: #fff;
+        }
+
+        .buy-dialog-cancel:hover {
+            background: #6A6257;
+        }
+
+        .buy-dialog-confirm {
+            background: #6B7F5C;
+            color: #fff;
+        }
+
+        .buy-dialog-confirm:hover {
+            background: #5A6E4B;
+        }
+
+        .buy-dialog-confirm:focus {
+            background: #5A6E4B;
+            outline: 2px solid #C9A861;
+            outline-offset: 2px;
+        }
+
+        .buy-dialog-confirm:disabled {
+            background: #4A443D;
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        /* BUILD MENU STYLES */
+        .build-menu-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            padding-left: 50px;
+        }
+
+        .build-menu-panel {
+            background: #3A342D;
+            border: 3px solid #4A443D;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+        }
+
+        .build-menu-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #B8825C;
+        }
+
+        .build-menu-header h2 {
+            margin: 0;
+            color: #B8825C;
+            font-family: Arial, sans-serif;
+            font-size: 24px;
+        }
+
+        .build-menu-close-btn {
+            background: #8B5A5A;
+            color: white;
+            border: none;
+            width: 30px;
+            height: 30px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            margin: 0;
+        }
+
+        .build-menu-close-btn:hover {
+            background: #7A4949;
+        }
+
+        .build-menu-grid-container {
+            position: relative;
+            width: fit-content;
+        }
+
+        .build-menu-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 60px);
+            grid-template-rows: repeat(10, 60px);
+            gap: 2px;
+            background: #2A2520;
+            padding: 2px;
+            border: 2px solid #5A5449;
+        }
+
+        .build-menu-slot {
+            width: 60px;
+            height: 60px;
+            background: #3D3730;
+            border: 1px solid #5A5449;
+            box-sizing: border-box;
+        }
+
+        .build-menu-slot:hover {
+            background: #4A443D;
+            border-color: #6A6459;
+        }
+
+        .build-menu-structures {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            pointer-events: none;
+        }
+
+        .build-menu-structure-wrapper {
+            position: absolute;
+            pointer-events: all;
+            cursor: pointer;
+        }
+
+        .build-menu-structure-wrapper:hover {
+            filter: brightness(1.2);
+        }
+
+        .build-menu-structure-wrapper.build-menu-structure-disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            filter: grayscale(0.6);
+        }
+
+        .build-menu-structure-wrapper.build-menu-structure-disabled:hover {
+            filter: grayscale(0.6) brightness(1.0);
+        }
+
+        .build-menu-structure {
+            position: relative;
+            display: block;
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+
+        /* BUILD MENU TOOLTIP */
+        .build-menu-tooltip {
+            position: fixed;
+            background: rgba(42, 37, 32, 0.95);
+            border: 2px solid #B8825C;
+            border-radius: 6px;
+            padding: 10px 12px;
+            pointer-events: none;
+            z-index: 2000;
+            font-family: Arial, sans-serif;
+            min-width: 150px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.8);
+        }
+
+        .build-menu-tooltip .tooltip-title {
+            color: #B8825C;
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 6px;
+        }
+
+        /* BACKPACK CONTAINER */
+        .backpack-container {
+            flex-shrink: 0;
+        }
+
+        /* BACKPACK SECTION HEADER */
+        .backpack-section-header {
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .backpack-section-header h3 {
+            color: #5B6F7A;
+            margin: 0;
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        /* SLING SLOT (rifle holder) */
+        .sling-slot-container {
+            display: flex;
+            align-items: center;
+        }
+
+        .sling-slot {
+            width: 124px;
+            height: 30px;
+            background: #2A2520;
+            border: 2px solid #5A5449;
+            border-radius: 4px;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .sling-slot:hover {
+            border-color: #8B7355;
+        }
+
+        .sling-slot-label {
+            color: #4A443D;
+            font-size: 11px;
+            font-weight: bold;
+            pointer-events: none;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .sling-slot.has-item .sling-slot-label {
+            display: none;
+        }
+
+        .sling-slot.drag-over {
+            border-color: #6B7F5C;
+            background: rgba(107, 127, 92, 0.2);
+        }
+
+        .sling-slot.drag-invalid {
+            border-color: #8B5A5A;
+            background: rgba(139, 90, 90, 0.2);
+        }
+
+        .sling-item-wrapper {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            pointer-events: all;
+            cursor: grab;
+        }
+
+        .sling-item-wrapper img {
+            width: 118px;
+            height: 24px;
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+
+        .sling-item-wrapper.dragging {
+            opacity: 0.5;
+            cursor: grabbing;
+        }
+
+        /* CONSTRUCTION SECTION (integrated into backpack) */
+        .construction-section {
+            margin-left: 20px;
+            padding-left: 20px;
+            border-left: 3px solid #6B7F5C;
+            transition: all 0.3s ease;
+            min-width: 350px;
+            max-width: 450px;
+            flex-shrink: 0;
+        }
+
+        .construction-section-header {
+            margin-bottom: 10px;
+        }
+
+        .construction-section-header h3 {
+            color: #6B7F5C;
+            margin: 0;
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        .construction-building-info {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: rgba(107, 127, 92, 0.2);
+            border-radius: 4px;
+            border-left: 4px solid #6B7F5C;
+        }
+
+        .construction-building-info h3,
+        .construction-building-info h4 {
+            color: #fff;
+            font-size: 16px;
+            margin: 0;
+        }
+
+        .construction-building-info span {
+            color: #6B7F5C;
+            font-weight: bold;
+        }
+
+        .construction-requirements {
+            margin-bottom: 20px;
+        }
+
+        .construction-requirements h3,
+        .construction-requirements h4 {
+            color: #6B7F5C;
+            font-size: 16px;
+            margin-bottom: 10px;
+            margin-top: 0;
+        }
+
+        #constructionRequirements {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .construction-slots-container {
+            margin-bottom: 20px;
+        }
+
+        .construction-slots {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 4px;
+            min-height: 80px;
+        }
+
+        .construction-slot {
+            width: 60px;
+            height: 60px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid #555;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .construction-slot.filled {
+            border-color: #6B7F5C;
+            background: rgba(107, 127, 92, 0.2);
+        }
+
+        .construction-slot-label {
+            position: absolute;
+            bottom: -20px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 10px;
+            color: #D4C4A8;
+        }
+
+        .construction-build-btn {
+            width: 100%;
+            padding: 12px;
+            background: #6B7F5C;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .construction-build-btn:hover:not(:disabled) {
+            background: #5A6E4B;
+        }
+
+        .construction-build-btn:disabled {
+            background: #4A443D;
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        /* CRATE SECTION (integrated into backpack) */
+        .crate-section {
+            margin-left: 20px;
+            padding-left: 20px;
+            border-left: 3px solid #B8825C;
+            transition: all 0.3s ease;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .crate-section-header {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .crate-section-header h3 {
+            color: #B8825C;
+            margin: 0;
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        .market-influence {
+            color: #9C8C5C;
+            font-size: 14px;
+            padding: 2px 8px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 3px;
+            margin-left: auto;
+        }
+
+        .market-merchant-btn {
+            padding: 4px 12px;
+            background: #8c4a4a;
+            border: 1px solid #5a2d2d;
+            color: white;
+            cursor: pointer;
+            font-size: 12px;
+            border-radius: 3px;
+            display: none;
+        }
+        .market-merchant-btn:hover { background: #9c5a5a; }
+        .market-merchant-btn.enabled {
+            background: #4a7c4e;
+            border-color: #2d4a2f;
+        }
+        .market-merchant-btn.enabled:hover { background: #5a9c5e; }
+
+        .crate-grid-container {
+            position: relative;
+            width: fit-content;
+            flex-shrink: 0;
+        }
+
+        .crate-grid {
+            display: grid;
+            /* Grid template set dynamically via JS based on window size */
+            background: #2A2520;
+            padding: 2px;
+            border-radius: 4px;
+            overflow-y: auto;
+        }
+
+        .crate-slot {
+            /* Size set dynamically via JS based on window size */
+            background: #3A342D;
+            border: 1px solid #6A6459;
+            border-radius: 2px;
+        }
+
+        .crate-slot:hover {
+            background: #4A443D;
+            border-color: #8A8479;
+        }
+
+        .crate-items {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            pointer-events: none;
+        }
+
+        .crate-item-wrapper {
+            pointer-events: all;
+            cursor: grab;
+        }
+
+        .crate-item {
+            position: absolute;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            pointer-events: auto;
+            cursor: grab;
+            border: 2px solid transparent;
+            border-radius: 2px;
+            box-sizing: border-box;
+        }
+
+        .crate-item:hover {
+            border-color: #B8825C;
+        }
+
+        .crate-item.dragging {
+            opacity: 0.5;
+            cursor: grabbing;
+        }
+
+        /* MARKET LIST VIEW */
+        .market-list-container {
+            width: 100%;
+            max-width: 600px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .market-list-header {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr;
+            gap: 10px;
+            padding: 10px;
+            background: #2A2520;
+            border-radius: 4px 4px 0 0;
+            font-weight: bold;
+            color: #B8825C;
+            border-bottom: 2px solid #B8825C;
+        }
+
+        .market-list {
+            background: #2A2520;
+            border-radius: 0 0 4px 4px;
+            flex: 1;
+            overflow-y: auto;
+            max-height: min(500px, 60vh);
+        }
+
+        .market-category-header {
+            background: #1A1815;
+            color: #C4A574;
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 8px 10px;
+            border-bottom: 1px solid #3A342D;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        .market-list-item {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr;
+            gap: 10px;
+            padding: 10px;
+            border-bottom: 1px solid #333;
+            transition: background 0.2s;
+        }
+
+        .market-list-item:hover {
+            background: #3A342D;
+        }
+
+        .market-list-item:last-child {
+            border-bottom: none;
+        }
+
+        .market-item-name {
+            color: #fff;
+            font-weight: 500;
+        }
+
+        .market-item-buy {
+            color: #9DC68B;
+        }
+
+        .market-item-sell {
+            color: #8BB4C4;
+        }
+
+        .market-item-qty {
+            color: #C9A861;
+        }
+
+        /* MARKET SELL PREVIEW */
+        .market-sell-preview {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 100;
+            pointer-events: none;
+        }
+
+        .sell-preview-content {
+            background: rgba(42, 37, 32, 0.95);
+            border: 3px solid #6B7F5C;
+            border-radius: 8px;
+            padding: 20px 30px;
+            text-align: center;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+
+        .sell-preview-label {
+            color: #fff;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+
+        .sell-preview-price {
+            color: #C9A861;
+            font-size: 28px;
+            font-weight: bold;
+        }
+
+        .market-list-container {
+            position: relative;
+        }
+
+        /* MARKET SORT TOGGLE */
+        .market-sort-toggle {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 10px;
+        }
+
+        .market-sort-btn {
+            flex: 1;
+            padding: 8px 12px;
+            background: #2A2520;
+            border: 2px solid #444;
+            border-radius: 4px;
+            color: #C8B898;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+
+        .market-sort-btn:hover {
+            background: #3A342D;
+            border-color: #666;
+        }
+
+        .market-sort-btn.active {
+            background: #3A342D;
+            border-color: #B8825C;
+            color: #B8825C;
+        }
+
+        /* MARKET BUY/SELL BUTTONS */
+        .market-btn {
+            padding: 4px 10px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+
+        .market-btn-buy {
+            background: #4A6340;
+            color: #C9E6B8;
+        }
+
+        .market-btn-buy:hover:not(:disabled) {
+            background: #5A7350;
+        }
+
+        .market-btn-sell {
+            background: #405A63;
+            color: #B8D6E6;
+        }
+
+        .market-btn-sell:hover:not(:disabled) {
+            background: #506A73;
+        }
+
+        .market-btn:disabled {
+            background: #333;
+            color: #998877;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        /* Horse sell button - separate from market-btn to avoid event delegation conflict */
+        .horse-sell-btn {
+            padding: 4px 10px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: bold;
+            transition: all 0.2s;
+            background: #405A63;
+            color: #B8D6E6;
+        }
+
+        .horse-sell-btn:hover:not(:disabled) {
+            background: #506A73;
+        }
+
+        .horse-sell-btn:disabled {
+            background: #333;
+            color: #998877;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .market-horse-info {
+            padding: 8px 10px;
+            color: #998877;
+            font-size: 11px;
+            border-top: 1px solid #3A342D;
+            margin-top: 5px;
+        }
+
+        .market-item-buy, .market-item-sell {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .market-price {
+            font-size: 12px;
+        }
+
+        /* MARKET TOOLTIP */
+        .market-tooltip {
+            position: fixed;
+            background: rgba(42, 37, 32, 0.95);
+            border: 2px solid #B8825C;
+            border-radius: 6px;
+            padding: 10px;
+            z-index: 10000;
+            max-width: 250px;
+            font-size: 12px;
+            pointer-events: none;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        }
+
+        .market-tooltip-title {
+            color: #fff;
+            font-weight: bold;
+            margin-bottom: 8px;
+            border-bottom: 1px solid #444;
+            padding-bottom: 5px;
+        }
+
+        .market-tooltip-row {
+            display: flex;
+            justify-content: space-between;
+            color: #D4C4A8;
+            margin: 3px 0;
+        }
+
+        .market-tooltip-row span:last-child {
+            color: #C9A861;
+        }
+
+        .market-tooltip-final {
+            margin-top: 8px;
+            padding-top: 5px;
+            border-top: 1px solid #444;
+            font-weight: bold;
+        }
+
+        .market-tooltip-final span:last-child {
+            color: #6B7F5C;
+        }
+
+        .market-tooltip-error {
+            color: #AA6666;
+            margin-top: 5px;
+            font-style: italic;
+        }
+
+        /* MERCHANT DIALOGUE STYLES */
+        .merchant-dialogue-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 3000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .merchant-dialogue-content {
+            background: #3A342D;
+            border: 3px solid #5B6F7A;
+            border-radius: 8px;
+            padding: 30px;
+            max-width: 450px;
+            text-align: center;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+        }
+
+        .merchant-dialogue-title {
+            color: #5B6F7A;
+            font-size: 24px;
+            font-weight: bold;
+            margin: 0 0 20px 0;
+            font-family: Arial, sans-serif;
+        }
+
+        .merchant-dialogue-text {
+            color: #ddd;
+            font-size: 14px;
+            line-height: 1.6;
+            margin: 0 0 25px 0;
+            text-align: left;
+            white-space: pre-line;
+        }
+
+        .merchant-dialogue-buttons {
+            display: flex;
+            justify-content: center;
+        }
+
+        .merchant-dialogue-btn {
+            padding: 12px 40px;
+            background: #5B6F7A;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .merchant-dialogue-btn:hover {
+            background: #4A5E69;
+        }
+
+        /* TRAPPER DIALOGUE STYLES */
+        .trapper-dialogue-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 3000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .trapper-dialogue-content {
+            background: #3A342D;
+            border: 3px solid #8B4513;
+            border-radius: 8px;
+            padding: 30px;
+            max-width: 450px;
+            text-align: center;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+        }
+
+        .trapper-dialogue-title {
+            color: #8B4513;
+            font-size: 24px;
+            font-weight: bold;
+            margin: 0 0 20px 0;
+            font-family: Arial, sans-serif;
+        }
+
+        .trapper-dialogue-text {
+            color: #ddd;
+            font-size: 14px;
+            line-height: 1.6;
+            margin: 0 0 25px 0;
+            text-align: left;
+            white-space: pre-line;
+        }
+
+        .trapper-resource-list {
+            max-height: 300px;
+            overflow-y: auto;
+            margin: 0 0 20px 0;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 4px;
+            text-align: left;
+        }
+
+        .trapper-resource-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .trapper-resource-item:last-child {
+            border-bottom: none;
+        }
+
+        .trapper-resource-name {
+            color: #ddd;
+            font-size: 13px;
+        }
+
+        .trapper-resource-quality {
+            color: #B89F5C;
+            font-size: 13px;
+            font-weight: bold;
+        }
+
+        .trapper-dialogue-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        .trapper-dialogue-btn {
+            padding: 12px 30px;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s, opacity 0.2s;
+            background: #5A5247;
+        }
+
+        .trapper-dialogue-btn:hover {
+            background: #4A4237;
+        }
+
+        .trapper-pay-btn {
+            background: #6B8F5C;
+        }
+
+        .trapper-pay-btn:hover {
+            background: #5A7E4B;
+        }
+
+        .trapper-pay-btn:disabled {
+            background: #5A5247;
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .trapper-pay-btn:disabled:hover {
+            background: #5A5247;
+        }
+
+        /* BAKER DIALOGUE STYLES */
+        .baker-dialogue-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 3000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .baker-dialogue-content {
+            background: #3A342D;
+            border: 3px solid #CC7722;
+            border-radius: 8px;
+            padding: 30px;
+            max-width: 400px;
+            text-align: center;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+        }
+
+        .baker-dialogue-title {
+            color: #CC7722;
+            font-size: 24px;
+            font-weight: bold;
+            margin: 0 0 20px 0;
+            font-family: Arial, sans-serif;
+        }
+
+        .baker-dialogue-text {
+            color: #ddd;
+            font-size: 14px;
+            line-height: 1.6;
+            margin: 0 0 25px 0;
+            text-align: left;
+            white-space: pre-line;
+        }
+
+        .baker-dialogue-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        .baker-dialogue-btn {
+            padding: 12px 30px;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+            background: #CC7722;
+        }
+
+        .baker-dialogue-btn:hover {
+            background: #AA5511;
+        }
+
+        /* DEATH SCREEN STYLES */
+        .death-screen-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .death-screen-content {
+            text-align: center;
+            padding: 60px;
+            background: rgba(42, 37, 32, 0.95);
+            border: 4px solid #8B5A5A;
+            border-radius: 12px;
+            box-shadow: 0 0 40px rgba(139, 90, 90, 0.8);
+        }
+
+        .death-screen-title {
+            color: #8B5A5A;
+            font-size: 72px;
+            font-weight: bold;
+            margin: 0 0 20px 0;
+            text-shadow: 0 0 20px rgba(139, 90, 90, 0.8);
+            letter-spacing: 8px;
+            font-family: Arial, sans-serif;
+        }
+
+        .death-screen-message {
+            color: #B89F5C;
+            font-size: 24px;
+            font-weight: normal;
+            margin: 0 0 40px 0;
+            font-family: Arial, sans-serif;
+            font-style: italic;
+        }
+
+        .death-screen-respawn-btn {
+            padding: 20px 60px;
+            background: #6B7F5C;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.3s;
+            letter-spacing: 2px;
+        }
+
+        .death-screen-respawn-btn:hover:not(:disabled) {
+            background: #5A6E4B;
+        }
+
+        .death-screen-respawn-btn:disabled {
+            background: #5A5247;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .death-screen-respawn-btn.disabled {
+            background: #5A5247;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        /* STARVATION WARNING STYLES */
+        #starvationWarningOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9998;
+            pointer-events: none;
+        }
+
+        #starvationWarningOverlay.visible {
+            display: flex;
+            animation: starvationFlash 1.67s ease-in-out 3;
+        }
+
+        #starvationWarningOverlay .warning-text {
+            color: #FF2222;
+            font-size: 64px;
+            font-weight: bold;
+            text-shadow: 0 0 30px rgba(255, 0, 0, 0.8);
+            font-family: Arial, sans-serif;
+            letter-spacing: 4px;
+        }
+
+        @keyframes starvationFlash {
+            0%, 100% { opacity: 0; }
+            50% { opacity: 1; }
+        }
+
+        /* LOADING SCREEN STYLES */
+        .loading-screen-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 9990;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .loading-screen-content {
+            text-align: center;
+            padding: 60px;
+            background: rgba(42, 37, 32, 0.95);
+            border: 4px solid #6B7F5C;
+            border-radius: 12px;
+            min-width: 400px;
+        }
+
+        .loading-screen-title {
+            color: #6B7F5C;
+            font-size: 48px;
+            font-weight: bold;
+            margin: 0 0 30px 0;
+            letter-spacing: 4px;
+            font-family: Arial, sans-serif;
+        }
+
+        .loading-progress-container {
+            width: 100%;
+            height: 24px;
+            background: rgba(42, 37, 32, 0.8);
+            border: 2px solid #6B7F5C;
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        .loading-progress-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #5A6E4B, #6B7F5C, #7A9060);
+            border-radius: 10px;
+            transition: width 0.15s ease-out;
+        }
+
+        .loading-progress-text {
+            color: #B89F5C;
+            font-size: 18px;
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        /* Pre-spawn links - visible until player spawns */
+        .pre-spawn-links {
+            position: fixed;
+            left: 20px;
+            bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 10001;
+        }
+
+        .pre-spawn-link {
+            display: block;
+            padding: 12px 24px;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            font-weight: bold;
+            transition: background 0.2s, transform 0.2s;
+            text-align: center;
+        }
+
+        .pre-spawn-link:hover {
+            transform: translateX(5px);
+        }
+
+        .pre-spawn-discord {
+            background: #5865F2;
+        }
+
+        .pre-spawn-discord:hover {
+            background: #4752C4;
+        }
+
+        .pre-spawn-wiki {
+            background: #6B7F5C;
+        }
+
+        .pre-spawn-wiki:hover {
+            background: #5A6E4B;
+        }
+
+        .pre-spawn-donate {
+            background: #8b7355;
+        }
+
+        .pre-spawn-donate:hover {
+            background: #5c4a32;
+        }
+    </style>
+
     <script type="importmap">
         {
           "imports": {
             "three": "https://unpkg.com/three@0.145.0/build/three.module.js",
-            "three/addons/": "https://unpkg.com/three@0.145.0/examples/jsm/"
+            "three/addons/": "https://unpkg.com/three@0.145.0/examples/jsm/",
+            "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.19/+esm",
+            "@dimforge/rapier3d-compat": "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.14.0/+esm"
           }
         }
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/dat.gui/build/dat.gui.min.js"></script>
     <script type="module" src="./game.js"></script>
+    <script src="./visualize-navigation.js"></script>
 </body>
 </html>
