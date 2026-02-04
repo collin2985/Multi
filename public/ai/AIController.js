@@ -120,7 +120,7 @@ export class AIController extends BaseAIController {
         this.isPlayerDead = null;
         this.tickManager = null;
         this.isPlayerActive = null;  // Heartbeat: checks if player has recent updates
-        this.isPlayerSpawnProtected = null;  // Spawn protection: skip targeting for 60s after random spawn
+        this.isPlayerSpawnProtected = null;  // Spawn protection: skip targeting for 2 min after random spawn
         
         // Spawn optimization (Phase 1)
         this._hasTentsInRange = false;

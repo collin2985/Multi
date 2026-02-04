@@ -95,7 +95,7 @@ export class BrownBearController extends BaseAIController {
         this.isPlayerDead = null;
         this.isPlayerClimbing = null;
         this.isPlayerActive = null;  // Heartbeat: checks if player has recent updates
-        this.isPlayerSpawnProtected = null;  // Spawn protection: skip targeting for 60s after random spawn
+        this.isPlayerSpawnProtected = null;  // Spawn protection: skip targeting for 2 min after random spawn
 
         // AIRegistry for cross-controller queries (bandits, deer, etc.)
         this.registry = null;

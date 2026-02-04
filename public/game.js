@@ -3228,7 +3228,7 @@ class MultiplayerGame {
             // Update spawn protection indicator every 60 frames (~1/second)
             if (this.gameLoop.frameCount % 60 === 0) {
                 const protectionEnd = (this.lastSpawnType === 'random' && this.gameState.lastSpawnTime)
-                    ? this.gameState.lastSpawnTime + 60000
+                    ? this.gameState.lastSpawnTime + 120000  // 2 minutes protection
                     : null;
                 ui.updateSpawnImmunity(protectionEnd);
             }

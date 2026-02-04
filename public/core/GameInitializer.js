@@ -930,18 +930,18 @@ export class GameInitializer {
                 return peerData?.factionId || null;
             },
 
-            // Spawn protection: don't target players for 60s after random spawn
+            // Spawn protection: don't target players for 2 minutes after random spawn
             isPlayerSpawnProtected: (playerId) => {
                 if (playerId === this.game.gameState.clientId) {
                     return this.game.lastSpawnType === 'random'
                         && this.game.gameState.lastSpawnTime
-                        && Date.now() - this.game.gameState.lastSpawnTime < 60000;
+                        && Date.now() - this.game.gameState.lastSpawnTime < 120000;
                 }
                 const peerData = this.game.networkManager.peerGameData.get(playerId);
                 if (!peerData) return false;
                 return peerData.spawnType === 'random'
                     && peerData.spawnTime
-                    && Date.now() - peerData.spawnTime < 60000;
+                    && Date.now() - peerData.spawnTime < 120000;
             }
         });
     }
@@ -1202,18 +1202,18 @@ export class GameInitializer {
                 return (Date.now() - peerData.lastUpdateTime) < 3000;
             },
 
-            // Spawn protection: don't target players for 60s after random spawn
+            // Spawn protection: don't target players for 2 minutes after random spawn
             isPlayerSpawnProtected: (playerId) => {
                 if (playerId === this.game.gameState.clientId) {
                     return this.game.lastSpawnType === 'random'
                         && this.game.gameState.lastSpawnTime
-                        && Date.now() - this.game.gameState.lastSpawnTime < 60000;
+                        && Date.now() - this.game.gameState.lastSpawnTime < 120000;
                 }
                 const peerData = this.game.networkManager.peerGameData.get(playerId);
                 if (!peerData) return false;
                 return peerData.spawnType === 'random'
                     && peerData.spawnTime
-                    && Date.now() - peerData.spawnTime < 60000;
+                    && Date.now() - peerData.spawnTime < 120000;
             },
         });
 
