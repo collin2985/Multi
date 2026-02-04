@@ -4,9 +4,9 @@
 
 set -e
 
-# Paths
-DEV="C:/Users/colli/Desktop/horses"
-BACKUP_ROOT="C:/Users/colli/Desktop/HORSES BACKUP/horses backup"
+# Paths (using forward slashes for Git Bash compatibility)
+DEV="/c/Users/colli/Desktop/horses"
+BACKUP_ROOT="/c/Users/colli/Desktop/HORSES BACKUP/horses backup"
 CONFIG_FILE="$DEV/public/config.js"
 
 # Colors for output
@@ -44,10 +44,13 @@ if [ -n "$BACKUP_DESC" ]; then
     echo ""
     echo -e "${GREEN}=== Step 1: Creating backup ===${NC}"
     echo "Destination: $BACKUP_DIR"
-    mkdir -p "$BACKUP_DIR"
 
-    # Copy everything except node_modules and .git for speed
-    rsync -a --exclude='node_modules' --exclude='.git' "$DEV/" "$BACKUP_DIR/"
+    # Copy entire directory
+    cp -r "$DEV" "$BACKUP_DIR"
+
+    # Remove node_modules and .git from backup (saves space)
+    rm -rf "$BACKUP_DIR/node_modules" "$BACKUP_DIR/.git"
+
     echo -e "${GREEN}Backup complete.${NC}"
 else
     echo ""
@@ -65,8 +68,9 @@ echo ""
 echo -e "${GREEN}=== Step 3: Git commit and push ===${NC}"
 cd "$DEV"
 
-# Check for any sensitive files that might be staged
 git add -A
+
+# Check for any sensitive files that might be staged
 STAGED=$(git diff --cached --name-only 2>/dev/null || true)
 
 if echo "$STAGED" | grep -qE '^\.env$'; then
@@ -76,10 +80,18 @@ if echo "$STAGED" | grep -qE '^\.env$'; then
     exit 1
 fi
 
+# Check if there are any changes to commit
+if [ -z "$STAGED" ]; then
+    echo -e "${YELLOW}No changes to commit.${NC}"
+    sed -i 's/USE_ONLINE_SERVER: true/USE_ONLINE_SERVER: false/' "$CONFIG_FILE"
+    echo "Config reverted to local mode."
+    exit 0
+fi
+
 # Show what will be committed
 echo "Files to be committed:"
-git diff --cached --name-only | head -20
-TOTAL_FILES=$(git diff --cached --name-only | wc -l)
+echo "$STAGED" | head -20
+TOTAL_FILES=$(echo "$STAGED" | wc -l)
 if [ "$TOTAL_FILES" -gt 20 ]; then
     echo "... and $((TOTAL_FILES - 20)) more files"
 fi
