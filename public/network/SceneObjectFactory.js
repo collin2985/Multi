@@ -815,7 +815,8 @@ export class SceneObjectFactory {
                     id: objectInstance.userData.objectId,
                     position: { x: objectPosition.x, y: objectPosition.y, z: objectPosition.z },
                     type: structureType,
-                    object: objectInstance
+                    object: objectInstance,
+                    banditDeathTime: data.banditDeathTime || null
                 });
             }
 
@@ -825,7 +826,8 @@ export class SceneObjectFactory {
                     id: objectInstance.userData.objectId,
                     position: { x: objectPosition.x, y: objectPosition.y, z: objectPosition.z },
                     type: structureType,
-                    object: objectInstance
+                    object: objectInstance,
+                    bearDeathTime: data.bearDeathTime || null
                 });
             }
 
@@ -835,7 +837,8 @@ export class SceneObjectFactory {
                     id: objectInstance.userData.objectId,
                     position: { x: objectPosition.x, y: objectPosition.y, z: objectPosition.z },
                     type: structureType,
-                    object: objectInstance
+                    object: objectInstance,
+                    deerDeathTime: data.deerDeathTime || null
                 });
             }
 

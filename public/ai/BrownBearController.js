@@ -120,6 +120,7 @@ export class BrownBearController extends BaseAIController {
 
         // Pending states queue (handles race condition: state message before spawn)
         this.pendingStates = new Map();
+        this._lastPendingStatesCleanup = 0;
 
         // Performance: Reusable broadcast message to avoid GC pressure
         this._broadcastMsg = {
@@ -196,6 +197,16 @@ export class BrownBearController extends BaseAIController {
     update(deltaTime, chunkX, chunkZ) {
         this._frameCount++;
         const now = Date.now();
+
+        // Cleanup orphaned pendingStates entries (TTL: 10 seconds)
+        if (now - this._lastPendingStatesCleanup > 10000) {
+            this._lastPendingStatesCleanup = now;
+            for (const [id, entry] of this.pendingStates) {
+                if (now - entry._timestamp > 10000) {
+                    this.pendingStates.delete(id);
+                }
+            }
+        }
 
         // Build player list for targeting
         const players = this._buildPlayerList(chunkX, chunkZ);
@@ -1259,14 +1270,22 @@ export class BrownBearController extends BaseAIController {
         }
 
         // Collect all unspawned dens from 3x3 grid (reuse array)
+        // 60-minute respawn cooldown: skip dens with recent bearDeathTime
+        const RESPAWN_COOLDOWN_MS = 60 * 60 * 1000;
         this._collectedDens.length = 0;
         for (const key of chunkKeys) {
             const dens = this.getBrownBearStructures(key);
             if (dens) {
                 for (const den of dens) {
-                    if (!this.entities.has(den.id)) {
-                        this._collectedDens.push(den);
+                    if (this.entities.has(den.id)) continue;
+                    // Check 60-minute respawn cooldown
+                    if (den.bearDeathTime) {
+                        const elapsed = Date.now() - den.bearDeathTime;
+                        if (elapsed < RESPAWN_COOLDOWN_MS) {
+                            continue; // Still on cooldown
+                        }
                     }
+                    this._collectedDens.push(den);
                 }
             }
         }
@@ -1726,7 +1745,7 @@ export class BrownBearController extends BaseAIController {
         if (!entity) {
             // Entity doesn't exist yet - store pending state for when it spawns
             // This handles race condition where state arrives before spawn message
-            this.pendingStates.set(denId, { position, rotation, state, authorityId, authorityTerm, target, chaseTargetType, wanderDirection, fleeDirection, homePosition });
+            this.pendingStates.set(denId, { position, rotation, state, authorityId, authorityTerm, target, chaseTargetType, wanderDirection, fleeDirection, homePosition, _timestamp: Date.now() });
             return;
         }
 
@@ -1839,6 +1858,16 @@ export class BrownBearController extends BaseAIController {
             denId: denId,
             killedBy: killedBy
         });
+
+        // Send to server for persistent tracking (60-minute respawn cooldown)
+        if (this.game?.networkManager) {
+            const chunkX = ChunkCoordinates.worldToChunk(entity.homePosition.x);
+            const chunkZ = ChunkCoordinates.worldToChunk(entity.homePosition.z);
+            this.game.networkManager.sendMessage('bear_death', {
+                denId: denId,
+                chunkId: `chunk_${chunkX},${chunkZ}`
+            });
+        }
 
         // Schedule visual cleanup after death animation (2 minutes for harvesting)
         // Entity stays in map to prevent respawn until chunk unloads

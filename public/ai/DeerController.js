@@ -124,6 +124,7 @@ export class DeerController extends BaseAIController {
 
         // Pending states queue (handles race condition: state message before spawn)
         this.pendingStates = new Map();
+        this._lastPendingStatesCleanup = 0;
 
         // Respawn cooldown tracking: treeId -> deathTimestamp (ms)
         // Persists after corpse cleanup to prevent immediate respawn
@@ -206,6 +207,16 @@ export class DeerController extends BaseAIController {
         this._frameCount++;
         const now = Date.now();
         const currentTick = this.getServerTick ? this.getServerTick() : 0;
+
+        // Cleanup orphaned pendingStates entries (TTL: 10 seconds)
+        if (now - this._lastPendingStatesCleanup > 10000) {
+            this._lastPendingStatesCleanup = now;
+            for (const [id, entry] of this.pendingStates) {
+                if (now - entry._timestamp > 10000) {
+                    this.pendingStates.delete(id);
+                }
+            }
+        }
 
         const corpsesToCleanup = [];
 
@@ -526,6 +537,16 @@ export class DeerController extends BaseAIController {
         // Record death time for respawn cooldown (persists after corpse cleanup)
         this._treeDeathTimes.set(entity.treeId, Date.now());
 
+        // Send to server for persistent tracking (60-minute respawn cooldown)
+        if (this.game?.networkManager) {
+            const chunkX = ChunkCoordinates.worldToChunk(entity.homeTreeX);
+            const chunkZ = ChunkCoordinates.worldToChunk(entity.homeTreeZ);
+            this.game.networkManager.sendMessage('deer_death', {
+                treeId: entity.treeId,
+                chunkId: `chunk_${chunkX},${chunkZ}`
+            });
+        }
+
         if (this.game?.nameTagManager) {
             this.game.nameTagManager.setEntityDead(`deer_${entity.treeId}`);
         }
@@ -616,13 +637,14 @@ export class DeerController extends BaseAIController {
         this._treeCheckIndex++;
 
         // Check respawn cooldown (60 min after deer death)
-        const deathTime = this._treeDeathTimes.get(tree.id);
+        // Prefer server data, fallback to local cache
+        const deathTime = tree.deerDeathTime || this._treeDeathTimes.get(tree.id);
         if (deathTime) {
             const elapsed = Date.now() - deathTime;
             if (elapsed < DEER_CONFIG.RESPAWN_COOLDOWN_MS) {
                 return;  // Still on cooldown
             }
-            // Cooldown expired, clear the entry
+            // Cooldown expired, clear local entry if exists
             this._treeDeathTimes.delete(tree.id);
         }
 
@@ -875,7 +897,7 @@ export class DeerController extends BaseAIController {
         if (!entity) {
             // Entity doesn't exist yet - store pending state for when it spawns
             // This handles race condition where state arrives before spawn message
-            this.pendingStates.set(treeId, { position, rotation, state, authorityId, authorityTerm, deathTick, wanderDirection, fleeDirection, homeTreeX, homeTreeZ, spawnedBy });
+            this.pendingStates.set(treeId, { position, rotation, state, authorityId, authorityTerm, deathTick, wanderDirection, fleeDirection, homeTreeX, homeTreeZ, spawnedBy, _timestamp: Date.now() });
             return;
         }
 

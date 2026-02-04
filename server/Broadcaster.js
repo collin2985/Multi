@@ -363,6 +363,60 @@ class MessageRouter {
             this.processNotificationQueue(getPlayersInProximity);
         }, this.notificationInterval);
     }
+
+    /**
+     * Broadcast a message to all clients within LOAD_RADIUS of a chunk
+     * Used for updates that need to reach all clients with the chunk loaded
+     * @param {string} chunkId - Center chunk
+     * @param {object} message
+     */
+    broadcastToProximity(chunkId, message) {
+        const jsonMessage = JSON.stringify(message);
+        const CONFIG = require('./ServerConfig.js');
+
+        // Use efficient chunk-based lookup if available
+        if (this.chunkManager) {
+            const players = this.chunkManager.getPlayersInRadius(chunkId, CONFIG.CHUNKS.LOAD_RADIUS);
+            for (const player of players) {
+                const clientData = this.clients.get(player.id);
+                if (clientData?.ws?.readyState === WebSocket.OPEN) {
+                    try {
+                        clientData.ws.send(jsonMessage);
+                    } catch (err) {
+                        console.error(`Failed to send ${message.type} to ${player.id}:`, err);
+                    }
+                }
+            }
+            return;
+        }
+
+        // Fallback: O(n) iteration (for backwards compatibility)
+        const parsed = ChunkCoordinates.parseChunkIdSafe(chunkId);
+        if (!parsed) {
+            console.error(`[Broadcaster] Cannot broadcast to invalid chunk: ${chunkId}`);
+            return;
+        }
+        const { chunkX, chunkZ } = parsed;
+        const radius = CONFIG.CHUNKS.LOAD_RADIUS;
+
+        const targetChunks = new Set();
+        for (let x = chunkX - radius; x <= chunkX + radius; x++) {
+            for (let z = chunkZ - radius; z <= chunkZ + radius; z++) {
+                targetChunks.add(`chunk_${x},${z}`);
+            }
+        }
+
+        this.clients.forEach((clientData, clientId) => {
+            if (clientData && clientData.currentChunk && targetChunks.has(clientData.currentChunk) &&
+                clientData.ws && clientData.ws.readyState === WebSocket.OPEN) {
+                try {
+                    clientData.ws.send(jsonMessage);
+                } catch (err) {
+                    console.error(`Failed to send ${message.type} to ${clientId}:`, err);
+                }
+            }
+        });
+    }
 }
 
 module.exports = MessageRouter;

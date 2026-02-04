@@ -160,6 +160,10 @@ export class AIController extends BaseAIController {
         // Performance: Cached registry references (lazy-initialized)
         this._cachedBrownBearController = null;
 
+        // Pending states cleanup (TTL-based orphan prevention)
+        this.pendingStates = new Map();
+        this._lastPendingStatesCleanup = 0;
+
         // Performance: Reusable broadcast message object to avoid GC pressure
         this._broadcastMsg = {
             type: 'bandit_state',
@@ -326,15 +330,24 @@ export class AIController extends BaseAIController {
         }
 
         // Collect all unspawned tents from 3x3 grid (reuse array, reuse chunkKeys from above)
+        // 60-minute respawn cooldown for bandits
+        const RESPAWN_COOLDOWN_MS = 60 * 60 * 1000;
         this._collectedTents.length = 0;
         for (const key of chunkKeys) {
             const tents = this.getBanditStructures(key);
             if (tents) {
                 for (const tent of tents) {
-                    // Skip if already spawned OR bandit was killed (no respawn)
-                    if (!this.entities.has(tent.id) && !this._deadTentIds.has(tent.id)) {
-                        this._collectedTents.push(tent);
+                    if (this.entities.has(tent.id)) continue;
+                    // Skip if in local death cache (temporary until chunk unload)
+                    if (this._deadTentIds.has(tent.id)) continue;
+                    // Check 60-minute respawn cooldown from server
+                    if (tent.banditDeathTime) {
+                        const elapsed = Date.now() - tent.banditDeathTime;
+                        if (elapsed < RESPAWN_COOLDOWN_MS) {
+                            continue; // Still on cooldown
+                        }
                     }
+                    this._collectedTents.push(tent);
                 }
             }
         }
@@ -2844,7 +2857,7 @@ export class AIController extends BaseAIController {
      */
     _handleWaterDetected(entity, waterX, waterZ) {
         // Scan surrounding area for water/slopes in navmap
-        this.game?.navigationManager?.scanAreaWalkability(waterX, waterZ, 5, this.getTerrainHeight);
+        this.game?.navigationManager?.scanAreaWalkability(waterX, waterZ, 3, this.getTerrainHeight);
 
         // Clear current path
         entity.path = null;
@@ -3941,7 +3954,7 @@ export class AIController extends BaseAIController {
         if (!entity) {
             // Entity doesn't exist yet - store pending state for when it spawns
             // This handles race condition where state arrives before spawn/sync
-            this.pendingStates = this.pendingStates || new Map();
+            data._timestamp = Date.now();
             this.pendingStates.set(tentId, data);
             return;
         }
@@ -4193,27 +4206,37 @@ export class AIController extends BaseAIController {
             this.game.aiEnemyManager.markTentAIDead(tentId);
         }
 
+        // Calculate chunkId from entity position
+        // For artillery militia, use current world position (artillery may have moved via ship)
+        let chunkX, chunkZ;
+        if (entity.isArtilleryMilitia && entity.artilleryMesh && typeof entity.artilleryMesh.getWorldPosition === 'function') {
+            const worldPos = this._tempWorldPos;
+            entity.artilleryMesh.getWorldPosition(worldPos);
+            chunkX = ChunkCoordinates.worldToChunk(worldPos.x);
+            chunkZ = ChunkCoordinates.worldToChunk(worldPos.z);
+        } else {
+            chunkX = ChunkCoordinates.worldToChunk(entity.homePosition.x);
+            chunkZ = ChunkCoordinates.worldToChunk(entity.homePosition.z);
+        }
+        const chunkId = `chunk_${chunkX},${chunkZ}`;
+
         // If this is a militia, notify server to clear the flag
         const militiaTypes = ['militia', 'outpostMilitia', 'artilleryMilitia'];
         if (militiaTypes.includes(entity.entityType)) {
-            // Calculate chunkId from entity position
-            // For artillery militia, use current world position (artillery may have moved via ship)
-            let chunkX, chunkZ;
-            if (entity.isArtilleryMilitia && entity.artilleryMesh && typeof entity.artilleryMesh.getWorldPosition === 'function') {
-                const worldPos = this._tempWorldPos;
-                entity.artilleryMesh.getWorldPosition(worldPos);
-                chunkX = ChunkCoordinates.worldToChunk(worldPos.x);
-                chunkZ = ChunkCoordinates.worldToChunk(worldPos.z);
-            } else {
-                chunkX = ChunkCoordinates.worldToChunk(entity.homePosition.x);
-                chunkZ = ChunkCoordinates.worldToChunk(entity.homePosition.z);
-            }
-            const chunkId = `chunk_${chunkX},${chunkZ}`;
-
             // Send militia_death to server
             if (this.game?.networkManager) {
                 this.game.networkManager.sendMessage('militia_death', {
                     structureId: tentId,
+                    chunkId: chunkId
+                });
+            }
+        }
+
+        // If this is a bandit, notify server to record death time (permanent death)
+        if (entity.entityType === 'bandit') {
+            if (this.game?.networkManager) {
+                this.game.networkManager.sendMessage('bandit_death', {
+                    tentId: tentId,
                     chunkId: chunkId
                 });
             }
@@ -4342,6 +4365,24 @@ export class AIController extends BaseAIController {
 
             if (entityChunkKey === chunkKey) {
                 this._destroyEntity(tentId);
+            }
+        }
+
+        // Clean up _deadTentIds for this chunk to prevent unbounded memory growth
+        // Server has persistent record, so we can safely clear local cache on unload
+        for (const tentId of this._deadTentIds) {
+            // Parse tentId to get chunk - tentId format is typically the objectId
+            // We need to check if any entity from this chunk was in deadTentIds
+            // Since we don't have position info in the Set, we'll match by checking
+            // if the bandit structure registry for this chunk contains the tentId
+            const banditStructures = this.getBanditStructures(chunkKey);
+            if (banditStructures) {
+                for (const tent of banditStructures) {
+                    if (tent.id === tentId) {
+                        this._deadTentIds.delete(tentId);
+                        break;
+                    }
+                }
             }
         }
     }
@@ -4488,6 +4529,16 @@ export class AIController extends BaseAIController {
         ChunkPerfTimer.start('bandit.update_total');
         this._frameCount++;
         const now = Date.now();
+
+        // Cleanup orphaned pendingStates entries (TTL: 10 seconds)
+        if (now - this._lastPendingStatesCleanup > 10000) {
+            this._lastPendingStatesCleanup = now;
+            for (const [id, entry] of this.pendingStates) {
+                if (now - entry._timestamp > 10000) {
+                    this.pendingStates.delete(id);
+                }
+            }
+        }
 
         // Build player list
         ChunkPerfTimer.start('bandit.buildPlayerList');

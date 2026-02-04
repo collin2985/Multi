@@ -7059,6 +7059,122 @@ class MessageHandlers {
     }
 
     /**
+     * Handle bandit_death message
+     * Records bandit death time on structure so bandit never respawns
+     */
+    async handleBanditDeath(ws, payload) {
+        try {
+            const { tentId, chunkId } = payload;
+
+            const structure = await this.chunkManager.findObjectChange(chunkId, tentId);
+            if (!structure) {
+                return;
+            }
+
+            // Only process if this is a bandit structure
+            if (!structure.isBanditStructure) {
+                return;
+            }
+
+            // Only record if not already dead (prevent duplicate processing)
+            if (structure.banditDeathTime) {
+                return;
+            }
+
+            // Record death time - bandit will never respawn
+            structure.banditDeathTime = Date.now();
+            await this.chunkManager.saveChunk(chunkId);
+
+            // Broadcast to all clients with this chunk loaded (LOAD_RADIUS, not just 3x3)
+            this.messageRouter.broadcastToProximity(chunkId, {
+                type: 'bandit_death_recorded',
+                payload: {
+                    tentId,
+                    chunkId,
+                    banditDeathTime: structure.banditDeathTime
+                }
+            });
+
+        } catch (error) {
+            console.error('[BanditDeath] Error in handleBanditDeath:', error);
+        }
+    }
+
+    /**
+     * Handle bear_death message
+     * Records bear death time on den structure for 60-minute respawn cooldown
+     */
+    async handleBearDeath(ws, payload) {
+        try {
+            const { denId, chunkId } = payload;
+
+            const structure = await this.chunkManager.findObjectChange(chunkId, denId);
+            if (!structure) {
+                return;
+            }
+
+            // Only process if this is a brown bear structure
+            if (!structure.isBrownBearStructure) {
+                return;
+            }
+
+            // Record death time for respawn cooldown
+            structure.bearDeathTime = Date.now();
+            await this.chunkManager.saveChunk(chunkId);
+
+            // Broadcast to all clients with this chunk loaded
+            this.messageRouter.broadcastToProximity(chunkId, {
+                type: 'bear_death_recorded',
+                payload: {
+                    denId,
+                    chunkId,
+                    bearDeathTime: structure.bearDeathTime
+                }
+            });
+
+        } catch (error) {
+            console.error('[BearDeath] Error in handleBearDeath:', error);
+        }
+    }
+
+    /**
+     * Handle deer_death message
+     * Records deer death time on tree structure for 60-minute respawn cooldown
+     */
+    async handleDeerDeath(ws, payload) {
+        try {
+            const { treeId, chunkId } = payload;
+
+            const structure = await this.chunkManager.findObjectChange(chunkId, treeId);
+            if (!structure) {
+                return;
+            }
+
+            // Only process if this is a deer tree structure
+            if (!structure.isDeerTreeStructure) {
+                return;
+            }
+
+            // Record death time for respawn cooldown
+            structure.deerDeathTime = Date.now();
+            await this.chunkManager.saveChunk(chunkId);
+
+            // Broadcast to all clients with this chunk loaded
+            this.messageRouter.broadcastToProximity(chunkId, {
+                type: 'deer_death_recorded',
+                payload: {
+                    treeId,
+                    chunkId,
+                    deerDeathTime: structure.deerDeathTime
+                }
+            });
+
+        } catch (error) {
+            console.error('[DeerDeath] Error in handleDeerDeath:', error);
+        }
+    }
+
+    /**
      * Clean up stale claims that were never completed (lease expiration)
      * Called periodically from server tick to prevent permanently stuck entities
      */

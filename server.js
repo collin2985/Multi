@@ -713,6 +713,18 @@ wss.on('connection', ws => {
                 await messageHandlers.handleMilitiaDeath(ws, payload);
                 break;
 
+            case 'bandit_death':
+                await messageHandlers.handleBanditDeath(ws, payload);
+                break;
+
+            case 'bear_death':
+                await messageHandlers.handleBearDeath(ws, payload);
+                break;
+
+            case 'deer_death':
+                await messageHandlers.handleDeerDeath(ws, payload);
+                break;
+
             case 'get_influence':
                 await messageHandlers.handleGetInfluence(ws, payload);
                 break;

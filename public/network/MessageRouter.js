@@ -126,7 +126,14 @@ export class MessageRouter {
             'claim_state_response': (payload) => this.handleClaimStateResponse(payload),
 
             // Construction site sync
-            'construction_materials_updated': (payload) => this.handleConstructionMaterialsUpdated(payload)
+            'construction_materials_updated': (payload) => this.handleConstructionMaterialsUpdated(payload),
+
+            // Bandit death sync
+            'bandit_death_recorded': (payload) => this.handleBanditDeathRecorded(payload),
+
+            // Bear/Deer death sync (60-minute respawn cooldown)
+            'bear_death_recorded': (payload) => this.handleBearDeathRecorded(payload),
+            'deer_death_recorded': (payload) => this.handleDeerDeathRecorded(payload)
         };
     }
 
@@ -3557,6 +3564,81 @@ export class MessageRouter {
                 if (this.game.bakerController) {
                     this.game.bakerController.handleClearDepositResponse(payload);
                 }
+        }
+    }
+
+    /**
+     * Handle bandit_death_recorded message from server
+     * Updates local bandit structure registry with death time so bandit never respawns
+     */
+    handleBanditDeathRecorded(payload) {
+        const { tentId, chunkId, banditDeathTime } = payload;
+        const chunkKey = chunkId.replace('chunk_', '');
+
+        // Update bandit structure registry with death time
+        const banditStructures = this.game.gameState?.banditStructures?.get(chunkKey);
+        if (banditStructures) {
+            for (const structure of banditStructures) {
+                if (structure.id === tentId) {
+                    structure.banditDeathTime = banditDeathTime;
+                    break;
+                }
+            }
+        }
+
+        // Also destroy any spawned entity if it exists
+        if (this.game.banditController?.entities.has(tentId)) {
+            this.game.banditController._destroyEntity(tentId);
+        }
+    }
+
+    /**
+     * Handle bear_death_recorded message from server
+     * Updates local brown bear structure registry with death time for 60-minute respawn cooldown
+     */
+    handleBearDeathRecorded(payload) {
+        const { denId, chunkId, bearDeathTime } = payload;
+        const chunkKey = chunkId.replace('chunk_', '');
+
+        // Update brown bear structure registry with death time
+        const bearStructures = this.game.gameState?.brownBearStructures?.get(chunkKey);
+        if (bearStructures) {
+            for (const structure of bearStructures) {
+                if (structure.id === denId) {
+                    structure.bearDeathTime = bearDeathTime;
+                    break;
+                }
+            }
+        }
+
+        // Also destroy any spawned entity if it exists
+        if (this.game.brownBearController?.entities.has(denId)) {
+            this.game.brownBearController._destroyEntity(denId);
+        }
+    }
+
+    /**
+     * Handle deer_death_recorded message from server
+     * Updates local deer tree structure registry with death time for 60-minute respawn cooldown
+     */
+    handleDeerDeathRecorded(payload) {
+        const { treeId, chunkId, deerDeathTime } = payload;
+        const chunkKey = chunkId.replace('chunk_', '');
+
+        // Update deer tree structure registry with death time
+        const deerStructures = this.game.gameState?.deerTreeStructures?.get(chunkKey);
+        if (deerStructures) {
+            for (const structure of deerStructures) {
+                if (structure.id === treeId) {
+                    structure.deerDeathTime = deerDeathTime;
+                    break;
+                }
+            }
+        }
+
+        // Also destroy any spawned entity if it exists
+        if (this.game.deerController?.entities.has(treeId)) {
+            this.game.deerController._destroyEntity(treeId);
         }
     }
 }
