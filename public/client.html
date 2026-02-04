@@ -973,6 +973,7 @@
                 <div id="loadingProgressBar" class="loading-progress-bar"></div>
             </div>
             <p id="loadingProgressText" class="loading-progress-text">Connecting to server...</p>
+            <p id="loadingSpawnTip" class="loading-spawn-tip" style="display: none;">For 2 minutes, bears and bandits won't notice you. Use this time to get away while you can.</p>
         </div>
     </div>
 
@@ -2680,6 +2681,16 @@
             font-size: 18px;
             margin: 0;
             font-family: Arial, sans-serif;
+        }
+
+        .loading-spawn-tip {
+            color: #7cb87c;
+            font-size: 16px;
+            margin: 20px 0 0 0;
+            font-family: Arial, sans-serif;
+            font-style: italic;
+            max-width: 400px;
+            text-align: center;
         }
 
         /* Pre-spawn links - visible until player spawns */

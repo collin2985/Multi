@@ -9499,6 +9499,9 @@ modelManager.loadAllModels().then(async () => {
             // Store spawn type for LoadingScreen to check (only random spawn gets immunity)
             game.lastSpawnType = spawnType;
 
+            // Show spawn protection tip for random spawns
+            game.loadingScreen.showSpawnTip(spawnType === 'random');
+
             // Hide spawn screen and show loading immediately
             game.spawnScreen.hide();
             game.loadingScreen.setStatus('Finding spawn point...', 2);

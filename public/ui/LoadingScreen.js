@@ -36,9 +36,20 @@ export class LoadingScreen {
         this.progressBar = document.getElementById('loadingProgressBar');
         this.progressText = document.getElementById('loadingProgressText');
         this.preSpawnLinks = document.getElementById('preSpawnLinks');
+        this.spawnTip = document.getElementById('loadingSpawnTip');
 
         if (!this.overlay) {
             console.error('[LoadingScreen] DOM elements not found');
+        }
+    }
+
+    /**
+     * Show or hide the spawn protection tip (only relevant for random spawns)
+     * @param {boolean} show - Whether to show the tip
+     */
+    showSpawnTip(show) {
+        if (this.spawnTip) {
+            this.spawnTip.style.display = show ? 'block' : 'none';
         }
     }
 
@@ -219,6 +230,9 @@ export class LoadingScreen {
         this.isActive = false;
         this.currentPhase = 'done';  // Stop polling loop
         this.overlay.style.display = 'none';
+
+        // Hide spawn tip
+        this.showSpawnTip(false);
 
 
 
