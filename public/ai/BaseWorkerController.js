@@ -53,6 +53,7 @@ export class BaseWorkerController {
         // Entity storage
         this.entities = new Map();
         this.pendingStates = new Map();
+        this._lastPendingStatesCleanup = 0;
 
         // Core references (set via initialize)
         this.clientId = null;
@@ -679,6 +680,16 @@ export class BaseWorkerController {
         this._frameCount++;
         const now = Date.now();
 
+        // Cleanup orphaned pendingStates entries (TTL: 10 seconds)
+        if (now - this._lastPendingStatesCleanup > 10000) {
+            this._lastPendingStatesCleanup = now;
+            for (const [id, entry] of this.pendingStates) {
+                if (now - entry._timestamp > 10000) {
+                    this.pendingStates.delete(id);
+                }
+            }
+        }
+
         // OPTIMIZATION: Cache frequently accessed values (with fallbacks before init)
         const myPos = this.game?.playerObject?.position;
         const nearDistSq = this._cachedConfig?.FAR_DISTANCE_SQ ?? this._getConfig('FAR_DISTANCE_SQ');
@@ -1154,7 +1165,7 @@ export class BaseWorkerController {
      * Called when AI steps on terrain with height < 0.3
      */
     _handleWaterDetected(entity, waterX, waterZ) {
-        this.game?.navigationManager?.scanAreaWalkability(waterX, waterZ, 5, this.getTerrainHeight);
+        this.game?.navigationManager?.scanAreaWalkability(waterX, waterZ, 3, this.getTerrainHeight);
         entity.path = [];
         entity.pathIndex = 0;
         entity._skipNextArrival = true;
@@ -1164,7 +1175,7 @@ export class BaseWorkerController {
     }
 
     _handleSteepSlopeDetected(entity, slopeX, slopeZ) {
-        this.game?.navigationManager?.scanAreaWalkability(slopeX, slopeZ, 5, this.getTerrainHeight);
+        this.game?.navigationManager?.scanAreaWalkability(slopeX, slopeZ, 3, this.getTerrainHeight);
         entity.path = [];
         entity.pathIndex = 0;
         entity._skipNextArrival = true;
@@ -1503,6 +1514,7 @@ export class BaseWorkerController {
 
         const entity = this.entities.get(buildingId);
         if (!entity) {
+            message._timestamp = Date.now();
             this.pendingStates.set(buildingId, message);
             return;
         }
@@ -1563,6 +1575,7 @@ export class BaseWorkerController {
 
         const building = this.gameState?.getStructureById(buildingId);
         if (!building) {
+            message._timestamp = Date.now();
             this.pendingStates.set(buildingId, message);
             return;
         }

@@ -24,6 +24,9 @@ export class NavigationManager {
         // chunkId (e.g., "chunk_0,0") → ChunkNavigationMap
         this.chunkMaps = new Map();
         this.workerClient = null;
+
+        // Track recently scanned areas to avoid duplicate scans
+        this._recentScans = new Map();
     }
 
     /**
@@ -79,6 +82,19 @@ export class NavigationManager {
     }
 
     /**
+     * Sync only changed cells to workers (memory-optimized)
+     * Used by scanAreaWalkability to avoid sending full 40KB grids
+     *
+     * @param {string} chunkId - Chunk identifier
+     * @param {Array<{index: number, flags: number}>} changes - Array of cell changes
+     */
+    syncChunkChangesToWorker(chunkId, changes) {
+        if (this.workerClient && changes.length > 0) {
+            this.workerClient.updateChunkCells(chunkId, changes);
+        }
+    }
+
+    /**
      * Mark a world position as water in the navigation grid
      * Called by AI/player when they detect terrain height < 0.3
      *
@@ -119,6 +135,14 @@ export class NavigationManager {
     scanAreaWalkability(worldX, worldZ, cellRadius, getTerrainHeight) {
         if (!getTerrainHeight) return;
 
+        // Skip if this area was scanned recently (2s cooldown)
+        const scanKey = `${Math.floor(worldX / 2)},${Math.floor(worldZ / 2)}`;
+        const now = Date.now();
+        if (this._recentScans.get(scanKey) > now - 2000) {
+            return;
+        }
+        this._recentScans.set(scanKey, now);
+
         const step = NAV_CONFIG.GRID_RESOLUTION; // 0.25m
         const startX = worldX - cellRadius * step;
         const startZ = worldZ - cellRadius * step;
@@ -126,7 +150,9 @@ export class NavigationManager {
         const slopeThreshold = 0.5;
         const waterThreshold = 0.3;
         const diameter = cellRadius * 2;
-        const modifiedChunks = new Set();
+
+        // Track changes per chunk: Map<chunkId, Array<{index, flags}>>
+        const chunkChanges = new Map();
 
         for (let dz = 0; dz < diameter; dz++) {
             const sz = startZ + dz * step;
@@ -140,14 +166,21 @@ export class NavigationManager {
                 const { cellX, cellZ } = navMap.worldToCell(sx, sz);
                 if (!navMap.isValidCell(cellX, cellZ)) continue;
 
-                // Skip cells already marked as obstacle
-                if (navMap.getCellFlags(cellX, cellZ) & NAV_FLAGS.OBSTACLE) continue;
+                // Skip cells already marked as obstacle or water
+                const flags = navMap.getCellFlags(cellX, cellZ);
+                if (flags & (NAV_FLAGS.OBSTACLE | NAV_FLAGS.WATER)) continue;
 
                 const h = getTerrainHeight(sx, sz);
+                const index = navMap.cellToIndex(cellX, cellZ);
+                const oldFlags = navMap.grid[index];
 
                 if (h < waterThreshold) {
                     navMap.addCellFlags(cellX, cellZ, NAV_FLAGS.WATER);
-                    modifiedChunks.add(chunkId);
+                    const newFlags = navMap.grid[index];
+                    if (oldFlags !== newFlags) {
+                        if (!chunkChanges.has(chunkId)) chunkChanges.set(chunkId, []);
+                        chunkChanges.get(chunkId).push({ index, flags: newFlags });
+                    }
                     continue;
                 }
 
@@ -164,14 +197,18 @@ export class NavigationManager {
                 if (maxDiff > slopeThreshold) {
                     navMap.removeCellFlags(cellX, cellZ, NAV_FLAGS.WALKABLE);
                     navMap.addCellFlags(cellX, cellZ, NAV_FLAGS.OBSTACLE);
-                    modifiedChunks.add(chunkId);
+                    const newFlags = navMap.grid[index];
+                    if (oldFlags !== newFlags) {
+                        if (!chunkChanges.has(chunkId)) chunkChanges.set(chunkId, []);
+                        chunkChanges.get(chunkId).push({ index, flags: newFlags });
+                    }
                 }
             }
         }
 
-        // Sync each affected chunk to the pathfinding worker once
-        for (const chunkId of modifiedChunks) {
-            this.syncChunkToWorker(chunkId);
+        // Send only changed cells to workers (much smaller than full grid sync)
+        for (const [chunkId, changes] of chunkChanges) {
+            this.syncChunkChangesToWorker(chunkId, changes);
         }
     }
 

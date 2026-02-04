@@ -36,7 +36,8 @@ export class SceneManager {
         );
 
         // Create renderer (stencil enabled for occlusion outline effects)
-        this.renderer = new THREE.WebGLRenderer({ antialias: true, stencil: true });
+        // powerPreference hints to browser to use discrete GPU on laptops with dual graphics
+        this.renderer = new THREE.WebGLRenderer({ antialias: true, stencil: true, powerPreference: 'high-performance' });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.renderer.setClearColor(0x000011);

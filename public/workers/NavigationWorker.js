@@ -770,6 +770,18 @@ self.onmessage = function(e) {
             break;
         }
 
+        case 'update_cells': {
+            const { chunkId, changes } = e.data;
+            const chunk = chunkGrids.get(chunkId);
+            if (chunk) {
+                for (const { index, flags } of changes) {
+                    chunk.grid[index] = flags;
+                }
+                chunk.version = (chunk.version || 0) + 1;
+            }
+            break;
+        }
+
         case 'find_path': {
             const { startX, startZ, goalX, goalZ, maxIterations, ignoreSlopes, ignoreObstacles } = e.data;
             let path = findPath(startX, startZ, goalX, goalZ, { maxIterations, ignoreSlopes, ignoreObstacles });

@@ -55,6 +55,15 @@ class WorkerHandle {
         }, [gridCopy.buffer]);
     }
 
+    updateChunkCells(chunkId, changes) {
+        if (!this.worker || this._restarting) return;
+        this.worker.postMessage({
+            type: 'update_cells',
+            chunkId,
+            changes  // Array of {index, flags}
+        });
+    }
+
     // Dispatch a single pathfinding request
     dispatch(startX, startZ, goalX, goalZ, options, resolve) {
         const requestId = this.nextRequestId++;
@@ -155,6 +164,20 @@ export class PathfindingScheduler {
         if (entry) entry.grid = grid;
         for (const w of this.workers) {
             w.updateChunkGrid(chunkId, grid);
+        }
+    }
+
+    updateChunkCells(chunkId, changes) {
+        // Update local registry
+        const entry = this._chunkRegistry.get(chunkId);
+        if (entry) {
+            for (const { index, flags } of changes) {
+                entry.grid[index] = flags;
+            }
+        }
+        // Send to all workers
+        for (const w of this.workers) {
+            w.updateChunkCells(chunkId, changes);
         }
     }
 

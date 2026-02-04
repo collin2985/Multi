@@ -35,6 +35,25 @@ export class CombatHUD {
         this.rifleCooldownBar = null;
         this.rifleCooldownFill = null;
 
+        // Cache for DOM values to avoid redundant writes
+        this._cache = {
+            accuracyText: null,
+            accuracyColor: null,
+            rangeText: null,
+            rangeColor: null,
+            ammoText: null,
+            ammoColor: null,
+            noAmmoDisplay: null,
+            noRifleDisplay: null,
+            rifleCooldownWidth: null,
+            rifleCooldownBg: null,
+            artilleryCooldownWidth: null,
+            artilleryCooldownBg: null,
+            warningText: null,
+            warningDisplay: null,
+            ammoParentDisplay: null
+        };
+
         this.createElements();
     }
 
@@ -379,50 +398,61 @@ export class CombatHUD {
             this.startFlash();
         }
 
-        // Update accuracy display
+        // Update accuracy display (with caching to avoid redundant DOM writes)
         const accuracyPercent = Math.round(hitChance * 100);
-        this.accuracyEl.textContent = `${accuracyPercent}%`;
+        const accuracyText = `${accuracyPercent}%`;
+        if (this._cache.accuracyText !== accuracyText) {
+            this._cache.accuracyText = accuracyText;
+            this.accuracyEl.textContent = accuracyText;
+        }
 
         // Color code accuracy
-        if (accuracyPercent >= 60) {
-            this.accuracyEl.style.color = '#7CB342'; // Green - high
-        } else if (accuracyPercent >= 40) {
-            this.accuracyEl.style.color = '#FFB74D'; // Orange - medium
-        } else {
-            this.accuracyEl.style.color = '#E8DCC4'; // Default - low
+        const accuracyColor = accuracyPercent >= 60 ? '#7CB342' : (accuracyPercent >= 40 ? '#FFB74D' : '#E8DCC4');
+        if (this._cache.accuracyColor !== accuracyColor) {
+            this._cache.accuracyColor = accuracyColor;
+            this.accuracyEl.style.color = accuracyColor;
         }
 
         // Update range display - show distance and status
         const inRange = distance <= shootingRange;
         const distText = Math.round(distance) + 'm';
-        if (inRange) {
-            this.rangeEl.textContent = `${distText} IN RANGE`;
-            this.rangeEl.style.color = '#7CB342'; // Green
-        } else {
-            this.rangeEl.textContent = `${distText} TOO FAR`;
-            this.rangeEl.style.color = '#EF5350'; // Red
+        const rangeText = inRange ? `${distText} IN RANGE` : `${distText} TOO FAR`;
+        const rangeColor = inRange ? '#7CB342' : '#EF5350';
+
+        if (this._cache.rangeText !== rangeText) {
+            this._cache.rangeText = rangeText;
+            this.rangeEl.textContent = rangeText;
+        }
+        if (this._cache.rangeColor !== rangeColor) {
+            this._cache.rangeColor = rangeColor;
+            this.rangeEl.style.color = rangeColor;
         }
 
         // Update ammo display
-        this.ammoEl.textContent = ammoCount.toString();
+        const ammoText = ammoCount.toString();
+        if (this._cache.ammoText !== ammoText) {
+            this._cache.ammoText = ammoText;
+            this.ammoEl.textContent = ammoText;
+        }
 
         // Color code ammo
-        if (ammoCount <= 0) {
-            this.ammoEl.style.color = '#EF5350'; // Red - no ammo
-            this.noAmmoWarning.style.display = 'block';
-        } else if (ammoCount <= 5) {
-            this.ammoEl.style.color = '#FFB74D'; // Orange - low ammo
-            this.noAmmoWarning.style.display = 'none';
-        } else {
-            this.ammoEl.style.color = '#E8DCC4'; // Default
-            this.noAmmoWarning.style.display = 'none';
+        const ammoColor = ammoCount <= 0 ? '#EF5350' : (ammoCount <= 5 ? '#FFB74D' : '#E8DCC4');
+        const noAmmoDisplay = ammoCount <= 0 ? 'block' : 'none';
+
+        if (this._cache.ammoColor !== ammoColor) {
+            this._cache.ammoColor = ammoColor;
+            this.ammoEl.style.color = ammoColor;
+        }
+        if (this._cache.noAmmoDisplay !== noAmmoDisplay) {
+            this._cache.noAmmoDisplay = noAmmoDisplay;
+            this.noAmmoWarning.style.display = noAmmoDisplay;
         }
 
         // Show/hide rifle warning
-        if (!hasRifle) {
-            this.noRifleWarning.style.display = 'block';
-        } else {
-            this.noRifleWarning.style.display = 'none';
+        const noRifleDisplay = hasRifle ? 'none' : 'block';
+        if (this._cache.noRifleDisplay !== noRifleDisplay) {
+            this._cache.noRifleDisplay = noRifleDisplay;
+            this.noRifleWarning.style.display = noRifleDisplay;
         }
 
         // Update rifle reload bar
@@ -430,15 +460,23 @@ export class CombatHUD {
         const elapsed = now - lastShootTime;
         const progress = Math.min(1, elapsed / shootInterval);
 
-        this.rifleCooldownFill.style.width = `${progress * 100}%`;
+        // Round to 1% increments to reduce DOM updates
+        const cooldownWidth = `${Math.round(progress * 100)}%`;
+        if (this._cache.rifleCooldownWidth !== cooldownWidth) {
+            this._cache.rifleCooldownWidth = cooldownWidth;
+            this.rifleCooldownFill.style.width = cooldownWidth;
+        }
 
         // Color code reload bar based on progress
-        if (progress >= 1) {
-            this.rifleCooldownFill.style.background = 'linear-gradient(90deg, #7CB342, #8BC34A)';  // Green - ready
-        } else if (progress >= 0.5) {
-            this.rifleCooldownFill.style.background = 'linear-gradient(90deg, #FFB74D, #FFA726)';  // Orange - reloading
-        } else {
-            this.rifleCooldownFill.style.background = 'linear-gradient(90deg, #EF5350, #E53935)';  // Red - just fired
+        const cooldownBg = progress >= 1
+            ? 'linear-gradient(90deg, #7CB342, #8BC34A)'
+            : (progress >= 0.5
+                ? 'linear-gradient(90deg, #FFB74D, #FFA726)'
+                : 'linear-gradient(90deg, #EF5350, #E53935)');
+
+        if (this._cache.rifleCooldownBg !== cooldownBg) {
+            this._cache.rifleCooldownBg = cooldownBg;
+            this.rifleCooldownFill.style.background = cooldownBg;
         }
 
         this.show();
@@ -465,6 +503,9 @@ export class CombatHUD {
                 this.artilleryControlsEl.style.display = 'none';
                 this.warningEl.style.display = 'block';
                 this.rifleCooldownContainer.style.display = 'flex';  // Show rifle reload bar
+                // Reset ammo parent display cache so it shows again in rifle mode
+                this._cache.ammoParentDisplay = null;
+                this.ammoEl.parentElement.style.display = '';
             }
             return;
         }
@@ -479,44 +520,60 @@ export class CombatHUD {
             this.show();
         }
 
-        // Always hide rifle/ammo warnings in artillery mode (artillery doesn't use them)
-        this.noRifleWarning.style.display = 'none';
-        this.noAmmoWarning.style.display = 'none';
-
-        // Update target warning based on target type
-        if (targetType && targetDistance > 0) {
-            this.warningEl.style.display = 'block';
-            if (targetType === 'player') {
-                this.warningEl.textContent = 'ENEMY PLAYER';
-            } else if (targetType === 'bandit') {
-                this.warningEl.textContent = 'BANDIT';
-            } else if (targetType === 'brownbear') {
-                this.warningEl.textContent = 'BROWN BEAR';
-            } else if (targetType === 'boat') {
-                this.warningEl.textContent = 'ENEMY BOAT';
-            } else if (targetType === 'militia') {
-                this.warningEl.textContent = 'MILITIA';
-            } else {
-                this.warningEl.textContent = 'TARGET';
-            }
-        } else {
-            this.warningEl.style.display = 'none';
+        // Always hide rifle/ammo warnings in artillery mode (with caching)
+        if (this._cache.noRifleDisplay !== 'none') {
+            this._cache.noRifleDisplay = 'none';
+            this.noRifleWarning.style.display = 'none';
+        }
+        if (this._cache.noAmmoDisplay !== 'none') {
+            this._cache.noAmmoDisplay = 'none';
+            this.noAmmoWarning.style.display = 'none';
         }
 
-        // Update cooldown bar
+        // Update target warning based on target type (with caching)
+        const hasTarget = targetType && targetDistance > 0;
+        const warningDisplay = hasTarget ? 'block' : 'none';
+        if (this._cache.warningDisplay !== warningDisplay) {
+            this._cache.warningDisplay = warningDisplay;
+            this.warningEl.style.display = warningDisplay;
+        }
+
+        if (hasTarget) {
+            const warningText = targetType === 'player' ? 'ENEMY PLAYER'
+                : targetType === 'bandit' ? 'BANDIT'
+                : targetType === 'brownbear' ? 'BROWN BEAR'
+                : targetType === 'boat' ? 'ENEMY BOAT'
+                : targetType === 'militia' ? 'MILITIA'
+                : 'TARGET';
+
+            if (this._cache.warningText !== warningText) {
+                this._cache.warningText = warningText;
+                this.warningEl.textContent = warningText;
+            }
+        }
+
+        // Update cooldown bar (with caching)
         const now = performance.now();
         const elapsed = now - lastFireTime;
         const progress = Math.min(1, elapsed / cooldown);
 
-        this.artilleryCooldownFill.style.width = `${progress * 100}%`;
+        // Round to 1% increments to reduce DOM updates
+        const artilleryCooldownWidth = `${Math.round(progress * 100)}%`;
+        if (this._cache.artilleryCooldownWidth !== artilleryCooldownWidth) {
+            this._cache.artilleryCooldownWidth = artilleryCooldownWidth;
+            this.artilleryCooldownFill.style.width = artilleryCooldownWidth;
+        }
 
         // Color code cooldown bar
-        if (progress >= 1) {
-            this.artilleryCooldownFill.style.background = 'linear-gradient(90deg, #7CB342, #8BC34A)';  // Green - ready
-        } else if (progress >= 0.5) {
-            this.artilleryCooldownFill.style.background = 'linear-gradient(90deg, #FFB74D, #FFA726)';  // Orange - reloading
-        } else {
-            this.artilleryCooldownFill.style.background = 'linear-gradient(90deg, #EF5350, #E53935)';  // Red - just fired
+        const artilleryCooldownBg = progress >= 1
+            ? 'linear-gradient(90deg, #7CB342, #8BC34A)'
+            : (progress >= 0.5
+                ? 'linear-gradient(90deg, #FFB74D, #FFA726)'
+                : 'linear-gradient(90deg, #EF5350, #E53935)');
+
+        if (this._cache.artilleryCooldownBg !== artilleryCooldownBg) {
+            this._cache.artilleryCooldownBg = artilleryCooldownBg;
+            this.artilleryCooldownFill.style.background = artilleryCooldownBg;
         }
 
         // Update accuracy display - use calculated hitChance if available, otherwise base accuracy
@@ -528,25 +585,42 @@ export class CombatHUD {
             const qualityBonus = (artilleryQuality - 50) / 50 * 0.10;
             accuracyPercent = Math.round((0.35 + qualityBonus) * 100);
         }
-        this.accuracyEl.textContent = `${accuracyPercent}%`;
+        const accuracyText = `${accuracyPercent}%`;
+        if (this._cache.accuracyText !== accuracyText) {
+            this._cache.accuracyText = accuracyText;
+            this.accuracyEl.textContent = accuracyText;
+        }
 
-        // Update range display - show target distance or no target
+        // Update range display - show target distance or no target (with caching)
+        let rangeText, rangeColor;
         if (targetDistance > 0) {
             const distText = Math.round(targetDistance) + 'm';
             if (targetDistance <= maxRange) {
-                this.rangeEl.textContent = `${distText} IN RANGE`;
-                this.rangeEl.style.color = '#7CB342';  // Green - in range
+                rangeText = `${distText} IN RANGE`;
+                rangeColor = '#7CB342';
             } else {
-                this.rangeEl.textContent = `${distText} TOO FAR`;
-                this.rangeEl.style.color = '#EF5350';  // Red - out of range
+                rangeText = `${distText} TOO FAR`;
+                rangeColor = '#EF5350';
             }
         } else {
-            this.rangeEl.textContent = 'NO TARGET';
-            this.rangeEl.style.color = '#C8B898';  // Default - no target
+            rangeText = 'NO TARGET';
+            rangeColor = '#C8B898';
         }
 
-        // Hide ammo (artillery doesn't use ammo like rifles)
-        this.ammoEl.parentElement.style.display = 'none';
+        if (this._cache.rangeText !== rangeText) {
+            this._cache.rangeText = rangeText;
+            this.rangeEl.textContent = rangeText;
+        }
+        if (this._cache.rangeColor !== rangeColor) {
+            this._cache.rangeColor = rangeColor;
+            this.rangeEl.style.color = rangeColor;
+        }
+
+        // Hide ammo (artillery doesn't use ammo like rifles) - with caching
+        if (this._cache.ammoParentDisplay !== 'none') {
+            this._cache.ammoParentDisplay = 'none';
+            this.ammoEl.parentElement.style.display = 'none';
+        }
     }
 
     show() {
@@ -564,6 +638,14 @@ export class CombatHUD {
             this.stopFlash();
             this.currentTargetType = null;
             this.currentTargetId = null;
+            // Reset cache so values refresh on next show
+            this._clearCache();
+        }
+    }
+
+    _clearCache() {
+        for (const key in this._cache) {
+            this._cache[key] = null;
         }
     }
 
