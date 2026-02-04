@@ -1,12 +1,27 @@
+# Dependencies
 node_modules/
+
+# Environment
 .env
+
+# Logs
 *.log
+logs/
+
+# AI/Dev tools
 .grepai/
 grepai/
 .mcp.json
+.claude/
+issues/
+
+# Dev documentation
 DEPLOY.md
 ALL_CODE.txt
 cheating2.txt
+*.md
+
+# Dev scripts
 export-ai-code.js
 export-code.js
 generate-docs.js
@@ -14,3 +29,14 @@ generate-terrain-map.js
 optimize-models.js
 reoptimize.sh
 public/visualize-navigation.js
+
+# Temp/generated files
+server-state.json
+public/chunks/
+nul
+NUL
+terrain-map.png
+terrain-map.ppm
+1.js
+query-crate.js
+query-temp.js

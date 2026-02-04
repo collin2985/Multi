@@ -1,102 +1,102 @@
 #!/bin/bash
 # Deployment script for Guns Horses & Ships
-# Run from Git Bash: bash deploy.sh "commit message here"
+# Run from Git Bash: bash deploy.sh
 
 set -e
 
-DEV="C:/Users/colli/Desktop/test horses/horses"
-PROD="C:/Users/colli/Desktop/horses"
-GIT_BACKUP="C:/Users/colli/Desktop/.git-backup"
+# Paths
+DEV="C:/Users/colli/Desktop/horses"
+BACKUP_ROOT="C:/Users/colli/Desktop/HORSES BACKUP/horses backup"
+CONFIG_FILE="$DEV/public/config.js"
 
-# Require commit message
-if [ -z "$1" ]; then
-    echo "Usage: bash deploy.sh \"commit message\""
-    exit 1
-fi
-COMMIT_MSG="$1"
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
 
-echo "=== Step 1: Back up dev .git ==="
-rm -rf "$GIT_BACKUP"
-cp -r "$DEV/.git" "$GIT_BACKUP"
-echo "Done."
-
-echo "=== Step 2: Delete production folder ==="
-rm -rf "$PROD"
-echo "Done."
-
-echo "=== Step 3: Clean dev folder ==="
-rm -f "$DEV"/public/chunks/*.JSON 2>/dev/null
-rm -f "$DEV"/NUL 2>/dev/null
-rm -f "$DEV"/tmpclaude* 2>/dev/null
-echo "Done."
-
-echo "=== Step 4: Copy dev to production ==="
-cp -r "$DEV" "$PROD"
-echo "Done."
-
-echo "=== Step 5: Restore dev .git + add remote ==="
-cp -r "$GIT_BACKUP" "$PROD/.git"
-rm -rf "$GIT_BACKUP"
-cd "$PROD"
-# Add the GitHub remote (dev .git won't have it)
-git remote remove origin 2>/dev/null || true
-git remote add origin https://github.com/collin2985/Multi.git
-echo "Done."
-
-echo "=== Step 5.5: Validate .gitignore and .env encoding ==="
-cd "$PROD"
-GITIGNORE_ENC=$(file .gitignore)
-ENV_ENC=$(file .env)
-if echo "$GITIGNORE_ENC" | grep -qi "utf-16\|little-endian"; then
-    echo "ERROR: .gitignore is UTF-16 corrupted! Fix manually."
-    exit 1
-fi
-if echo "$ENV_ENC" | grep -qi "utf-16\|little-endian"; then
-    echo "ERROR: .env is UTF-16 corrupted! Fix manually."
-    exit 1
-fi
-echo "Encoding OK."
-
-echo "=== Step 5.6: Ensure git identity ==="
-cd "$PROD"
-git config user.email "collin2985@gmail.com"
-git config user.name "Collin"
-echo "Done."
-
-echo "=== Step 6: Clean dev-only files from production ==="
-cd "$PROD"
-rm -rf nul logs/ .claude/ issues/ node_modules/
-rm -f 1.js query-crate.js query-temp.js server-state.json
-rm -f terrain-map.png terrain-map.ppm
-rm -f *.md
-echo "Done."
-
-echo "=== Step 7: Set online mode ==="
-sed -i 's/USE_ONLINE_SERVER: false/USE_ONLINE_SERVER: true/' "$PROD/public/config.js"
-echo "Done."
-
-echo "=== Step 8: Git add + verify ==="
-cd "$PROD"
-git add .
-
-# Check for sensitive files being ADDED (not deleted - deletions are fine)
-STAGED=$(git diff --cached --name-only --diff-filter=ACMR)
-BAD_FILES=""
-for pattern in ".env$" "node_modules/" ".grepai/" ".mcp.json" "grepai/" "ALL_CODE.txt" "cheating2.txt" "DEPLOY.md"; do
-    if echo "$STAGED" | grep -q "^${pattern}"; then
-        BAD_FILES="$BAD_FILES $pattern"
-    fi
-done
-
-if [ -n "$BAD_FILES" ]; then
-    echo "ERROR: Sensitive files staged:$BAD_FILES"
-    echo "Fix .gitignore and retry."
-    exit 1
-fi
-echo "Staged files look clean."
-
-echo "=== Step 9: Commit and push ==="
-git commit -m "$COMMIT_MSG"
-git push --force origin main
+echo -e "${GREEN}=== Guns Horses & Ships Deployment ===${NC}"
 echo ""
-echo "=== Deploy complete. Render will auto-deploy. ==="
+
+# Get next backup number
+LAST_NUM=$(ls -1 "$BACKUP_ROOT" 2>/dev/null | grep -E '^[0-9]+' | sed 's/^\([0-9]*\).*/\1/' | sort -n | tail -1)
+if [ -z "$LAST_NUM" ]; then
+    NEXT_NUM=1
+else
+    NEXT_NUM=$((LAST_NUM + 1))
+fi
+
+# Prompt for backup description
+echo -e "${YELLOW}Backup will be saved as: ${NEXT_NUM} <description>${NC}"
+read -p "Enter backup description (or press Enter to skip backup): " BACKUP_DESC
+
+# Prompt for commit message
+read -p "Enter commit message: " COMMIT_MSG
+
+if [ -z "$COMMIT_MSG" ]; then
+    echo -e "${RED}Error: Commit message is required${NC}"
+    exit 1
+fi
+
+# Step 1: Create backup (if description provided)
+if [ -n "$BACKUP_DESC" ]; then
+    BACKUP_DIR="$BACKUP_ROOT/$NEXT_NUM $BACKUP_DESC"
+    echo ""
+    echo -e "${GREEN}=== Step 1: Creating backup ===${NC}"
+    echo "Destination: $BACKUP_DIR"
+    mkdir -p "$BACKUP_DIR"
+
+    # Copy everything except node_modules and .git for speed
+    rsync -a --exclude='node_modules' --exclude='.git' "$DEV/" "$BACKUP_DIR/"
+    echo -e "${GREEN}Backup complete.${NC}"
+else
+    echo ""
+    echo -e "${YELLOW}=== Step 1: Skipping backup ===${NC}"
+fi
+
+# Step 2: Switch config to online mode
+echo ""
+echo -e "${GREEN}=== Step 2: Switching to online mode ===${NC}"
+sed -i 's/USE_ONLINE_SERVER: false/USE_ONLINE_SERVER: true/' "$CONFIG_FILE"
+echo "USE_ONLINE_SERVER set to true"
+
+# Step 3: Git add, commit, push
+echo ""
+echo -e "${GREEN}=== Step 3: Git commit and push ===${NC}"
+cd "$DEV"
+
+# Check for any sensitive files that might be staged
+git add -A
+STAGED=$(git diff --cached --name-only 2>/dev/null || true)
+
+if echo "$STAGED" | grep -qE '^\.env$'; then
+    echo -e "${RED}ERROR: .env is staged! Check your .gitignore${NC}"
+    git reset HEAD .env 2>/dev/null || true
+    sed -i 's/USE_ONLINE_SERVER: true/USE_ONLINE_SERVER: false/' "$CONFIG_FILE"
+    exit 1
+fi
+
+# Show what will be committed
+echo "Files to be committed:"
+git diff --cached --name-only | head -20
+TOTAL_FILES=$(git diff --cached --name-only | wc -l)
+if [ "$TOTAL_FILES" -gt 20 ]; then
+    echo "... and $((TOTAL_FILES - 20)) more files"
+fi
+echo ""
+
+# Commit and push
+git commit -m "$COMMIT_MSG"
+git push origin main
+
+echo -e "${GREEN}Push complete.${NC}"
+
+# Step 4: Switch config back to local mode
+echo ""
+echo -e "${GREEN}=== Step 4: Switching back to local mode ===${NC}"
+sed -i 's/USE_ONLINE_SERVER: true/USE_ONLINE_SERVER: false/' "$CONFIG_FILE"
+echo "USE_ONLINE_SERVER set to false"
+
+echo ""
+echo -e "${GREEN}=== Deployment complete! ===${NC}"
+echo "Render will auto-deploy from the push."

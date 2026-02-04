@@ -31,6 +31,7 @@ import { AuthClient } from '../network/AuthClient.js';
 import { LoginModal } from '../ui/LoginModal.js';
 import { MessageRouter } from '../network/MessageRouter.js';
 import { LoadingScreen } from '../ui/LoadingScreen.js';
+import { showGPUWarningIfNeeded } from '../ui/GPUWarningModal.js';
 import { AIController } from '../ai/AIController.js';
 import { DeerController } from '../ai/DeerController.js';
 import { DeerManager } from '../entity/DeerManager.js';
@@ -75,6 +76,9 @@ export class GameInitializer {
         this.game.scene = this.game.sceneManager.getScene();
         this.game.camera = this.game.sceneManager.getCamera();
         this.game.renderer = this.game.sceneManager.getRenderer();
+
+        // Check for integrated GPU and warn user if detected
+        showGPUWarningIfNeeded(this.game.renderer);
 
         // Store game reference in scene for object removal handling
         this.game.scene.userData.game = this.game;
