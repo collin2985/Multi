@@ -731,7 +731,6 @@ self.onmessage = function(e) {
                 if (f & 4) waterCount++;
                 if (f === 0) zeroCount++;
             }
-            console.warn(`[NavWorker] register_chunk ${chunkId} | cells=${parsedGrid.length} walkable=${wc} obstacle=${obsCount} water=${waterCount} zero=${zeroCount}`);
             break;
         }
 
@@ -744,28 +743,8 @@ self.onmessage = function(e) {
             const { chunkId, grid } = e.data;
             const chunk = chunkGrids.get(chunkId);
             if (chunk) {
-                // Count walkable before
-                const oldGrid = chunk.grid;
-                let oldWalkable = 0, oldObs = 0, oldWater = 0;
-                for (let i = 0; i < oldGrid.length; i++) {
-                    if (oldGrid[i] & 1) oldWalkable++;
-                    if (oldGrid[i] & 64) oldObs++;
-                    if (oldGrid[i] & 4) oldWater++;
-                }
                 chunk.grid = new Uint8Array(grid);
                 chunk.version = (chunk.version || 0) + 1;
-                // Count walkable after
-                let newWalkable = 0, newObs = 0, newWater = 0;
-                for (let i = 0; i < chunk.grid.length; i++) {
-                    if (chunk.grid[i] & 1) newWalkable++;
-                    if (chunk.grid[i] & 64) newObs++;
-                    if (chunk.grid[i] & 4) newWater++;
-                }
-                const wDelta = newWalkable - oldWalkable;
-                const oDelta = newObs - oldObs;
-                if (Math.abs(wDelta) > 50 || Math.abs(oDelta) > 50) {
-                    console.warn(`[NavWorker] update_chunk ${chunkId} | walkable: ${oldWalkable}->${newWalkable} (${wDelta > 0 ? '+' : ''}${wDelta}) obstacle: ${oldObs}->${newObs} (${oDelta > 0 ? '+' : ''}${oDelta}) water: ${oldWater}->${newWater}`);
-                }
             }
             break;
         }

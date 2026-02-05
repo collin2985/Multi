@@ -71,14 +71,15 @@ export class AvatarManager {
      * @returns {THREE.Object3D|null}
      */
     createAvatar() {
-        const manGLTF = this.modelManager.getGLTF('man');
-        if (!manGLTF) {
+        const cloneSource = this.modelManager.getCloneSource('man');
+        const manGLTF = this.modelManager.getGLTF('man'); // Need GLTF for animations
+        if (!cloneSource || !manGLTF) {
             console.error('Man model not loaded for avatar');
             return null;
         }
 
-        // Use SkeletonUtils.clone() to preserve skeleton binding for animations
-        const avatarMesh = SkeletonUtils.clone(manGLTF.scene);
+        // Use SkeletonUtils.clone() from pristine source to avoid inheriting animation poses
+        const avatarMesh = SkeletonUtils.clone(cloneSource);
         avatarMesh.scale.set(this.playerScale, this.playerScale, this.playerScale);
 
         // Setup materials (same as main player)

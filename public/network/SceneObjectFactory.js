@@ -325,6 +325,11 @@ export class SceneObjectFactory {
             if ((structureType === 'crate' || structureType === 'tent' || structureType === 'house' || structureType === 'market' || structureType === 'campfire' || structureType === 'fisherman' || structureType === 'tileworks' || structureType === 'ironworks' || structureType === 'blacksmith' || structureType === 'bakery') && change.inventory) {
                 existingObject.userData.inventory = change.inventory;
             }
+
+            // Update warehouse loaded crates if present
+            if (structureType === 'warehouse' && change.loadedCrates) {
+                existingObject.userData.loadedCrates = change.loadedCrates;
+            }
             return true;
         } else {
             // Create new object
@@ -339,7 +344,7 @@ export class SceneObjectFactory {
                     'house', 'bakery', 'gardener', 'miner', 'woodcutter',
                     'stonemason', 'wall', 'tileworks', 'blacksmith', 'ironworks', 'fisherman',
                     'boat', 'sailboat', 'ship2', 'bearden', 'crate', 'construction', '2x2construction',
-                    '2x8construction', '3x3construction', '10x4construction'
+                    '2x8construction', '3x3construction', '10x4construction', 'warehouse'
                 ]);
 
                 if (LOD_STRUCTURE_TYPES.has(structureType)) {
@@ -609,6 +614,11 @@ export class SceneObjectFactory {
             }
         }
 
+        // Handle corpse objects (dead players/bandits/militia with lootable inventory)
+        if (objectType === 'corpse' || data.isCorpse) {
+            return this.createCorpseObject(data, chunkKey);
+        }
+
         const objectPosition = new THREE.Vector3(data.position[0], data.position[1], data.position[2]);
 
         // Force mobile entities Y to terrain height (server may send incorrect Y)
@@ -774,6 +784,11 @@ export class SceneObjectFactory {
                 objectInstance.userData.merchantShipsEnabled = data.merchantShipsEnabled || false;
             }
 
+            // Load warehouse stored crates
+            if (structureType === 'warehouse' && data.loadedCrates) {
+                objectInstance.userData.loadedCrates = data.loadedCrates;
+            }
+
             // Handle growing tree metadata (tick-based)
             if (data.isGrowing) {
                 objectInstance.userData.isGrowing = true;
@@ -802,7 +817,7 @@ export class SceneObjectFactory {
             // Track decayable structures for efficient decay checks (avoids scene.traverse)
             const decayableTypes = new Set(['house', 'crate', 'tent', 'outpost', 'campfire',
                                             'market', 'tileworks', 'ship', 'boat', 'sailboat', 'ship2', 'horse', 'cart', 'artillery',
-                                            'fisherman', 'ironworks', 'blacksmith', 'bakery', 'gardener', 'miner', 'woodcutter', 'stonemason']);
+                                            'fisherman', 'ironworks', 'blacksmith', 'bakery', 'gardener', 'miner', 'woodcutter', 'stonemason', 'warehouse']);
             if (this.game?.gameState && !data.isBanditStructure) {
                 if (decayableTypes.has(structureType) || data.isRuin || data.isConstructionSite) {
                     this.game.gameState.decayableStructures.add(objectInstance.userData.objectId);
@@ -1378,6 +1393,101 @@ export class SceneObjectFactory {
                 });
             }
         });
+    }
+
+    /**
+     * Create a corpse object (dead player/bandit/militia with lootable inventory)
+     * @param {Object} data - Corpse data from server
+     * @param {string} chunkKey - Chunk key for the corpse location
+     * @returns {THREE.Object3D|null} The created corpse object
+     */
+    createCorpseObject(data, chunkKey) {
+        const baseModel = data.modelType || 'man';
+        const pos = Array.isArray(data.position) ? data.position : [data.position.x, data.position.y, data.position.z];
+        const objectPosition = new THREE.Vector3(pos[0], pos[1], pos[2]);
+        const objectRotation = data.rotation || 0;
+
+        // Create the base model instance
+        const instance = objectPlacer.createInstance(baseModel, objectPosition, 1.0, objectRotation, this.scene);
+
+        if (!instance) {
+            return null;
+        }
+
+        // Apply death pose (90 degree fall) - formula from DeathSystem.js
+        // Rotate instance directly (like peer death animation), not children[0]
+        if (data.fallDirection !== undefined) {
+            const fallAngle = (Math.PI / 2) * data.fallDirection;
+            const yRot = objectRotation;
+            instance.rotation.x = fallAngle * Math.sin(yRot);
+            instance.rotation.z = fallAngle * Math.cos(yRot);
+        }
+
+        // Apply shirt color (pattern from ai-enemy.js)
+        if (data.shirtColor && baseModel === 'man') {
+            instance.traverse(child => {
+                if (child.isMesh && child.name === 'Cube001_3') {
+                    const mat = child.material.clone();
+                    mat.color.setHex(data.shirtColor);
+                    child.material = mat;
+                }
+            });
+        }
+
+        // Store metadata
+        instance.userData = {
+            objectId: data.id || data.objectId,
+            modelType: 'corpse',
+            isCorpse: true,
+            corpseType: data.corpseType,
+            inventory: data.inventory,
+            displayName: data.displayName,
+            quality: data.quality,
+            lastRepairTime: data.lastRepairTime,
+            chunkKey: chunkKey
+        };
+
+        this.scene.add(instance);
+
+        // Track for decay (corpses decay like other structures)
+        if (this.game?.gameState) {
+            this.game.gameState.decayableStructures.add(instance.userData.objectId);
+        }
+
+        // Create physics collider for interaction detection
+        if (this.game.physicsManager && this.game.physicsManager.initialized) {
+            const dims = CONFIG.CONSTRUCTION.GRID_DIMENSIONS['corpse'];
+            if (dims) {
+                const shape = {
+                    type: 'cuboid',
+                    width: dims.width,
+                    depth: dims.depth,
+                    height: dims.height || 0.3
+                };
+                const collider = this.game.physicsManager.createStaticCollider(
+                    instance.userData.objectId,
+                    shape,
+                    objectPosition,
+                    objectRotation,
+                    COLLISION_GROUPS.PLACED
+                );
+                if (collider) {
+                    instance.userData.physicsHandle = collider;
+                }
+            }
+        }
+
+        // Add to chunkObjects for proximity detection
+        const chunkObjects = this.game.chunkManager.chunkObjects.get(chunkKey) || [];
+        chunkObjects.push(instance);
+        this.game.chunkManager.chunkObjects.set(chunkKey, chunkObjects);
+
+        // Add to objectRegistry for fast lookups
+        if (this.game.objectRegistry && instance.userData.objectId) {
+            this.game.objectRegistry.set(instance.userData.objectId, instance);
+        }
+
+        return instance;
     }
 
     /**

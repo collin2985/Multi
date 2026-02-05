@@ -34,7 +34,7 @@ export class InteractionManager {
         // Type sets for O(1) lookups (defined once, reused forever)
         this.treeTypes = new Set(['oak', 'oak2', 'pine', 'pine2', 'fir', 'cypress', 'apple']);
         this.rockTypes = new Set(['limestone', 'sandstone', 'clay', 'iron', 'vegetables', 'hemp']);
-        this.structureTypes = new Set(['crate', 'tent', 'house', 'market', 'outpost', 'ship', 'dock', 'campfire', 'tileworks', 'ironworks', 'blacksmith', 'bakery', 'gardener', 'fisherman', 'miner', 'woodcutter', 'stonemason', 'bearden', 'artillery', 'wall']);
+        this.structureTypes = new Set(['crate', 'tent', 'house', 'market', 'outpost', 'ship', 'dock', 'campfire', 'tileworks', 'ironworks', 'blacksmith', 'bakery', 'gardener', 'fisherman', 'miner', 'woodcutter', 'stonemason', 'bearden', 'artillery', 'wall', 'warehouse']);
         this.mobileEntityTypes = new Set(['boat', 'sailboat', 'ship2', 'horse']);
         this.towableEntityTypes = new Set(['cart', 'artillery']);
     }
@@ -205,6 +205,10 @@ export class InteractionManager {
         const hasRoomForHorse = maxHorseSlots > 0 && currentHorseCount < maxHorseSlots;
         const shouldTrackLoadableHorses = isPilotingShip2 && hasRoomForHorse;
 
+        // Track nearest warehouse for crate storage
+        let nearestWarehouse = null;
+        let nearestWarehouseDistance = Infinity;
+
         // Calculate distances to all active proximity objects
         // PERFORMANCE OPTIMIZATION: Use squared distances for comparisons to avoid expensive Math.sqrt()
         this.activeProximityObjects.forEach((object, objectId) => {
@@ -231,13 +235,19 @@ export class InteractionManager {
                     nearestStructureDistance = distanceSquared;
                     nearestStructure = object;
                 }
+            } else if (object.userData.isCorpse) {
+                // Corpses are lootable - track as structure for inventory UI
+                if (distanceSquared < nearestStructureDistance) {
+                    nearestStructureDistance = distanceSquared;
+                    nearestStructure = object;
+                }
             } else if (this.structureTypes.has(modelType)) {
                 if (distanceSquared < nearestStructureDistance) {
                     nearestStructureDistance = distanceSquared;
                     nearestStructure = object;
                 }
-                // Also track crates for cart loading (combined into single loop for performance)
-                if (modelType === 'crate' && shouldTrackLoadableCrates) {
+                // Also track nearest crate for vehicle loading or warehouse storage
+                if (modelType === 'crate') {
                     const crateId = object.userData.objectId;
                     const mobileEntitySystem = this.game.mobileEntitySystem;
                     // Only track if not occupied by someone else
@@ -289,6 +299,13 @@ export class InteractionManager {
                                 nearestLoadableArtillery = object;
                             }
                         }
+                    }
+                }
+                // Track nearest warehouse for crate storage
+                if (modelType === 'warehouse') {
+                    if (distanceSquared < nearestWarehouseDistance) {
+                        nearestWarehouseDistance = distanceSquared;
+                        nearestWarehouse = object;
                     }
                 }
             } else if (this.mobileEntityTypes.has(modelType)) {
@@ -475,8 +492,18 @@ export class InteractionManager {
                     }
                 }
             }
-            // Handle crates when piloting a boat or towing cart (crate loading needs larger radius than 0.75)
-            else if (modelType === 'crate' && shouldTrackLoadableCrates && (isPilotingBoat || isTowingCart)) {
+            // Track warehouses from larger query (warehouse collider may be beyond 0.75 radius)
+            else if (modelType === 'warehouse') {
+                const dx = this.game.playerObject.position.x - sceneObject.position.x;
+                const dz = this.game.playerObject.position.z - sceneObject.position.z;
+                const distanceSquared = dx * dx + dz * dz;
+                if (distanceSquared < nearestWarehouseDistance) {
+                    nearestWarehouseDistance = distanceSquared;
+                    nearestWarehouse = sceneObject;
+                }
+            }
+            // Track nearest crate from larger query (gating by vehicle/warehouse happens after loop at gameState update)
+            else if (modelType === 'crate') {
                 const crateId = sceneObject.userData.objectId;
                 const mobileEntitySystem = this.game.mobileEntitySystem;
                 // Only track if not occupied by someone else
@@ -805,9 +832,9 @@ export class InteractionManager {
         }
 
         // Update game state - loadable crates (already tracked in main loop above)
-        if (shouldTrackLoadableCrates && nearestLoadableCrate) {
+        if (nearestLoadableCrate && (shouldTrackLoadableCrates || nearestWarehouse)) {
             const actualDistance = Math.sqrt(nearestLoadableDistance);
-            // Match crate load range to vehicle type: cart: 2, sailboat: 3, ship2: 4
+            // Match crate load range to vehicle type: cart: 2, sailboat: 3, ship2: 4; on foot near warehouse: 3
             const proximityRange = isTowingCart ? 2 : (entityType === 'ship2' ? 4 : 3);
 
             if (actualDistance <= proximityRange) {
@@ -854,6 +881,23 @@ export class InteractionManager {
             }
         } else {
             this.gameState.nearestLoadableHorse = null;
+        }
+
+        // Update game state - nearest warehouse for crate storage
+        if (nearestWarehouse) {
+            const actualDistance = Math.sqrt(nearestWarehouseDistance);
+            const proximityRange = 3.0;  // Interaction range for warehouse
+
+            if (actualDistance <= proximityRange) {
+                this.gameState.nearestWarehouse = {
+                    object: nearestWarehouse,
+                    distance: actualDistance
+                };
+            } else {
+                this.gameState.nearestWarehouse = null;
+            }
+        } else {
+            this.gameState.nearestWarehouse = null;
         }
 
         // Update game state - mannable artillery (player stands behind to fire)
@@ -1215,6 +1259,15 @@ export class InteractionManager {
 
         // MILITIA BUTTON: Update visibility for spawning militia at owned tents
         ui.updateMilitiaButton(this.gameState.nearestStructure, this.gameState.isMoving);
+
+        // WAREHOUSE BUTTONS: Update visibility for crate storage
+        ui.updateWarehouseButtons(
+            this.gameState.nearestWarehouse,
+            this.gameState.nearestLoadableCrate,
+            this.gameState.isMoving,
+            this.gameState.accountId,
+            this.gameState.clientId
+        );
     }
 
     /**

@@ -45,7 +45,6 @@ export class NavigationManager {
             if (g[i] & 1) walkCount++;
             if (g[i] & 64) obstCount++;
         }
-        console.error(`[NavDiag] addChunk ${chunkId} | walkable=${walkCount}/${g.length} obstacle=${obstCount} workerReady=${!!this.workerClient}`);
         if (this.workerClient) {
             this.workerClient.registerChunk(
                 chunkId, navMap.chunkX, navMap.chunkZ,
@@ -233,7 +232,6 @@ export class NavigationManager {
             const { PathfindingScheduler } = await import('./PathfindingScheduler.js');
             this.workerClient = new PathfindingScheduler();
             await this.workerClient.initialize();
-            console.error(`[NavigationManager] PathfindingScheduler initialized with 3 workers`);
 
             for (const [chunkId, navMap] of this.chunkMaps) {
                 this.workerClient.registerChunk(

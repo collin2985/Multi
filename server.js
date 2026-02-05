@@ -450,6 +450,10 @@ wss.on('connection', ws => {
                 await messageHandlers.handlePlaceBoat(payload);
                 break;
 
+            case 'create_corpse':
+                await messageHandlers.handleCreateCorpse(ws, payload);
+                break;
+
             case 'place_sailboat':
                 await messageHandlers.handlePlaceSailboat(payload);
                 break;
@@ -488,6 +492,14 @@ wss.on('connection', ws => {
 
             case 'release_crate':
                 await messageHandlers.handleReleaseCrate(ws, payload);
+                break;
+
+            case 'warehouse_load_crate':
+                await messageHandlers.handleWarehouseLoadCrate(ws, payload);
+                break;
+
+            case 'warehouse_unload_crate':
+                await messageHandlers.handleWarehouseUnloadCrate(ws, payload);
                 break;
 
             // Unified towed entity handlers (cart or artillery)

@@ -279,6 +279,15 @@ export class BuildMenu {
                     height: 1,
                     imagePath: './structures/stonemason.png'
                 },
+                // Warehouse structure (stores up to 4 crates)
+                {
+                    id: 'warehouse',
+                    type: 'warehouse',
+                    name: 'Warehouse',
+                    width: 1,
+                    height: 1,
+                    imagePath: './structures/warehouse.png'
+                },
                 // Plantable trees (require seeds)
                 {
                     id: 'planted_pine',

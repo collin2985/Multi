@@ -318,7 +318,7 @@
         <h3>Construction</h3>
         <p>Click the Build button at the top of your screen to open the build menu. Select a structure and click to place it. While placing, use Q and E keys to rotate the structure, or scroll the mouse wheel. Simple structures like tents, campfires, crates, carts, walls, roads, and boats build instantly when you have the materials. Larger structures like houses, markets, and worker buildings require placing a construction site first, then gathering materials and using a hammer <img src="images/hammer.png" alt="Hammer" style="width:24px;height:24px;vertical-align:middle;"> to complete the build.</p>
         <h3>Structures</h3>
-        <p>Tents <img src="images/tent.png" alt="Tent" style="width:24px;height:24px;vertical-align:middle;"> and houses <img src="images/house.png" alt="House" style="width:24px;height:24px;vertical-align:middle;"> store your items and serve as respawn points. You can only have one spawn point at a time - building a new tent or house makes it your new home, replacing any previous spawn point. Tents are shared - any player can open them. Houses are private - only the owner can access the inventory. Campfires <img src="images/campfire.png" alt="Campfire" style="width:24px;height:24px;vertical-align:middle;"> cook food using firewood. Markets <img src="images/market.png" alt="Market" style="width:24px;height:24px;vertical-align:middle;"> enable trading when paired with a dock <img src="images/dock.png" alt="Dock" style="width:24px;height:24px;vertical-align:middle;">, which must be placed on a shoreline with deep water ahead. Worker buildings like bakeries, woodcutters, and miners can be sold to NPC proprietors who will run them automatically.</p>
+        <p>Tents <img src="images/tent.png" alt="Tent" style="width:24px;height:24px;vertical-align:middle;"> and houses <img src="images/house.png" alt="House" style="width:24px;height:24px;vertical-align:middle;"> store your items and serve as respawn points. You can only have one spawn point at a time - building a new tent or house makes it your new home, replacing any previous spawn point. Tents are shared - any player can open them. Houses are private - only the owner can access the inventory. Campfires <img src="images/campfire.png" alt="Campfire" style="width:24px;height:24px;vertical-align:middle;"> cook food using firewood. Markets <img src="images/market.png" alt="Market" style="width:24px;height:24px;vertical-align:middle;"> enable trading when paired with a dock <img src="images/dock.png" alt="Dock" style="width:24px;height:24px;vertical-align:middle;">, which must be placed on a shoreline with deep water ahead. Warehouses store up to 4 crates inside a single building - only the owner can load and unload crates. Worker buildings like bakeries, woodcutters, and miners can be sold to NPC proprietors who will run them automatically.</p>
         <table>
             <tr>
                 <th>Structure</th>
@@ -380,6 +380,12 @@
                 <td>Lookout tower</td>
                 <td>Instant</td>
             </tr>
+            <tr>
+                <td>Warehouse</td>
+                <td><img src="structures/warehouse.png" alt="Warehouse"></td>
+                <td>Crate storage (up to 4)</td>
+                <td>Construction site</td>
+            </tr>
         </table>
         <h3>Structure Inventories</h3>
         <p>Some structures have restricted inventories that only accept specific items. This prevents accidentally storing random items in processing structures.</p>
@@ -436,7 +442,7 @@
                 <td>~2 days</td>
             </tr>
             <tr>
-                <td>House, Market, Dock, Outpost, Wall, Artillery, Worker Structures</td>
+                <td>House, Market, Dock, Outpost, Wall, Artillery, Warehouse, Worker Structures</td>
                 <td>None</td>
                 <td>Up to ~30 days (quality 100)</td>
             </tr>
@@ -533,11 +539,11 @@
         <h3>Outpost Climbing</h3>
         <p>Outposts <img src="images/outpost.png" alt="Outpost" style="width:24px;height:24px;vertical-align:middle;"> provide elevated shooting positions. When near an outpost, a Climb button appears at the top of your screen. While at the top, you can aim and shoot but cannot move - the height advantage significantly improves your accuracy and range. Click Climb Down to descend. Only one person can occupy an outpost at a time. If you've recruited outpost militia, they occupy the tower instead.</p>
         <h3>Bandits</h3>
-        <p>Bandits spawn from tents scattered throughout the wilderness. They detect you at 30 units and will chase and shoot. Destroying a bandit's tent prevents them from respawning. Bandit tents contain loot like coins and ammo - interact with the tent to access its inventory.</p>
+        <p>Bandits spawn from tents scattered throughout the wilderness. They detect you at 30 units and will chase and shoot. Destroying a bandit's tent prevents them from respawning. Killed bandits leave lootable corpses containing coins, ammo, and sometimes other items. Bandit tents also contain loot - interact with the tent to access its inventory.</p>
         <h3>Bears</h3>
         <p>Brown bears spawn from bear dens and are extremely dangerous. They attack in melee range and move fast. Keep your distance and use a rifle - if a bear reaches you, it will maul you quickly. Bears flee from structures, so buildings offer some protection.</p>
-        <h3>Death</h3>
-        <p>When you die, you lose everything in your inventory including your rifle, tools, and coins. Your structures remain - anything stored in tents or houses is safe. After a short countdown, you can choose how to respawn:</p>
+        <h3>Death and Corpses</h3>
+        <p>When you die, your body remains as a lootable corpse for about 1 hour. Other players can open your corpse to take your inventory, including any rifle in your sling slot. Your structures remain - anything stored in tents or houses is safe. Killed bandits and militia also leave lootable corpses containing coins, ammo, and sometimes other items. After a short countdown, you can choose how to respawn:</p>
         <table>
             <tr>
                 <th>Spawn Option</th>
@@ -567,7 +573,7 @@
         </table>
         <p>Resume Last Session is only available for registered players whose session was synced before death. If you die shortly after spawning, this option may not appear.</p>
         <h3>Spawn Protection</h3>
-        <p>After respawning, you have 60 seconds of protection from bandits and bears. A "Protected: Xs" counter appears in your status bar showing how many seconds remain. During this time, enemies will not attack you, giving you a chance to get your bearings and find safety.</p>
+        <p>After respawning, you have 2 minutes of protection from bandits and bears. A "Protected: Xs" counter appears in your status bar showing how many seconds remain. During this time, enemies will not attack you, giving you a chance to get your bearings and find safety.</p>
         <h3>Friends</h3>
         <p>Open the Friends panel from the Settings menu to manage your friends list. Type a player's username and click Add to send a friend request. When you receive a request, you can accept or decline it. Accepted friends appear in your list with a green dot if they're online or grey if offline. After dying, you can choose to respawn near an online friend instead of at home or a random location.</p>
         <h3>Artillery</h3>
@@ -626,7 +632,7 @@
         <p>Brown bears spawn from bear dens and are extremely aggressive. They chase anything that moves - players, bandits, even deer. Bears move at 2.75 units per second, faster than you can run, and their melee attacks are nearly instant kills. However, bears will flee from buildings and structures, so staying near your settlement offers protection. Killed bears don't respawn until all players leave the area and the chunk unloads. To permanently clear the area, destroy the bear den.</p>
         <h3>Bandits</h3>
         <p>Bandits live in camps scattered throughout the world, typically with 1-3 tents and sometimes an outpost. They spawn when you get within 50 units of their tent and will chase you up to 30 units from home. Bandits carry rifles and shoot every 6 seconds with the same accuracy rules as players - about 35% base chance, up to 80% with height advantage.</p>
-        <p>Bandits return to their tent if you retreat beyond 30 units. If you kill a bandit, they respawn after 2 minutes as long as their structure stands. Both tents and outposts spawn bandits - to clear a camp permanently, destroy all tents and outposts. Bandit tents contain valuable loot including coins, ammo, and sometimes tools - interact with the tent to access its inventory. Artillery can destroy bandit camps from a safe distance.</p>
+        <p>Bandits return to their tent if you retreat beyond 30 units. If you kill a bandit, they respawn after 2 minutes as long as their structure stands. Both tents and outposts spawn bandits - to clear a camp permanently, destroy all tents and outposts. Killed bandits leave lootable corpses on the ground containing coins, ammo, and sometimes tools - walk up and interact to loot them. Corpses last about 1 hour before disappearing. Bandit tents also contain loot you can access. Artillery can destroy bandit camps from a safe distance.</p>
         <h3>Workers</h3>
         <p>Nine types of worker NPCs can run your structures automatically. Build a worker structure near your market (within 20 units), then click the Seek Proprietor button. You'll receive 10 coins and lose control of the structure, but a worker spawns who gathers resources and sells them to your market. The structure stops decaying once sold. You can talk to any worker NPC - a Talk button appears when you're nearby, and they'll explain what they do.</p>
         <p><img src="images/woodcutter.png" alt="Woodcutter" style="width:24px;height:24px;vertical-align:middle;"> <strong>Woodcutter</strong> - Finds pine trees within 50 units, chops them down, and processes each log into firewood and planks. Delivers materials to your market.</p>

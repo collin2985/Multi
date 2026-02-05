@@ -100,6 +100,49 @@ export class CrateInventoryUI {
                 this.inventoryUI.hideTooltip();
             }
         }, true);
+
+        // === CRATE SLING SLOT EVENT DELEGATION ===
+        const crateSlingSlot = document.getElementById('crateSlingSlot');
+        if (crateSlingSlot) {
+            // Mousedown delegation for dragging from crate sling
+            crateSlingSlot.addEventListener('mousedown', (e) => {
+                const slingItem = e.target.closest('#crateSlingItem');
+                if (!slingItem) return;
+
+                const crateInventory = this.inventoryUI.crateInventory;
+                const item = crateInventory?.slingItem;
+                if (item) {
+                    this.onCrateSlingItemMouseDown(e, item);
+                }
+            });
+
+            // Tooltip delegation - mouseenter
+            crateSlingSlot.addEventListener('mouseenter', (e) => {
+                const slingItem = e.target.closest('#crateSlingItem');
+                if (!slingItem || this.inventoryUI.inventoryPickedItem) return;
+
+                const crateInventory = this.inventoryUI.crateInventory;
+                const item = crateInventory?.slingItem;
+                if (item) {
+                    this.inventoryUI.tooltipUI.showTooltip(e, item);
+                }
+            }, true);
+
+            // Tooltip delegation - mousemove
+            crateSlingSlot.addEventListener('mousemove', (e) => {
+                const slingItem = e.target.closest('#crateSlingItem');
+                if (!slingItem || this.inventoryUI.inventoryPickedItem) return;
+
+                this.inventoryUI.tooltipUI.updateTooltipPosition(e);
+            }, true);
+
+            // Tooltip delegation - mouseleave
+            crateSlingSlot.addEventListener('mouseleave', (e) => {
+                if (e.target.closest('#crateSlingItem')) {
+                    this.inventoryUI.tooltipUI.hideTooltip();
+                }
+            }, true);
+        }
     }
 
     /**
@@ -423,9 +466,15 @@ export class CrateInventoryUI {
                     'ironworks': 'Ironworks',
                     'blacksmith': 'Blacksmith',
                     'bakery': 'Bakery',
-                    'artillery': 'Artillery'
+                    'artillery': 'Artillery',
+                    'corpse': 'Loot Body'
                 };
                 titleElement.textContent = titleMap[structureType] || 'Storage';
+
+                // Update title with display name for corpses
+                if (structureType === 'corpse' && crate.userData.displayName) {
+                    titleElement.textContent = `Loot ${crate.userData.displayName}`;
+                }
             }
 
             // Notify tasks panel that structure inventory was opened
@@ -836,6 +885,13 @@ export class CrateInventoryUI {
         }
         const crateInventory = crate.userData.inventory;
 
+        // Get structure type and inventory size from config
+        const structProps = CONFIG.CONSTRUCTION.STRUCTURE_PROPERTIES[structureType];
+
+        // Show/hide crate sling slot based on structure type
+        const hasSlingSlot = structProps?.hasSlingSlot || false;
+        this.renderCrateSlingSlot(hasSlingSlot ? crateInventory : null);
+
         // Show grid, hide list (for non-market structures)
         const gridContainer = document.getElementById('crateGridContainer');
         const listContainer = document.getElementById('marketListContainer');
@@ -849,12 +905,9 @@ export class CrateInventoryUI {
         // Use same slot size and gap as backpack inventory
         const { slotSize, gap } = this.gameState.inventory;
 
-        // Get structure type and inventory size from config
-        const structureProps = CONFIG.CONSTRUCTION.STRUCTURE_PROPERTIES[structureType];
-
         // Default to 10x10 if no specific size configured (crate, tent, etc.)
-        const rows = structureProps?.inventorySize?.rows || 10;
-        const cols = structureProps?.inventorySize?.cols || 10;
+        const rows = structProps?.inventorySize?.rows || 10;
+        const cols = structProps?.inventorySize?.cols || 10;
 
         // Update grid styling dynamically
         GridUIHelpers.applyGridStyling(crateGrid, rows, cols, slotSize, gap);
@@ -1240,5 +1293,98 @@ export class CrateInventoryUI {
             elements.wrapper.remove();
         }
         this._crateElements.clear();
+    }
+
+    // ==========================================
+    // CRATE SLING SLOT (for corpse looting)
+    // ==========================================
+
+    /**
+     * Render the crate sling slot (for structures with hasSlingSlot like corpses)
+     * @param {object|null} crateInventory - Inventory with slingItem, or null to hide
+     */
+    renderCrateSlingSlot(crateInventory) {
+        const container = document.getElementById('crateSlingContainer');
+        const slingSlot = document.getElementById('crateSlingSlot');
+        const slingItemEl = document.getElementById('crateSlingItem');
+
+        if (!container || !slingSlot || !slingItemEl) return;
+
+        if (!crateInventory) {
+            container.style.display = 'none';
+            return;
+        }
+
+        container.style.display = 'flex';
+        const slingItem = crateInventory.slingItem;
+
+        // Cache elements for efficient updates
+        if (!this._crateSlingElements) {
+            this._crateSlingElements = {
+                container,
+                slingSlot,
+                slingItemEl,
+                img: null
+            };
+        }
+
+        if (slingItem) {
+            slingSlot.classList.add('has-item');
+
+            // Create or update image
+            if (!this._crateSlingElements.img) {
+                const img = document.createElement('img');
+                img.src = './items/Rrifle.png';
+                img.alt = 'Rifle';
+                img.draggable = false;
+                slingItemEl.appendChild(img);
+                this._crateSlingElements.img = img;
+            } else {
+                this._crateSlingElements.img.style.display = '';
+            }
+        } else {
+            slingSlot.classList.remove('has-item');
+            if (this._crateSlingElements.img) {
+                this._crateSlingElements.img.style.display = 'none';
+            }
+        }
+
+        // Update drag-over state
+        if (this.inventoryUI.inventoryPickedItem && this.inventoryUI.inventoryPickedTarget === 'crateSling') {
+            if (this.inventoryUI.inventoryPickedItem.type === 'rifle') {
+                slingSlot.classList.add('drag-over');
+                slingSlot.classList.remove('drag-invalid');
+            } else {
+                slingSlot.classList.add('drag-invalid');
+                slingSlot.classList.remove('drag-over');
+            }
+        } else {
+            slingSlot.classList.remove('drag-over', 'drag-invalid');
+        }
+    }
+
+    /**
+     * Handle mousedown on crate sling item
+     */
+    onCrateSlingItemMouseDown(e, item) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        // Start dragging from crate sling
+        this.inventoryUI.inventoryPickedItem = item;
+        this.inventoryUI.inventoryPickedSource = 'crateSling';
+        this.inventoryUI.inventoryPickedTarget = 'crateSling';
+        this.inventoryUI.inventoryPickedOriginalX = 0;
+        this.inventoryUI.inventoryPickedOriginalY = 0;
+        this.inventoryUI.inventoryPickedOriginalRotation = item.rotation || 90;
+
+        this.inventoryUI.tooltipUI.hideTooltip();
+
+        // Add global event listeners
+        this.inventoryUI._setupDragHandlers();
+
+        // Re-render to show ghost
+        this.inventoryUI.renderInventory();
+        this.renderCrateInventory();
     }
 }

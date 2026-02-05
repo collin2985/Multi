@@ -1,6 +1,10 @@
 #!/bin/bash
 # Deployment script for Guns Horses & Ships
 # Run from Git Bash: bash deploy.sh
+#
+# Interactive:   bash deploy.sh
+# Non-interactive: bash deploy.sh -m "commit message" -b "backup description"
+#                  bash deploy.sh -m "commit message"   (skip backup)
 
 set -e
 
@@ -15,6 +19,33 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# Parse command-line arguments
+COMMIT_MSG=""
+BACKUP_DESC=""
+NO_BACKUP=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -m|--message)
+            COMMIT_MSG="$2"
+            shift 2
+            ;;
+        -b|--backup)
+            BACKUP_DESC="$2"
+            shift 2
+            ;;
+        --no-backup)
+            NO_BACKUP=true
+            shift
+            ;;
+        *)
+            echo -e "${RED}Unknown option: $1${NC}"
+            echo "Usage: bash deploy.sh [-m \"commit message\"] [-b \"backup desc\"] [--no-backup]"
+            exit 1
+            ;;
+    esac
+done
+
 echo -e "${GREEN}=== Guns Horses & Ships Deployment ===${NC}"
 echo ""
 
@@ -26,20 +57,25 @@ else
     NEXT_NUM=$((LAST_NUM + 1))
 fi
 
-# Prompt for backup description
-echo -e "${YELLOW}Backup will be saved as: ${NEXT_NUM} <description>${NC}"
-read -p "Enter backup description (or press Enter to skip backup): " BACKUP_DESC
-
-# Prompt for commit message
-read -p "Enter commit message: " COMMIT_MSG
-
+# If no -m flag, prompt interactively
 if [ -z "$COMMIT_MSG" ]; then
-    echo -e "${RED}Error: Commit message is required${NC}"
-    exit 1
+    echo -e "${YELLOW}Backup will be saved as: ${NEXT_NUM} <description>${NC}"
+    read -p "Enter backup description (or press Enter to skip backup): " BACKUP_DESC
+    read -p "Enter commit message: " COMMIT_MSG
+
+    if [ -z "$COMMIT_MSG" ]; then
+        echo -e "${RED}Error: Commit message is required${NC}"
+        exit 1
+    fi
+else
+    # Non-interactive: if no -b and no --no-backup, default to skipping backup
+    if [ -z "$BACKUP_DESC" ] && [ "$NO_BACKUP" = false ]; then
+        NO_BACKUP=true
+    fi
 fi
 
 # Step 1: Create backup (if description provided)
-if [ -n "$BACKUP_DESC" ]; then
+if [ -n "$BACKUP_DESC" ] && [ "$NO_BACKUP" = false ]; then
     BACKUP_DIR="$BACKUP_ROOT/$NEXT_NUM $BACKUP_DESC"
     echo ""
     echo -e "${GREEN}=== Step 1: Creating backup ===${NC}"

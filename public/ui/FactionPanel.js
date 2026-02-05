@@ -136,15 +136,6 @@ export class FactionPanel {
                 <div style="font-size: 24px; color: #fff; font-weight: bold;">
                     ${factionName}
                 </div>
-                ${currentFaction !== null ? `
-                    <div style="color: #D4C4A8; font-size: 13px; margin-top: 8px;">
-                        Territory: Z ${CONFIG.FACTION_ZONES[currentFaction].minZ} to ${CONFIG.FACTION_ZONES[currentFaction].maxZ}
-                    </div>
-                ` : `
-                    <div style="color: #D4C4A8; font-size: 13px; margin-top: 8px;">
-                        No territory - spawn anywhere
-                    </div>
-                `}
             </div>
 
             <!-- Join / Status Section -->

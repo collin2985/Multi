@@ -123,7 +123,7 @@ class BrownBearVisual {
                 }
                 // Scale animation speed by movement ratio (min 0.3 to avoid frozen look)
                 const animSpeed = Math.max(0.3, this.speedRatio);
-                this.mixer.update((deltaTime / 1000) * this.speedMultiplier * animSpeed);
+                this.mixer.update((deltaTime / 1000) * this.speedMultiplier * animSpeed * 1.2);
             } else if (this.walkAction) {
                 // Fallback to walk if no run animation
                 if (!this.walkAction.isRunning() || this.walkAction.paused) {

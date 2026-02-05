@@ -120,6 +120,11 @@ export class MessageRouter {
             'claim_crate_response': (payload) => this.handleClaimCrateResponse(payload),
             'release_crate_response': (payload) => this.handleReleaseCrateResponse(payload),
 
+            // Warehouse crate load/unload responses
+            'warehouse_load_response': (payload) => this.handleWarehouseLoadResponse(payload),
+            'warehouse_unload_response': (payload) => this.handleWarehouseUnloadResponse(payload),
+            'warehouse_state_updated': (payload) => this.handleWarehouseStateUpdated(payload),
+
             // Ship cargo load responses (artillery/horse)
             'claim_artillery_response': (payload) => this.handleClaimArtilleryResponse(payload),
             'claim_horse_response': (payload) => this.handleClaimHorseResponse(payload),
@@ -168,6 +173,102 @@ export class MessageRouter {
                 this.game.pendingCrateRelease.reject(new Error(reason || 'Release failed'));
             }
             this.game.pendingCrateRelease = null;
+        }
+    }
+
+    /**
+     * Handle warehouse_load_response from server
+     * Called after attempting to load a crate into a warehouse
+     */
+    handleWarehouseLoadResponse(payload) {
+        const { success, warehouseId, crateId, loadedCount, reason } = payload;
+
+        if (!success) {
+            ui.showToast(reason || 'Failed to load crate', 'warning');
+            return;
+        }
+
+        // Update the warehouse's local state
+        const warehouse = this.game.objectRegistry?.get(warehouseId);
+        if (warehouse) {
+            if (!warehouse.userData.loadedCrates) {
+                warehouse.userData.loadedCrates = [];
+            }
+            // We don't have full crate data client-side, just track count via loadedCount
+            warehouse.userData.loadedCrates.length = loadedCount;
+        }
+
+        // Remove the crate mesh from scene (server already removed from DB)
+        const crate = this.game.objectRegistry?.get(crateId);
+        if (crate) {
+            // Remove physics collider
+            if (this.game.physicsManager) {
+                this.game.physicsManager.removeCollider(crateId);
+            }
+
+            // Remove from object registry
+            this.game.objectRegistry?.delete(crateId);
+
+            // Remove from chunk objects
+            if (crate.userData.chunkKey && this.game.chunkManager?.chunkObjects) {
+                const chunkObjects = this.game.chunkManager.chunkObjects.get(crate.userData.chunkKey);
+                if (chunkObjects) {
+                    const index = chunkObjects.indexOf(crate);
+                    if (index !== -1) {
+                        chunkObjects.splice(index, 1);
+                    }
+                }
+            }
+
+            // Remove from scene
+            if (crate.parent) {
+                crate.parent.remove(crate);
+            }
+        }
+
+        ui.showToast(`Crate stored (${loadedCount}/4)`, 'info');
+    }
+
+    /**
+     * Handle warehouse_unload_response from server
+     * Called after attempting to unload a crate from a warehouse
+     */
+    handleWarehouseUnloadResponse(payload) {
+        const { success, warehouseId, crateId, loadedCount, cratePosition, crateRotation,
+                crateOwner, crateQuality, crateLastRepairTime, crateInventory, crateChunkKey, reason } = payload;
+
+        if (!success) {
+            ui.showToast(reason || 'Failed to unload crate', 'warning');
+            return;
+        }
+
+        // Update the warehouse's local state
+        const warehouse = this.game.objectRegistry?.get(warehouseId);
+        if (warehouse) {
+            if (!warehouse.userData.loadedCrates) {
+                warehouse.userData.loadedCrates = [];
+            }
+            warehouse.userData.loadedCrates.length = loadedCount;
+        }
+
+        // The object_added broadcast will handle creating the crate mesh
+        // Just show toast
+        ui.showToast(`Crate retrieved (${loadedCount}/4 remaining)`, 'info');
+    }
+
+    /**
+     * Handle warehouse_state_updated broadcast
+     * Called when warehouse state changes (for nearby players)
+     */
+    handleWarehouseStateUpdated(payload) {
+        const { warehouseId, loadedCount } = payload;
+
+        const warehouse = this.game.objectRegistry?.get(warehouseId);
+        if (warehouse) {
+            if (!warehouse.userData.loadedCrates) {
+                warehouse.userData.loadedCrates = [];
+            }
+            warehouse.userData.loadedCrates.length = loadedCount;
         }
     }
 
@@ -571,16 +672,9 @@ export class MessageRouter {
                 if (change.currentDurability !== undefined && change.currentDurability <= 0 &&
                     !change.isBanditStructure && !change.isBrownBearStructure && !change.isSoldWorkerStructure &&
                     !change.isDeerTreeStructure) {
-                    // Expired ruins only after their 1-hour lifespan
+                    // Ruins no longer auto-expire - always load them
                     if (change.isRuin) {
-                        const ageHours = (Date.now() - (change.lastRepairTime || Date.now())) / (1000 * 60 * 60);
-                        if (ageHours >= CONSTRUCTION_SITE_LIFESPAN_HOURS) {
-                            this.networkManager.sendMessage('remove_ruin', {
-                                structureId: change.id,
-                                chunkId: change.chunkId
-                            });
-                            return;
-                        }
+                        // Skip removal, fall through to line 594 for creation
                     } else {
                         // Decayed structure or expired construction site — remove from DB
                         this.networkManager.sendMessage('remove_ruin', {
@@ -1132,7 +1226,8 @@ export class MessageRouter {
                 targetStructure, requiredMaterials, materials, finalFoundationY, inventory,
                 currentDurability, hoursUntilRuin, owner, ownerFactionId, isBanditStructure, materialType,
                 isMobileRelease, isBrownBearStructure, isDeerTreeStructure,
-                hasMilitia, militiaOwner, militiaFaction, militiaType } = payload;
+                hasMilitia, militiaOwner, militiaFaction, militiaType,
+                fallDirection, shirtColor, isCorpse, corpseType, displayName } = payload;
 
         const MOBILE_TYPES = ['boat', 'sailboat', 'ship2', 'horse'];
 
@@ -1363,7 +1458,12 @@ export class MessageRouter {
             hasMilitia,
             militiaOwner,
             militiaFaction,
-            militiaType
+            militiaType,
+            fallDirection,
+            shirtColor,
+            isCorpse,
+            corpseType,
+            displayName
         };
 
         // Skip creation if a peer is currently riding/using this mobile entity
@@ -3253,15 +3353,13 @@ export class MessageRouter {
     }
 
     /**
-     * Check if a ruin should be removed (1-hour lifespan expired)
+     * Check if a ruin should be removed
+     * Ruins no longer auto-expire - players can demolish manually with hammer
      * @param {object} userData - Ruin's userData
-     * @returns {boolean} True if ruin should be removed
+     * @returns {boolean} Always false (ruins are permanent)
      */
     isRuinExpired(userData) {
-        if (!userData.isRuin) return false;
-
-        const ageHours = (Date.now() - userData.lastRepairTime) / (1000 * 60 * 60);
-        return ageHours >= CONSTRUCTION_SITE_LIFESPAN_HOURS;
+        return false;
     }
 
     /**
@@ -3370,6 +3468,26 @@ export class MessageRouter {
 
                 if (durability <= 0) {
                     object.userData._constructionRemovalSent = true;
+
+                    const chunkId = `chunk_${object.userData.chunkKey}`;
+                    this.networkManager.sendMessage('remove_ruin', {
+                        structureId: object.userData.objectId,
+                        chunkId: chunkId
+                    });
+
+                    // Mark for removal from tracking set
+                    completedStructures.push(objectId);
+                }
+            }
+
+            // Check corpses for expiration (direct removal, no ruin phase)
+            if (object.userData.isCorpse) {
+                if (object.userData._corpseRemovalSent) continue;
+
+                const durability = this.calculateStructureDurability(object.userData);
+
+                if (durability <= 0) {
+                    object.userData._corpseRemovalSent = true;
 
                     const chunkId = `chunk_${object.userData.chunkKey}`;
                     this.networkManager.sendMessage('remove_ruin', {

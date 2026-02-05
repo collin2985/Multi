@@ -8,7 +8,7 @@ const { CONFIG } = require('./ServerConfig.js');
 const ChunkCoordinates = require('./ServerChunkCoords.js');
 const TimeTrackerService = require('./TimeTrackerService.js');
 const { clampQuality, enrichStructureWithDurability, DECAY_EXPONENT } = require('./StructureDecayUtils.js');
-const { generateBanditTentLoot, generateBanditCampfireLoot } = require('./BanditLootGenerator.js');
+const { generateBanditTentLoot, generateBanditCampfireLoot, generateBanditDeathLoot } = require('./BanditLootGenerator.js');
 const SpawnTasks = require('./SpawnTasks.js');
 
 /**
@@ -45,7 +45,8 @@ const STRUCTURE_TYPES = new Set([
     'house', 'crate', 'tent', 'outpost', 'ship', 'campfire',
     'market', 'dock', 'wall', 'tileworks', 'ironworks', 'blacksmith',
     'bakery', 'gardener', 'miner', 'woodcutter', 'stonemason', 'bearden',
-    'fisherman', 'boat', 'sailboat', 'ship2', 'cart', 'artillery', 'horse'
+    'fisherman', 'boat', 'sailboat', 'ship2', 'cart', 'artillery', 'horse',
+    'warehouse'
 ]);
 
 // Structures that only owner can modify inventory
@@ -747,6 +748,77 @@ class MessageHandlers {
 
         } catch (error) {
             console.error('ERROR in place_boat:', error);
+        }
+    }
+
+    /**
+     * Handle create_corpse message
+     * Creates a lootable corpse structure when player/bandit/militia dies
+     */
+    async handleCreateCorpse(ws, payload) {
+        try {
+            const {
+                position, rotation, fallDirection, shirtColor, modelType,
+                corpseType, displayName, inventory, hasRifle, chunkId
+            } = payload;
+
+            // Validate position
+            if (!validatePosition(position)) {
+                console.warn('[CreateCorpse] Invalid position:', position);
+                return;
+            }
+
+            // Generate unique corpse ID
+            const corpseId = `corpse_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+            // Generate loot for bandits/militia, use provided inventory for players
+            let corpseInventory;
+            if (corpseType === 'player') {
+                corpseInventory = inventory;  // Player's actual inventory
+            } else {
+                // Generate deterministic loot for bandits/militia
+                corpseInventory = generateBanditDeathLoot(corpseId, hasRifle !== false);
+            }
+
+            // Create corpse structure (quality 1 = ~1 hour lifespan via decay formula)
+            const corpseChange = {
+                action: 'add',
+                id: corpseId,
+                name: 'corpse',
+                position: position,
+                rotation: rotation || 0,
+                quality: 1,  // ~1 hour lifespan
+                lastRepairTime: Date.now(),
+                chunkId: chunkId,
+                isCorpse: true,
+                fallDirection: fallDirection,
+                shirtColor: shirtColor,
+                modelType: modelType || 'man',
+                corpseType: corpseType || 'bandit',
+                displayName: displayName || 'Body',
+                inventory: corpseInventory
+            };
+
+            // Save to chunk file
+            await this.chunkManager.addObjectChange(chunkId, corpseChange);
+
+            // Calculate durability values for broadcast
+            const durabilityInfo = enrichStructureWithDurability(corpseChange);
+
+            // Broadcast to clients in 3x3 grid
+            this.messageRouter.broadcastTo3x3Grid(chunkId, {
+                type: 'object_added',
+                payload: {
+                    ...corpseChange,
+                    objectType: 'corpse',
+                    objectId: corpseId,
+                    currentDurability: durabilityInfo.currentDurability,
+                    hoursUntilRuin: durabilityInfo.hoursUntilRuin
+                }
+            });
+
+        } catch (error) {
+            console.error('ERROR in create_corpse:', error);
         }
     }
 
@@ -1681,6 +1753,321 @@ class MessageHandlers {
             ws.send(JSON.stringify({
                 type: 'release_crate_response',
                 payload: { entityId: payload.entityId, success: false, reason: 'Server error' }
+            }));
+        }
+    }
+
+    /**
+     * Handle warehouse_load_crate message
+     * Loads a crate into a warehouse for safe storage (max 4 crates)
+     */
+    async handleWarehouseLoadCrate(ws, payload) {
+        try {
+            const { warehouseId, warehouseChunkKey, crateId, crateChunkKey, clientId } = payload;
+            const warehouseFullChunkId = `chunk_${warehouseChunkKey}`;
+            const crateFullChunkId = `chunk_${crateChunkKey}`;
+
+            // Load warehouse chunk
+            const warehouseChunkData = await this.chunkManager.loadChunk(warehouseFullChunkId);
+            if (!warehouseChunkData || !warehouseChunkData.objectChanges) {
+                ws.send(JSON.stringify({
+                    type: 'warehouse_load_response',
+                    payload: { success: false, reason: 'Warehouse chunk not found' }
+                }));
+                return;
+            }
+
+            // Find the warehouse
+            const warehouseIndex = warehouseChunkData.objectChanges.findIndex(
+                obj => obj.id === warehouseId && obj.action === 'add' && obj.name === 'warehouse'
+            );
+
+            if (warehouseIndex === -1) {
+                ws.send(JSON.stringify({
+                    type: 'warehouse_load_response',
+                    payload: { success: false, reason: 'Warehouse not found' }
+                }));
+                return;
+            }
+
+            const warehouse = warehouseChunkData.objectChanges[warehouseIndex];
+
+            // Check ownership (owner may be accountId or clientId)
+            if (warehouse.owner !== clientId && warehouse.owner !== ws.accountId) {
+                ws.send(JSON.stringify({
+                    type: 'warehouse_load_response',
+                    payload: { success: false, reason: 'Not your warehouse' }
+                }));
+                return;
+            }
+
+            // Check capacity (max 4 crates)
+            if (!warehouse.loadedCrates) {
+                warehouse.loadedCrates = [];
+            }
+            if (warehouse.loadedCrates.length >= 4) {
+                ws.send(JSON.stringify({
+                    type: 'warehouse_load_response',
+                    payload: { success: false, reason: 'Warehouse is full' }
+                }));
+                return;
+            }
+
+            // Load crate chunk (may be same as warehouse chunk)
+            let crateChunkData;
+            if (crateFullChunkId === warehouseFullChunkId) {
+                crateChunkData = warehouseChunkData;
+            } else {
+                crateChunkData = await this.chunkManager.loadChunk(crateFullChunkId);
+            }
+
+            if (!crateChunkData || !crateChunkData.objectChanges) {
+                ws.send(JSON.stringify({
+                    type: 'warehouse_load_response',
+                    payload: { success: false, reason: 'Crate chunk not found' }
+                }));
+                return;
+            }
+
+            // Find the crate
+            const crateIndex = crateChunkData.objectChanges.findIndex(
+                obj => obj.id === crateId && obj.action === 'add' && obj.name === 'crate'
+            );
+
+            if (crateIndex === -1) {
+                ws.send(JSON.stringify({
+                    type: 'warehouse_load_response',
+                    payload: { success: false, reason: 'Crate not found' }
+                }));
+                return;
+            }
+
+            const crate = crateChunkData.objectChanges[crateIndex];
+
+            // Check if crate is locked by another player
+            if (crate.lockedBy && crate.lockedBy !== clientId && !this.isLockStale(crate)) {
+                ws.send(JSON.stringify({
+                    type: 'warehouse_load_response',
+                    payload: { success: false, reason: 'Crate is being used by another player' }
+                }));
+                return;
+            }
+
+            // Check if crate is claimed (loaded on cart/boat)
+            if (this.loadedCrates.has(crateId)) {
+                ws.send(JSON.stringify({
+                    type: 'warehouse_load_response',
+                    payload: { success: false, reason: 'Crate is loaded on a vehicle' }
+                }));
+                return;
+            }
+
+            // Store crate data in warehouse
+            const crateData = {
+                crateId: crateId,
+                inventory: crate.inventory || { items: [] },
+                owner: crate.owner,
+                quality: crate.quality,
+                lastRepairTime: crate.lastRepairTime,
+                loadedAt: Date.now()
+            };
+            warehouse.loadedCrates.push(crateData);
+
+            // Remove crate from its chunk
+            crateChunkData.objectChanges.splice(crateIndex, 1);
+
+            // Save both chunks (may be same chunk)
+            await this.chunkManager.saveChunk(warehouseFullChunkId, warehouseChunkData);
+            if (crateFullChunkId !== warehouseFullChunkId) {
+                await this.chunkManager.saveChunk(crateFullChunkId, crateChunkData);
+            }
+
+            // Send success response
+            ws.send(JSON.stringify({
+                type: 'warehouse_load_response',
+                payload: {
+                    success: true,
+                    warehouseId: warehouseId,
+                    crateId: crateId,
+                    loadedCount: warehouse.loadedCrates.length
+                }
+            }));
+
+            // Broadcast crate removal to nearby players
+            this.messageRouter.broadcastTo3x3Grid(crateFullChunkId, {
+                type: 'object_removed',
+                payload: {
+                    chunkId: crateFullChunkId,
+                    objectId: crateId,
+                    isWarehouseLoad: true
+                }
+            });
+
+            // Broadcast warehouse state update
+            this.messageRouter.broadcastTo3x3Grid(warehouseFullChunkId, {
+                type: 'warehouse_state_updated',
+                payload: {
+                    warehouseId: warehouseId,
+                    chunkId: warehouseFullChunkId,
+                    loadedCount: warehouse.loadedCrates.length
+                }
+            });
+
+        } catch (error) {
+            console.error('ERROR in warehouse_load_crate:', error);
+            ws.send(JSON.stringify({
+                type: 'warehouse_load_response',
+                payload: { success: false, reason: 'Server error' }
+            }));
+        }
+    }
+
+    /**
+     * Handle warehouse_unload_crate message
+     * Unloads the last loaded crate from warehouse (LIFO)
+     */
+    async handleWarehouseUnloadCrate(ws, payload) {
+        try {
+            const { warehouseId, warehouseChunkKey, dropPosition, dropRotation, clientId } = payload;
+            const warehouseFullChunkId = `chunk_${warehouseChunkKey}`;
+
+            // Load warehouse chunk
+            const warehouseChunkData = await this.chunkManager.loadChunk(warehouseFullChunkId);
+            if (!warehouseChunkData || !warehouseChunkData.objectChanges) {
+                ws.send(JSON.stringify({
+                    type: 'warehouse_unload_response',
+                    payload: { success: false, reason: 'Warehouse chunk not found' }
+                }));
+                return;
+            }
+
+            // Find the warehouse
+            const warehouseIndex = warehouseChunkData.objectChanges.findIndex(
+                obj => obj.id === warehouseId && obj.action === 'add' && obj.name === 'warehouse'
+            );
+
+            if (warehouseIndex === -1) {
+                ws.send(JSON.stringify({
+                    type: 'warehouse_unload_response',
+                    payload: { success: false, reason: 'Warehouse not found' }
+                }));
+                return;
+            }
+
+            const warehouse = warehouseChunkData.objectChanges[warehouseIndex];
+
+            // Check ownership (owner may be accountId or clientId)
+            if (warehouse.owner !== clientId && warehouse.owner !== ws.accountId) {
+                ws.send(JSON.stringify({
+                    type: 'warehouse_unload_response',
+                    payload: { success: false, reason: 'Not your warehouse' }
+                }));
+                return;
+            }
+
+            // Check if warehouse has crates
+            if (!warehouse.loadedCrates || warehouse.loadedCrates.length === 0) {
+                ws.send(JSON.stringify({
+                    type: 'warehouse_unload_response',
+                    payload: { success: false, reason: 'Warehouse is empty' }
+                }));
+                return;
+            }
+
+            // Pop the last crate (LIFO)
+            const crateData = warehouse.loadedCrates.pop();
+
+            // Calculate which chunk the crate will be placed in
+            const newFullChunkId = ChunkCoordinates.worldToChunkId(dropPosition[0], dropPosition[2]);
+            const newChunkKey = newFullChunkId.replace('chunk_', '');
+
+            // Load or reuse chunk for new crate position
+            let dropChunkData;
+            if (newFullChunkId === warehouseFullChunkId) {
+                dropChunkData = warehouseChunkData;
+            } else {
+                dropChunkData = await this.chunkManager.loadChunk(newFullChunkId);
+                if (!dropChunkData) {
+                    dropChunkData = { objectChanges: [] };
+                }
+                if (!dropChunkData.objectChanges) {
+                    dropChunkData.objectChanges = [];
+                }
+            }
+
+            // Create new crate object
+            const newCrateId = crateData.crateId;
+            const newCrate = {
+                action: 'add',
+                id: newCrateId,
+                name: 'crate',
+                position: dropPosition,
+                rotation: dropRotation,
+                scale: 1,
+                chunkId: newFullChunkId,
+                owner: crateData.owner,
+                quality: crateData.quality,
+                lastRepairTime: crateData.lastRepairTime,
+                inventory: crateData.inventory
+            };
+
+            dropChunkData.objectChanges.push(newCrate);
+
+            // Save chunks
+            await this.chunkManager.saveChunk(warehouseFullChunkId, warehouseChunkData);
+            if (newFullChunkId !== warehouseFullChunkId) {
+                await this.chunkManager.saveChunk(newFullChunkId, dropChunkData);
+            }
+
+            // Send success response
+            ws.send(JSON.stringify({
+                type: 'warehouse_unload_response',
+                payload: {
+                    success: true,
+                    warehouseId: warehouseId,
+                    crateId: newCrateId,
+                    loadedCount: warehouse.loadedCrates.length,
+                    cratePosition: dropPosition,
+                    crateRotation: dropRotation,
+                    crateOwner: crateData.owner,
+                    crateQuality: crateData.quality,
+                    crateLastRepairTime: crateData.lastRepairTime,
+                    crateInventory: crateData.inventory,
+                    crateChunkKey: newChunkKey
+                }
+            }));
+
+            // Broadcast new crate to nearby players
+            this.messageRouter.broadcastTo3x3Grid(newFullChunkId, {
+                type: 'object_added',
+                payload: {
+                    chunkId: newFullChunkId,
+                    objectId: newCrateId,
+                    objectType: 'crate',
+                    position: dropPosition,
+                    rotation: dropRotation,
+                    scale: 1,
+                    quality: crateData.quality,
+                    inventory: crateData.inventory,
+                    owner: crateData.owner
+                }
+            });
+
+            // Broadcast warehouse state update
+            this.messageRouter.broadcastTo3x3Grid(warehouseFullChunkId, {
+                type: 'warehouse_state_updated',
+                payload: {
+                    warehouseId: warehouseId,
+                    chunkId: warehouseFullChunkId,
+                    loadedCount: warehouse.loadedCrates.length
+                }
+            });
+
+        } catch (error) {
+            console.error('ERROR in warehouse_unload_crate:', error);
+            ws.send(JSON.stringify({
+                type: 'warehouse_unload_response',
+                payload: { success: false, reason: 'Server error' }
             }));
         }
     }
@@ -3225,6 +3612,8 @@ class MessageHandlers {
             } else if (constructionSite.targetStructure === 'wall') {
                 structureScale = 1.0;
             } else if (constructionSite.targetStructure === 'fisherman') {
+                structureScale = 1.0;
+            } else if (constructionSite.targetStructure === 'warehouse') {
                 structureScale = 1.0;
             }
 

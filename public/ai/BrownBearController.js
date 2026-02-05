@@ -110,6 +110,7 @@ export class BrownBearController extends BaseAIController {
         // Performance caches
         this._playerListCache = [];
         this._playerObjectPool = [];
+        this._lastPlayerListBuild = 0;
         this._candidatesCache = [];
         this._candidateObjectPool = [];
 
@@ -208,8 +209,12 @@ export class BrownBearController extends BaseAIController {
             }
         }
 
-        // Build player list for targeting
-        const players = this._buildPlayerList(chunkX, chunkZ);
+        // Build player list for targeting (throttled to 100ms)
+        if (now - this._lastPlayerListBuild > 100) {
+            this._lastPlayerListBuild = now;
+            this._buildPlayerList(chunkX, chunkZ);
+        }
+        const players = this._playerListCache;
 
         // Update all entities
         for (const [denId, entity] of this.entities) {
@@ -242,10 +247,7 @@ export class BrownBearController extends BaseAIController {
         const playerIds = this.getPlayersInChunks(chunkKeys);
 
         for (const playerId of playerIds) {
-            if (this.isPlayerDead && this.isPlayerDead(playerId)) {
-                console.log(`[Bear] FILTERED dead player: ${playerId}`);
-                continue;
-            }
+            if (this.isPlayerDead && this.isPlayerDead(playerId)) continue;
             if (this.isPlayerClimbing && this.isPlayerClimbing(playerId)) continue;
             if (this.isPlayerSpawnProtected && this.isPlayerSpawnProtected(playerId)) continue;
             const pos = this.getPlayerPosition(playerId);

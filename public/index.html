@@ -203,6 +203,60 @@
             background: #5c4a32;
             transform: scale(1.05);
         }
+        .devlog {
+            max-width: 600px;
+            margin-top: 50px;
+            border-top: 1px solid rgba(139, 115, 85, 0.4);
+            padding-top: 30px;
+            text-align: left;
+        }
+        .devlog-title {
+            font-size: 1.5em;
+            color: #8b7355;
+            margin-bottom: 20px;
+            text-align: center;
+            text-shadow:
+                2px 2px 0 #000,
+                -2px -2px 0 #000,
+                2px -2px 0 #000,
+                -2px 2px 0 #000,
+                1px 1px 0 #000,
+                -1px -1px 0 #000,
+                1px -1px 0 #000,
+                -1px 1px 0 #000;
+        }
+        .devlog-entry {
+            margin-bottom: 25px;
+        }
+        .devlog-entry h3 {
+            font-size: 1.1em;
+            color: #f5f1e8;
+            margin-bottom: 8px;
+            text-shadow: 1px 1px 3px #000, -1px -1px 3px #000;
+        }
+        .devlog-entry .devlog-date {
+            font-size: 0.85em;
+            color: #8b7355;
+            font-style: italic;
+            margin-bottom: 6px;
+        }
+        .devlog-entry ul {
+            list-style: none;
+            padding: 0;
+        }
+        .devlog-entry li {
+            font-size: 0.95em;
+            color: #d4c4a8;
+            padding: 3px 0 3px 15px;
+            position: relative;
+            text-shadow: 1px 1px 2px #000, -1px -1px 2px #000;
+        }
+        .devlog-entry li::before {
+            content: '-';
+            position: absolute;
+            left: 0;
+            color: #8b7355;
+        }
         @media (max-width: 600px) {
             h1 {
                 font-size: 2em;
@@ -256,6 +310,25 @@
             <p>Here, on shores untouched by kings and emperors, you will carve your name into the wilderness itself. Fell the ancient pines. Raise walls from raw stone. Trade with ships that sail from lands you'll never see.</p>
             <p>But beware - you are not alone. Bandits lurk in the hills. Bears prowl the forests. And across the great divide, another faction watches for the breath of your chimneys.</p>
             <p class="final">This land will not be given. It must be taken.</p>
+        </div>
+        <div class="devlog">
+            <div class="devlog-title">Dev Log</div>
+
+            <div class="devlog-entry">
+                <h3>Warehouses, Lootable Corpses & Fixes</h3>
+                <div class="devlog-date">February 5, 2026</div>
+                <ul>
+                    <li>New structure: Warehouse - store up to 4 crates inside a single building</li>
+                    <li>Bandits and militia now drop lootable corpses with inventory and rifle sling</li>
+                    <li>Fixed dead player avatars standing back up on respawn</li>
+                    <li>Fixed avatar cloning inheriting animation poses from other players</li>
+                    <li>Construction panel now updates immediately after crafting items in your backpack</li>
+                    <li>Quality setting changes now apply instantly via page reload</li>
+                    <li>Bear run animation tuned to be faster</li>
+                    <li>Removed excessive debug logging for better performance</li>
+                    <li>Peer cleanup improved - disconnected player avatars are properly removed</li>
+                </ul>
+            </div>
         </div>
     </div>
 

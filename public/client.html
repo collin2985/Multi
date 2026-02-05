@@ -460,6 +460,8 @@
 <button id="releaseCartBtn" style="display: none;">Release Cart</button>
 <button id="loadCrateBtn" style="display: none;">Load Crate</button>
 <button id="unloadCrateBtn" style="display: none;">Unload Crate</button>
+<button id="loadWarehouseCrateBtn" style="display: none;">Store Crate (0/4)</button>
+<button id="unloadWarehouseCrateBtn" style="display: none;">Retrieve Crate (0/4)</button>
 <button id="loadShipArtilleryBtn" style="display: none;">Load Artillery</button>
 <button id="unloadShipArtilleryBtn" style="display: none;">Unload Artillery</button>
 <button id="loadShipHorseBtn" style="display: none;">Load Horse</button>
@@ -790,6 +792,13 @@
                 <div id="crateSection" class="crate-section" style="display: none;">
                     <div class="crate-section-header">
                         <h3 id="crateTitle">Crate</h3>
+                        <!-- Crate sling slot (for corpse looting) -->
+                        <div id="crateSlingContainer" class="sling-slot-container" style="display: none;">
+                            <div id="crateSlingSlot" class="sling-slot">
+                                <div id="crateSlingItem" class="sling-item-wrapper"></div>
+                                <span class="sling-slot-label">Rifle Sling</span>
+                            </div>
+                        </div>
                         <span id="marketInfluenceDisplay" class="market-influence" style="display: none;">Influence: 0</span>
                         <button id="marketMerchantBtn" class="market-merchant-btn">Harbour Closed</button>
                     </div>

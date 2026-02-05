@@ -859,7 +859,6 @@ export class ChunkManager {
             if (navMap.grid[i] & 1) actualWalkable++;
             if (navMap.grid[i] & 64) actualObstacle++;
         }
-        console.error(`[NavDiag] createNavMap chunk(${gridX},${gridZ}) | objects=${objects.length} walkableCells=${actualWalkable}/${result.processedCells} blockedCells=${actualObstacle} obstacleObjects=${result.obstacleCount} (cyl=${result.cylindrical} rect=${result.rectangular} small=${result.small}) ${result.timeMs.toFixed(1)}ms`);
 
         // Apply roads from gameState.roads to restore road speed bonuses
         // Nav map uses circular approximation (radius 1.25 covers pill area)

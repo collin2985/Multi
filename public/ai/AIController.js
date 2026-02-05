@@ -4246,6 +4246,28 @@ export class AIController extends BaseAIController {
             entity._logged.dead = true;
         }
 
+        // Create corpse structure with lootable inventory
+        // Authority sends create_corpse message, server generates loot
+        if (this.isAuthority(tentId) && this.game?.networkManager) {
+            // Get death position from controller mesh or entity position
+            const deathPos = entity.controller?.enemy?.position || entity.position;
+            const fallDirection = entity.controller?.fallDirection || 1;
+            const shirtColor = entity.shirtColor || CONFIG.FACTION_COLORS?.default?.shirt || 0x5a5a5a;
+            const hasRifle = entity.hasRifle !== false;  // Most bandits/militia have rifles
+
+            this.game.networkManager.sendMessage('create_corpse', {
+                position: [deathPos.x, deathPos.y, deathPos.z],
+                rotation: entity.controller?.enemy?.rotation?.y || 0,
+                fallDirection: fallDirection,
+                shirtColor: shirtColor,
+                modelType: 'man',
+                corpseType: entity.entityType || 'bandit',
+                displayName: entity.displayName || (entity.entityType === 'bandit' ? 'Bandit' : 'Militia'),
+                hasRifle: hasRifle,
+                chunkId: chunkId
+            });
+        }
+
         // Schedule visual cleanup after death animation (30 seconds)
         // Entity stays in map to prevent respawn until player leaves area
         setTimeout(() => {

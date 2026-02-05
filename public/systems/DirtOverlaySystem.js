@@ -21,7 +21,7 @@ function wrapCoord(v) {
 
 // Objects excluded from dirt painting (mobile entities, water structures, etc.)
 // Note: 'dock' removed - docks now use terrain-based rendering with paintDockImmediate()
-const EXCLUDED_TYPES = new Set(['ship', 'campfire', 'tent', 'road', 'horse', 'boat', 'sailboat', 'ship2', 'crate', 'cart', 'mobilecrate', 'wall', 'artillery']);
+const EXCLUDED_TYPES = new Set(['ship', 'campfire', 'tent', 'road', 'horse', 'boat', 'sailboat', 'ship2', 'crate', 'cart', 'mobilecrate', 'wall', 'artillery', 'corpse']);
 
 // Check if type is a log (logs don't get dirt)
 const isLogType = (type) => type && type.endsWith('_log');

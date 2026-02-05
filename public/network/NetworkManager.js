@@ -249,17 +249,6 @@ export class NetworkManager {
             // Hide P2P connection status banner (connection succeeded)
             ui.updateP2PConnectionStatus('hidden');
 
-            // Log connection type for debugging (delayed to ensure stats are available)
-            setTimeout(async () => {
-                const connType = await this.p2pTransport.getConnectionType(peerId);
-                const usedFallback = this.p2pTransport.isUsingTurnFallback(peerId);
-                if (connType === 'relay') {
-                    console.warn(`[P2P] ${peerId.slice(0,8)}: Using TURN relay`);
-                } else if (connType) {
-                    console.warn(`[P2P] ${peerId.slice(0,8)}: Direct connection (${connType})${usedFallback ? ' after TURN fallback enabled' : ''}`);
-                }
-            }, 1000);
-
             // Initialize game-specific data for this peer
             if (!this.peerGameData.has(peerId)) {
                 this.peerGameData.set(peerId, {
@@ -454,6 +443,11 @@ export class NetworkManager {
         // Handle data channel close
         this.p2pTransport.onDataChannelClose((peerId) => {
             ui.updateStatus(`P2P data channel closed with ${peerId}`);
+            // Clean up peer avatar and data when connection closes
+            // This fixes the "stand up" bug where dead avatars weren't cleaned up on respawn
+            if (this.scene) {
+                this.cleanupPeer(peerId, this.scene);
+            }
             ui.updatePeerInfo(this.p2pTransport.peers, this.avatars);
         });
 

@@ -78,6 +78,9 @@ const domCache = {
     // Crate loading buttons (cart must be attached)
     loadCrateBtn: null,
     unloadCrateBtn: null,
+    // Warehouse crate loading buttons
+    loadWarehouseCrateBtn: null,
+    unloadWarehouseCrateBtn: null,
     // Artillery ship loading buttons (ship2 only)
     loadShipArtilleryBtn: null,
     unloadShipArtilleryBtn: null,
@@ -229,6 +232,9 @@ function initDOMCache() {
     // Crate loading buttons
     domCache.loadCrateBtn = document.getElementById('loadCrateBtn');
     domCache.unloadCrateBtn = document.getElementById('unloadCrateBtn');
+    // Warehouse crate loading buttons
+    domCache.loadWarehouseCrateBtn = document.getElementById('loadWarehouseCrateBtn');
+    domCache.unloadWarehouseCrateBtn = document.getElementById('unloadWarehouseCrateBtn');
     // Artillery ship loading buttons
     domCache.loadShipArtilleryBtn = document.getElementById('loadShipArtilleryBtn');
     domCache.unloadShipArtilleryBtn = document.getElementById('unloadShipArtilleryBtn');
@@ -794,6 +800,9 @@ export const ui = {
             // Crate loading buttons hidden when mounted
             if (domCache.loadCrateBtn) domCache.loadCrateBtn.style.display = 'none';
             if (domCache.unloadCrateBtn) domCache.unloadCrateBtn.style.display = 'none';
+            // Warehouse buttons hidden when mounted
+            if (domCache.loadWarehouseCrateBtn) domCache.loadWarehouseCrateBtn.style.display = 'none';
+            if (domCache.unloadWarehouseCrateBtn) domCache.unloadWarehouseCrateBtn.style.display = 'none';
             // Mobile entity button is handled separately below
             // Skip the rest of button state updates while mounted
         }
@@ -832,6 +841,8 @@ export const ui = {
             if (fishingBtn) fishingBtn.style.display = 'none';
             if (domCache.loadCrateBtn) domCache.loadCrateBtn.style.display = 'none';
             if (domCache.unloadCrateBtn) domCache.unloadCrateBtn.style.display = 'none';
+            if (domCache.loadWarehouseCrateBtn) domCache.loadWarehouseCrateBtn.style.display = 'none';
+            if (domCache.unloadWarehouseCrateBtn) domCache.unloadWarehouseCrateBtn.style.display = 'none';
             if (domCache.attachCartBtn) domCache.attachCartBtn.style.display = 'none';
             if (domCache.releaseCartBtn) domCache.releaseCartBtn.style.display = 'none';
             if (domCache.enterMobileEntityBtn) domCache.enterMobileEntityBtn.style.display = 'none';
@@ -870,10 +881,34 @@ export const ui = {
                 const structureType = nearestStructure.userData?.modelType;
                 const isConstructionSite = nearestStructure.userData?.isConstructionSite;
 
+                // Check if this is a corpse (special handling)
+                const isCorpse = nearestStructure.userData?.isCorpse;
+
                 // Exclude dock, outpost, construction sites, and decorative structures from storage
-                const noStorageTypes = ['dock', 'outpost', 'stonemason', 'gardener', 'miner', 'woodcutter', 'bearden'];
-                if (noStorageTypes.includes(structureType) || isConstructionSite) {
+                const noStorageTypes = ['dock', 'outpost', 'stonemason', 'gardener', 'miner', 'woodcutter', 'bearden', 'warehouse'];
+                if (!isCorpse && (noStorageTypes.includes(structureType) || isConstructionSite)) {
                     crateBtn.style.display = 'none';
+                } else if (isCorpse) {
+                    // Corpse - show Loot Body button
+                    const displayName = nearestStructure.userData?.displayName || 'Body';
+                    crateBtn.textContent = `Loot ${displayName}`;
+                    crateBtn.style.display = 'inline-block';
+                    crateBtn._targetStructureId = nearestStructure.userData?.objectId;
+                    crateBtn.disabled = false;
+                    crateBtn.style.opacity = '1';
+                    crateBtn.style.cursor = 'pointer';
+
+                    // Build tooltip for corpse
+                    let tooltip = `Loot ${displayName}`;
+                    const corpseType = nearestStructure.userData?.corpseType;
+                    if (corpseType === 'player') {
+                        tooltip += `<br><span style="color:#aaa">Player corpse</span>`;
+                    } else if (corpseType === 'bandit') {
+                        tooltip += `<br><span style="color:#a66">Bandit corpse</span>`;
+                    } else if (corpseType === 'militia') {
+                        tooltip += `<br><span style="color:#6a6">Militia corpse</span>`;
+                    }
+                    buttonTooltips.set('crateInventoryBtn', tooltip);
                 } else {
                     // Check ownership for owner-protected structures
                     const ownerProtectedStructures = ['house', 'tileworks', 'ironworks', 'blacksmith', 'bakery', 'fisherman'];
@@ -2326,6 +2361,64 @@ export const ui = {
             } else {
                 domCache.actionTooltip.style.display = 'none';
             }
+        }
+    },
+
+    /**
+     * Update warehouse crate load/unload button visibility
+     * @param {Object|null} nearestWarehouse - Nearest warehouse from gameState
+     * @param {Object|null} nearestLoadableCrate - Nearest loadable crate from gameState
+     * @param {boolean} isMoving - Whether player is moving
+     * @param {string} accountId - Current player's account ID
+     */
+    updateWarehouseButtons(nearestWarehouse, nearestLoadableCrate, isMoving, accountId, clientId) {
+        if (!domCache.initialized) initDOMCache();
+
+        const loadBtn = domCache.loadWarehouseCrateBtn;
+        const unloadBtn = domCache.unloadWarehouseCrateBtn;
+
+        if (!loadBtn || !unloadBtn) return;
+
+        // Get warehouse data
+        const warehouseObj = nearestWarehouse?.object;
+        const warehouseData = warehouseObj?.userData;
+        const isOwner = warehouseData?.owner === accountId || warehouseData?.owner === clientId;
+        const loadedCrates = warehouseData?.loadedCrates || [];
+        const crateCount = loadedCrates.length;
+        const maxCrates = 4;
+
+        // Show load button when:
+        // 1. Near owned warehouse
+        // 2. Warehouse has room (< 4 crates)
+        // 3. Near a loadable crate
+        // 4. Not moving
+        const canLoad = nearestWarehouse && isOwner && crateCount < maxCrates &&
+                       nearestLoadableCrate?.object && !isMoving;
+
+        if (canLoad) {
+            loadBtn.textContent = `Store Crate (${crateCount}/${maxCrates})`;
+            loadBtn.style.display = 'inline-block';
+            loadBtn.disabled = false;
+            loadBtn.style.opacity = '1';
+            loadBtn.style.cursor = 'pointer';
+        } else {
+            loadBtn.style.display = 'none';
+        }
+
+        // Show unload button when:
+        // 1. Near owned warehouse
+        // 2. Warehouse has at least 1 crate
+        // 3. Not moving
+        const canUnload = nearestWarehouse && isOwner && crateCount > 0 && !isMoving;
+
+        if (canUnload) {
+            unloadBtn.textContent = `Retrieve Crate (${crateCount}/${maxCrates})`;
+            unloadBtn.style.display = 'inline-block';
+            unloadBtn.disabled = false;
+            unloadBtn.style.opacity = '1';
+            unloadBtn.style.cursor = 'pointer';
+        } else {
+            unloadBtn.style.display = 'none';
         }
     },
 
@@ -3844,6 +3937,19 @@ export const ui = {
         setupButton(document.getElementById('unloadCrateBtn'), () => {
             if (callbacks.onUnloadCrate) {
                 callbacks.onUnloadCrate();
+            }
+        });
+
+        // Warehouse crate storage buttons
+        setupButton(document.getElementById('loadWarehouseCrateBtn'), () => {
+            if (callbacks.onLoadWarehouseCrate) {
+                callbacks.onLoadWarehouseCrate();
+            }
+        });
+
+        setupButton(document.getElementById('unloadWarehouseCrateBtn'), () => {
+            if (callbacks.onUnloadWarehouseCrate) {
+                callbacks.onUnloadWarehouseCrate();
             }
         });
 

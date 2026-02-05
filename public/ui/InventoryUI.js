@@ -1319,6 +1319,31 @@ export class InventoryUI {
             }
         }
 
+        // Check if hovering over crate sling slot (check before crate grid)
+        const crateSlingSlot = document.getElementById('crateSlingSlot');
+        const crateSlingContainer = document.getElementById('crateSlingContainer');
+        if (crateSlingSlot && crateSlingContainer && crateSlingContainer.style.display !== 'none') {
+            const crateSlingRect = crateSlingSlot.getBoundingClientRect();
+            const overCrateSling = (event.clientX >= crateSlingRect.left && event.clientX <= crateSlingRect.right &&
+                                    event.clientY >= crateSlingRect.top && event.clientY <= crateSlingRect.bottom);
+            if (overCrateSling) {
+                this.inventoryMouseX = event.clientX - backpackGridRect.left - gridContentOffset;
+                this.inventoryMouseY = event.clientY - backpackGridRect.top - gridContentOffset;
+                const wasAlreadyCrateSling = previousTarget === 'crateSling';
+                this.inventoryPickedTarget = 'crateSling';
+                if (!wasAlreadyCrateSling) {
+                    this.crateUI.renderCrateSlingSlot(this.crateInventory);
+                    this.renderInventory();
+                    if (this.gameState.nearestStructure) {
+                        this.crateUI.renderCrateInventory();
+                    }
+                } else {
+                    this._updateGhostPosition();
+                }
+                return;
+            }
+        }
+
         // Get crate grid for bounds checking
         const crateGrid = document.getElementById('crateGrid');
         const crateRect = crateGrid.getBoundingClientRect();
@@ -1369,6 +1394,11 @@ export class InventoryUI {
         // If we were over sling but now aren't, update sling visual
         if (previousTarget === 'sling' && newTarget !== 'sling') {
             this.renderSlingSlot();
+        }
+
+        // If we were over crate sling but now aren't, update crate sling visual
+        if (previousTarget === 'crateSling' && newTarget !== 'crateSling') {
+            this.crateUI.renderCrateSlingSlot(this.crateInventory);
         }
 
         // Efficiently update chisel/combine target highlights
@@ -1566,6 +1596,12 @@ export class InventoryUI {
                 return;
             }
 
+            // Check if dropping onto crate sling slot
+            if (this.inventoryPickedTarget === 'crateSling') {
+                this._handleCrateSlingDrop(event, item, source);
+                return;
+            }
+
             // Handle placement based on whether we're in crate mode
             const crateSection = document.getElementById('crateSection');
             const crateVisible = crateSection && crateSection.style.display !== 'none';
@@ -1682,6 +1718,58 @@ export class InventoryUI {
         // Set rifle in sling (rotated for horizontal display)
         item.rotation = 90;
         this.gameState.slingItem = item;
+
+        this._finishDrop();
+    }
+
+    _handleCrateSlingDrop(event, item, source) {
+        // Only rifles can go in the sling
+        if (item.type !== 'rifle') {
+            ui.showToast('Only rifles can go in the sling', 'warning');
+            this._restoreItemPosition();
+            this._finishDrop();
+            return;
+        }
+
+        // Check if crate sling already has a rifle
+        const crateInventory = this.crateInventory;
+        if (!crateInventory) {
+            this._restoreItemPosition();
+            this._finishDrop();
+            return;
+        }
+
+        if (crateInventory.slingItem && source !== 'crateSling') {
+            ui.showToast('Sling already has a rifle', 'warning');
+            this._restoreItemPosition();
+            this._finishDrop();
+            return;
+        }
+
+        // Remove item from source
+        if (source === 'backpack') {
+            const itemIndex = this.gameState.inventory.items.findIndex(i => i.id === item.id);
+            if (itemIndex > -1) {
+                this.gameState.inventory.items.splice(itemIndex, 1);
+                this.gameState.markInventoryDirty();
+            }
+        } else if (source === 'crate') {
+            const itemIndex = crateInventory.items.findIndex(i => i.id === item.id);
+            if (itemIndex > -1) {
+                crateInventory.items.splice(itemIndex, 1);
+            }
+        } else if (source === 'sling') {
+            // Remove from player sling
+            this.gameState.slingItem = null;
+        }
+        // If source is 'crateSling', item is already in crate sling, no removal needed
+
+        // Set rifle in crate sling (rotated for horizontal display)
+        item.rotation = 90;
+        crateInventory.slingItem = item;
+
+        // Save crate inventory
+        this.saveCrateInventory();
 
         this._finishDrop();
     }

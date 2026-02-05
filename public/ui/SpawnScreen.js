@@ -390,9 +390,13 @@ export class SpawnScreen {
     }
 
     handleQualityChange(quality) {
+        const currentQuality = this.gameState.qualitySetting;
+        if (quality === currentQuality) return;
+
         this.gameState.setQualitySetting(quality);
-        // Re-render to update button styles
-        this.render();
+        // Quality settings require page reload to fully apply
+        window._allowNavigation = true;
+        window.location.reload();
     }
 
     handleHomeSpawn() {

@@ -451,6 +451,13 @@ const MODEL_CONFIG = {
         scaleRange: { min: 0, max: 0 },
         density: 0,
         category: 'weapon'
+    },
+    warehouse: {
+        path: './models/warehouse.glb',
+        heightRange: { min: 0, max: 0 },
+        scaleRange: { min: 0, max: 0 },
+        density: 0,
+        category: 'structure'
     }
 };
 
@@ -463,6 +470,7 @@ class ModelManager {
         this.models = new Map();
         this.gltfData = new Map(); // Store full GLTF objects (for animations, etc.)
         this.modelSizes = new Map(); // Store bounding box sizes for shadow calculation
+        this.pristineClones = new Map(); // Store pristine clones for skinned models (unaffected by animation)
         this.loader = new GLTFLoader();
         this.loadingPromises = new Map();
         this.allModelsPromise = null; // Cache the loadAllModels promise
@@ -526,6 +534,16 @@ class ModelManager {
                     const diameter = Math.max(size.x, size.z);
                     this.modelSizes.set(name, diameter);
 
+                    // Check if model has skinned meshes - if so, store a pristine clone
+                    // This clone is used for corpses/peers/AI to avoid inheriting animation poses
+                    let hasSkeleton = false;
+                    gltf.scene.traverse(child => {
+                        if (child.isSkinnedMesh) hasSkeleton = true;
+                    });
+                    if (hasSkeleton) {
+                        this.pristineClones.set(name, SkeletonUtils.clone(gltf.scene));
+                    }
+
                     resolve(gltf.scene);
                 },
                 undefined,
@@ -565,6 +583,16 @@ class ModelManager {
      */
     isModelLoaded(name) {
         return this.models.has(name);
+    }
+
+    /**
+     * Get the clone source for a model (pristine clone for skinned models, original for others)
+     * Use this when cloning models to avoid inheriting animation poses from the main player
+     * @param {string} name - Model identifier
+     * @returns {THREE.Object3D|null}
+     */
+    getCloneSource(name) {
+        return this.pristineClones.get(name) || this.models.get(name) || null;
     }
 
     /**
@@ -664,7 +692,7 @@ class ObjectPlacer {
      * @returns {THREE.Object3D|null} Created instance or null
      */
     createInstance(modelType, position, scale, rotationY, scene = null) {
-        const model = this.modelManager.getModel(modelType);
+        const model = this.modelManager.getCloneSource(modelType);
 
         if (!model) {
             console.warn(`Model ${modelType} not loaded`);

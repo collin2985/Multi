@@ -67,14 +67,15 @@ export class AIEnemy {
     }
 
     setupModel() {
-        const manGLTF = modelManager.getGLTF('man');
-        if (!manGLTF) {
+        const cloneSource = modelManager.getCloneSource('man');
+        const manGLTF = modelManager.getGLTF('man'); // Need GLTF for animations
+        if (!cloneSource || !manGLTF) {
             console.error('Man model not loaded for AI enemy');
             return;
         }
 
-        // Clone the man model for AI enemy
-        const aiEnemyMesh = SkeletonUtils.clone(manGLTF.scene);
+        // Clone from pristine source to avoid inheriting animation poses from main player
+        const aiEnemyMesh = SkeletonUtils.clone(cloneSource);
         aiEnemyMesh.scale.set(this.scale, this.scale, this.scale);
 
         // PERFORMANCE: Single-pass traverse - setup materials AND find hand bone in one traversal

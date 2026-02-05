@@ -179,8 +179,71 @@ function generateBanditCampfireLoot(campfireId) {
     return items;
 }
 
+/**
+ * Generate loot for a dead bandit/militia corpse (deterministic based on entity ID)
+ * Used when bandits or militia die - creates lootable corpse inventory
+ * @param {string} entityId - Unique entity identifier for deterministic loot
+ * @param {boolean} hasRifle - Whether the entity had a rifle (true by default)
+ * @returns {object} { items: [], slingItem: rifle|null }
+ */
+function generateBanditDeathLoot(entityId, hasRifle = true) {
+    const rng = createSeededRNG(entityId);
+    const items = [];
+
+    // Coins (always, 5-25)
+    items.push({
+        id: `${entityId}_coins`,
+        type: 'coin',
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+        quantity: Math.floor(rng() * 20) + 5
+    });
+
+    // Ammo (if rifle, 70% chance, 3-12)
+    if (hasRifle && rng() < 0.7) {
+        items.push({
+            id: `${entityId}_ammo`,
+            type: 'ammo',
+            x: 1,
+            y: 0,
+            width: 1,
+            height: 1,
+            quantity: Math.floor(rng() * 10) + 3
+        });
+    }
+
+    // Food (25% chance - cooked meat)
+    if (rng() < 0.25) {
+        const meatQuality = Math.floor(rng() * 40) + 30;  // 30-70 quality
+        items.push({
+            id: `${entityId}_food`,
+            type: 'cookedmeat',
+            x: 2,
+            y: 0,
+            width: 1,
+            height: 1,
+            quality: meatQuality,
+            durability: calculateFoodDurability('cookedmeat', meatQuality)
+        });
+    }
+
+    // Sling rifle (if entity had one)
+    const slingItem = hasRifle ? {
+        id: `${entityId}_rifle`,
+        type: 'rifle',
+        quality: Math.floor(rng() * 35) + 15,  // 15-50 quality
+        durability: Math.floor(rng() * 25) + 10,  // 10-35 durability
+        rotation: 90
+    } : null;
+
+    return { items, slingItem };
+}
+
 module.exports = {
     createSeededRNG,
     generateBanditTentLoot,
-    generateBanditCampfireLoot
+    generateBanditCampfireLoot,
+    generateBanditDeathLoot
 };

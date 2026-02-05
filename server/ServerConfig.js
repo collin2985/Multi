@@ -95,7 +95,8 @@ const CONFIG = {
             horse: { vegetables: 1 },
             cart: { oakplank: 1 },
             artillery: { oakplank: 1, parts: 1 },
-            wall: { chiseledlimestone: 1 }
+            wall: { chiseledlimestone: 1 },
+            warehouse: { oakplank: 1, chiseledlimestone: 1, tile: 1 }
         },
 
         // Default materials if structure not found in MATERIALS
@@ -112,7 +113,8 @@ const CONFIG = {
             ironworks: '2x2construction',
             blacksmith: '2x2construction',
             bakery: 'construction',
-            stonemason: '2x2construction'
+            stonemason: '2x2construction',
+            warehouse: '2x2construction'
         },
 
         // Quality caps for structures (limits max quality regardless of materials)

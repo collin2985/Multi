@@ -889,6 +889,12 @@ class MultiplayerGame {
                     this.handleUnloadCrateFromSailboat();
                 }
             },
+            onLoadWarehouseCrate: () => {
+                this.handleLoadCrateToWarehouse();
+            },
+            onUnloadWarehouseCrate: () => {
+                this.handleUnloadCrateFromWarehouse();
+            },
             onLoadShipArtillery: () => {
                 this.handleLoadArtilleryToShip();
             },
@@ -7765,6 +7771,109 @@ class MultiplayerGame {
             console.warn('[Crate] Boat unload failed:', error.message);
             ui.showToast(error.message || 'Failed to unload crate', 'warning');
         }
+    }
+
+    /**
+     * Load a nearby crate into a warehouse
+     */
+    handleLoadCrateToWarehouse() {
+        const nearestWarehouse = this.gameState.nearestWarehouse;
+        const nearestCrate = this.gameState.nearestLoadableCrate;
+
+        // Validate warehouse
+        if (!nearestWarehouse || !nearestWarehouse.object) {
+            ui.showToast('No warehouse nearby', 'warning');
+            return;
+        }
+
+        const warehouse = nearestWarehouse.object;
+        const warehouseData = warehouse.userData;
+
+        // Check ownership
+        if (warehouseData.owner !== this.gameState.accountId && warehouseData.owner !== this.gameState.clientId) {
+            ui.showToast('Not your warehouse', 'warning');
+            return;
+        }
+
+        // Check capacity (max 4 crates)
+        const loadedCrates = warehouseData.loadedCrates || [];
+        if (loadedCrates.length >= 4) {
+            ui.showToast('Warehouse is full', 'warning');
+            return;
+        }
+
+        // Validate crate
+        if (!nearestCrate || !nearestCrate.object) {
+            ui.showToast('No crate nearby', 'warning');
+            return;
+        }
+
+        const crate = nearestCrate.object;
+        const crateId = crate.userData.objectId;
+        const crateChunkKey = crate.userData.chunkKey;
+
+        // Send load request to server
+        this.networkManager.sendMessage('warehouse_load_crate', {
+            warehouseId: warehouseData.objectId,
+            warehouseChunkKey: warehouseData.chunkKey,
+            crateId: crateId,
+            crateChunkKey: crateChunkKey,
+            clientId: this.gameState.clientId
+        });
+    }
+
+    /**
+     * Unload a crate from a warehouse
+     */
+    handleUnloadCrateFromWarehouse() {
+        const nearestWarehouse = this.gameState.nearestWarehouse;
+
+        // Validate warehouse
+        if (!nearestWarehouse || !nearestWarehouse.object) {
+            ui.showToast('No warehouse nearby', 'warning');
+            return;
+        }
+
+        const warehouse = nearestWarehouse.object;
+        const warehouseData = warehouse.userData;
+
+        // Check ownership
+        if (warehouseData.owner !== this.gameState.accountId && warehouseData.owner !== this.gameState.clientId) {
+            ui.showToast('Not your warehouse', 'warning');
+            return;
+        }
+
+        // Check if warehouse has crates
+        const loadedCrates = warehouseData.loadedCrates || [];
+        if (loadedCrates.length === 0) {
+            ui.showToast('Warehouse is empty', 'warning');
+            return;
+        }
+
+        // Find a clear drop position using collision-checked grid search
+        const warehousePos = warehouse.position;
+        const playerPos = this.camera.position;
+
+        // Heading from warehouse toward player so search prioritizes outside the building
+        const heading = Math.atan2(playerPos.x - warehousePos.x, playerPos.z - warehousePos.z);
+
+        const dropPos = this.mobileEntitySystem.findCrateLandingPosition(
+            warehousePos, heading, this.physicsManager
+        );
+
+        if (!dropPos) {
+            ui.showToast('No room to place crate nearby', 'warning');
+            return;
+        }
+
+        // Send unload request to server
+        this.networkManager.sendMessage('warehouse_unload_crate', {
+            warehouseId: warehouseData.objectId,
+            warehouseChunkKey: warehouseData.chunkKey,
+            dropPosition: [dropPos.x, dropPos.y, dropPos.z],
+            dropRotation: heading,
+            clientId: this.gameState.clientId
+        });
     }
 
     /**

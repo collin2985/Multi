@@ -143,9 +143,9 @@ export class CraftingSystem {
             ui.updateActionStatus(result.message, 3000);
         }
 
-        // Re-render inventory
+        // Re-render inventory and construction section
         if (this.gameState.inventoryOpen) {
-            this.inventoryUI.renderInventory();
+            this.inventoryUI.refresh();
         }
 
         // Clear active action
@@ -403,9 +403,9 @@ export class CraftingSystem {
                 item2.quantity = total - maxStack;
             }
 
-            // Re-render inventory
+            // Re-render inventory and construction section
             if (this.gameState.inventoryOpen) {
-                this.inventoryUI.renderInventory();
+                this.inventoryUI.refresh();
             }
 
             return { success: true, message: 'Ammo stacked', instant: true };
@@ -612,9 +612,9 @@ export class CraftingSystem {
             result.message = 'Inventory full';
         }
 
-        // Re-render inventory
+        // Re-render inventory and construction section
         if (this.gameState.inventoryOpen) {
-            this.inventoryUI.renderInventory();
+            this.inventoryUI.refresh();
         }
 
         // Clear active action

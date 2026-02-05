@@ -642,6 +642,51 @@ export class DeathManager {
             }
         }
 
+        // Create corpse structure with player's inventory (local player only)
+        // Delay until after death animation (600ms) so rotation is final
+        if (!isAI && !isPeer) {
+            // Copy inventory NOW (before it gets cleared on respawn)
+            const corpseInventory = {
+                items: [...this.gameState.inventory.items],
+                slingItem: this.gameState.slingItem ? { ...this.gameState.slingItem } : null
+            };
+
+            // Get fall direction from death data
+            const fallDirection = deathData?.fallDirection || 1;
+
+            // Get shirt color from faction
+            const shirtColor = CONFIG.FACTION_COLORS?.[this.gameState.factionId]?.shirt ||
+                               CONFIG.FACTION_COLORS?.default?.shirt || 0x5a5a5a;
+
+            // Capture display name now
+            const displayName = this.gameState.playerName || 'Player';
+
+            // Delay corpse creation until death animation completes
+            // This ensures rotation.y is captured at final pose
+            setTimeout(() => {
+                const playerPos = this.game.playerObject.position;
+                const { chunkX, chunkZ } = ChunkCoordinates.worldToChunk(playerPos.x, playerPos.z);
+                const chunkId = `chunk_${chunkX},${chunkZ}`;
+
+                this.networkManager.sendMessage('create_corpse', {
+                    position: [playerPos.x, playerPos.y, playerPos.z],
+                    rotation: this.game.playerObject.rotation.y,
+                    fallDirection: fallDirection,
+                    shirtColor: shirtColor,
+                    modelType: 'man',
+                    corpseType: 'player',
+                    displayName: displayName,
+                    inventory: corpseInventory,
+                    chunkId: chunkId
+                });
+
+                // Hide player mesh now that corpse structure exists
+                if (this.game.playerObject?.children[0]) {
+                    this.game.playerObject.children[0].visible = false;
+                }
+            }, 600);
+        }
+
         // Stop any ongoing animations using DeathSystem
         let mixer = null;
         let idleAction = null;
@@ -715,323 +760,20 @@ export class DeathManager {
         if (this._isRespawning) return;
         this._isRespawning = true;
 
-        // Fully disconnect P2P + WebSocket for clean respawn (like soft page reload)
-        // MUST await to ensure disconnect completes before reconnect attempt
-        await this.networkManager.disconnectForRespawn();
-
-        // Clear any mobile entity state (in case it wasn't cleared on death)
-        const mobileState = this.gameState.vehicleState;
-        if (mobileState.isActive()) {
-            console.warn('[Respawn] Mobile entity state still active - forcing cleanup');
-            // Clear occupancy so entity can be remounted (ISSUE-044 fix)
-            if (mobileState.pilotingEntityId && this.game.mobileEntitySystem) {
-                this.game.mobileEntitySystem.clearOccupied(mobileState.pilotingEntityId);
-            }
-            // Stop horse sound if still playing
-            if (mobileState.horseSound?.isPlaying) {
-                mobileState.horseSound.stop();
-                mobileState.horseSound = null;
-            }
-            mobileState.forceReset('respawn cleanup');
-
-            // Clean up activeVehicle (fixes stale boat reference when boarding ship as gunner)
-            if (this.game.activeVehicle) {
-                if (this.game.activeVehicle.removeDebugVisualization) {
-                    this.game.activeVehicle.removeDebugVisualization(this.game.scene);
-                }
-                if (this.game.activeVehicle.removeColliderDebugVisualization) {
-                    this.game.activeVehicle.removeColliderDebugVisualization(this.game.scene);
-                }
-                this.game.activeVehicle.cleanup();
-                this.game.activeVehicle = null;
-            }
-        }
-        // Extra safety: stop horse sound even if state was already inactive
-        if (mobileState.horseSound?.isPlaying) {
-            mobileState.horseSound.stop();
-            mobileState.horseSound = null;
-        }
-        this.gameState.nearestMobileEntity = null;
-        this.gameState.nearestLandVehicle = null;
-        this.gameState.nearestWaterVehicle = null;
-
-        // CRITICAL: Also clear towed entity state (safety net in case death didn't clear it)
-        const towedEntityCleanup = this.gameState.vehicleState.towedEntity;
-        if (towedEntityCleanup?.isAttached) {
-            console.warn('[Respawn] Towed entity still attached - forcing cleanup');
-            if (this.game.mobileEntitySystem && towedEntityCleanup.id) {
-                this.game.mobileEntitySystem.clearOccupied(towedEntityCleanup.id);
-            }
-            this.gameState.vehicleState.clearTowedEntity();
-        }
-        this.gameState.nearestTowableEntity = null;
-
-        // CRITICAL: Also clear crate state (safety net)
-        const vehicleState = this.gameState.vehicleState;
-        // Clear multi-crate array first
-        if (vehicleState.shipCrates?.length > 0) {
-            console.warn(`[Respawn] ${vehicleState.shipCrates.length} crates still loaded - forcing cleanup`);
-            for (const slot of vehicleState.shipCrates) {
-                if (this.game.mobileEntitySystem && slot.crateId) {
-                    this.game.mobileEntitySystem.clearOccupied(slot.crateId);
-                }
-            }
-            vehicleState.clearShipCargo();
-        }
-        this.gameState.nearestLoadableCrate = null;
-
-        // CRITICAL: Clear climbing state (safety net in case death/disconnect interrupted descent)
-        this.gameState.climbingState.isClimbing = false;
-        this.gameState.climbingState.climbingOutpost = null;
-        this.gameState.climbingState.outpostId = null;
-        this.gameState.climbingState.climbingStartTime = null;
-        this.gameState.climbingState.climbingPhase = null;
-        this.gameState.climbingState.originalPosition = null;
-        this.gameState.climbingState.targetPosition = null;
-        this.gameState.climbingState.dieAfterDescent = false;
-        this.gameState.climbingState.pendingDeathData = null;
-
-        // NOTE: Death state (isDead, etc.) is NOT reset here
-        // Player stays "dead" and protected until respawnToPosition() teleports them
-
-        // CRITICAL: Cancel any active actions (chiseling, chopping, building, etc.)
-        if (this.gameState.activeAction) {
-            // Stop any active sounds
-            if (this.gameState.activeAction.sound) {
-                this.gameState.activeAction.sound.stop();
-            }
-            // Stop chopping animation
-            if (this.game.choppingAction) {
-                this.game.choppingAction.stop();
-            }
-            // Clear active action state
-            this.gameState.activeAction = null;
-        }
-
-        // CRITICAL: Close inventory and clear all inventory UI state
-        if (this.gameState.inventoryOpen && this.inventoryUI) {
-            this.inventoryUI.toggleInventory(); // Close inventory
-        }
-        // Clear inventory UI interaction state
-        if (this.inventoryUI) {
-            this.inventoryUI.chiselTarget = null;
-            this.inventoryUI.combineTarget = null;
-            this.inventoryUI.inventoryPickedItem = null;
-            this.inventoryUI.crateInventory = null;
-        }
-
-        // Clear inventory (starting tools given only for random spawns, handled in spawn callback)
-        this.gameState.inventory.items = [];
-        this.gameState.slingItem = null;  // Clear rifle on death
-        if (this.game.playerInventory) {
-            this.game.playerInventory.itemsRef = this.gameState.inventory.items;
-        }
-        if (this.inventoryUI) {
-            this.inventoryUI.renderInventory();
-        }
-
-        // CRITICAL: Reset object tracking (clear nearestObject and nearestStructure)
-        this.gameState.nearestObject = null;
-        this.gameState.nearestObjectDistance = Infinity;
-        this.gameState.nearestStructure = null;
-        this.gameState.nearestStructureDistance = Infinity;
-        this.gameState.nearestDeerCorpse = null;
-        this.gameState.nearestBrownbearCorpse = null;
-        this.gameState.clickedTargetObjectId = null;
-
-        // CRITICAL: Reset all gathering-related UI states to hide stale buttons
-        this.gameState.onGrass = false;
-        this.gameState.mushroomAvailable = false;
-        this.gameState.vegetableSeedsAvailable = false;
-        this.gameState.limestoneAvailable = false;
-        this.gameState.seedsAvailable = false;
-        this.gameState.seedTreeType = null;
-        this.gameState.vegetablesGatherAvailable = false;
-        this.gameState.hempSeedsAvailable = false;
-        this.gameState.hempGatherAvailable = false;
-        this.gameState.nearWater = false;
-        this.gameState.wasMoving = false;
-        this.gameState.harvestCooldown = null; // Clear harvest cooldown
-
-        // Clear UI elements on respawn
-        ui.hideStructurePanel(); // Hide structure panel
-        ui.updateChoppingProgress(0); // Clear any progress indicators
-        ui.updatePlacementStatus(null); // Clear placement status
-
-        // Close build menu if open
-        if (this.game.buildMenu && this.game.buildMenu.isOpen()) {
-            this.game.buildMenu.toggleBuildMenu();
-        }
-
-        // Reset hunger state based on whether player has food
-        if (this.playerHunger) {
-            this.playerHunger.hungerDebt = 0; // Clear debt on respawn
-            this.playerHunger.twoMinuteWarningShown = false; // Reset starvation warning flag
-
-            // Check if player has food in inventory
-            const foodItems = this.playerHunger.getFoodItemsFromInventory();
-            if (foodItems.length > 0) {
-                // Player has food - reset to fed state
-                this.playerHunger.starvationStartTime = null;
-                this.playerHunger.hungerState = 'fed';
-                this.playerHunger.updateFoodStatusUI(foodItems);
-            } else {
-                // No food - start hungry
-                this.playerHunger.starvationStartTime = Date.now();
-                this.playerHunger.hungerState = 'hungry';
-                ui.showToast('You are hungry! Find food!', 'warning', 5000);
-            }
-
-            // Restart the hunger update loop (it stops when player dies)
-            this.playerHunger.start();
-        }
-
-        // CRITICAL: Reset WASD keyboard state to prevent residual movement after respawn
-        if (this.game.wasdKeys) {
-            this.game.wasdKeys.w = false;
-            this.game.wasdKeys.a = false;
-            this.game.wasdKeys.s = false;
-            this.game.wasdKeys.d = false;
-        }
-
-        // CRITICAL: Reset player controller movement state
-        if (this.game.playerController) {
-            this.game.playerController.wasdDirection?.set(0, 0, 0);
-            this.game.playerController.waterReversalLockout = false;
-        }
-
-        // CRITICAL: Reset ambient sound combat timer to restore ambient sounds immediately
-        if (this.game.ambientSoundSystem) {
-            this.game.ambientSoundSystem.lastCombatTime = 0;
-        }
-
-        // CRITICAL: Clear pending NPC transactions that might fire from previous life
-        this.gameState.pendingProprietorSale = null;
-        this.gameState.pendingMilitiaRequest = null;
-
-        // CRITICAL: Close chat input if open to prevent blocked movement keys
-        if (this.game.chatInputOpen && this.game.closeChatInput) {
-            this.game.closeChatInput();
-        }
-
-        // Clear NPC proximity states (will be recalculated at new position)
-        this.gameState.nearMerchant = null;
-        this.gameState.nearTrapper = null;
-        this.gameState.nearBaker = null;
-        this.gameState.nearGardener = null;
-        this.gameState.nearWoodcutter = null;
-        this.gameState.nearMiner = null;
-        this.gameState.nearFisherman = null;
-        this.gameState.nearBlacksmith = null;
-        this.gameState.nearIronWorker = null;
-        this.gameState.nearTileWorker = null;
-        this.gameState.nearStoneMason = null;
-
-        // Reset and show tasks panel on respawn
-        if (this.game.tasksPanel) {
-            if (this.gameState.isGuest) {
-                // Guests: fresh start every spawn
-                this.game.tasksPanel.reset();
-            } else {
-                // Accounts: reload from server data
-                this.game.tasksPanel.loadState(); // Clears current state
-                if (this.gameState.playerData) {
-                    this.game.tasksPanel.checkServerClosed(this.gameState.playerData);
-                }
-            }
-            // Show panel if not closed
-            if (!this.game.tasksPanel.isClosed) {
-                this.game.tasksPanel.show();
-            }
-        }
-
-        // Reconnect to server BEFORE showing spawn screen so friends list works
-        // Show loading screen during reconnect
-        if (this.game.loadingScreen) {
-            this.game.loadingScreen.show();
-            this.game.loadingScreen.setConnecting();
-        }
-
-        try {
-            await this.networkManager.reconnectForRespawnAsync();
-        } catch (error) {
-            console.error('[Respawn] Failed to reconnect:', error);
-            // Hide loading screen and show spawn screen with error
-            if (this.game.loadingScreen) {
-                this.game.loadingScreen.hide();
-            }
-            if (this.game.spawnScreen) {
-                this.game.spawnScreen.show({ isRespawn: true, kickMessage: 'Failed to reconnect to server. Please try again.' });
-            }
-            this._isRespawning = false;
-            return;
-        }
-
-        // Hide loading screen now that we're connected
-        if (this.game.loadingScreen) {
-            this.game.loadingScreen.hide();
-        }
-
-        // Show spawn screen for respawn selection
-        // The actual teleport happens in respawnToPosition() after selection
-        if (this.game.spawnScreen) {
-            // Check for P2P kick message (set by NetworkManager on P2P failure)
-            const kickMessage = this.game._p2pKickMessage || null;
-            if (kickMessage) {
-                delete this.game._p2pKickMessage;  // Clear after use
-            }
-            this.game.spawnScreen.show({ isRespawn: true, kickMessage });
-            return; // Exit here - respawnToPosition will be called after selection
-        }
-
-        // Fallback if spawn screen not available - use faction random spawn
-        const factionId = this.gameState.factionId;
-        let spawnX = 0;
-        let spawnZ;
-
-        if (factionId === null) {
-            spawnZ = -1500 + Math.random() * 3000;
-        } else {
-            const zone = this.gameState.FACTION_ZONES[factionId];
-            spawnZ = zone.minZ + Math.random() * (zone.maxZ - zone.minZ);
-        }
-
-        const spawnY = this.game.getGroundHeightAt(spawnX, spawnZ);
-        this.game.playerObject.position.set(spawnX, spawnY, spawnZ);
-
-        // Re-enable movement
-        this.gameState.isMoving = false;
-
-        // CRITICAL: Stop all animations and reset animation mixer completely
-        if (this.game.animationMixer) {
-            this.game.animationMixer.stopAllAction();
-            this.game.animationMixer.update(0); // Clear any pending updates
-        }
-
-        // CRITICAL: Reset player mesh rotation BEFORE starting any animations
-        // Death animation rotates the first child (player mesh), not the parent group
-        if (this.game.playerObject && this.game.playerObject.children[0]) {
-            this.game.playerObject.children[0].rotation.set(0, 0, 0);
-        }
-
-        // Start idle animation fresh
-        if (this.game.idleAction) {
-            this.game.idleAction.reset();
-            this.game.idleAction.play();
-        }
-
-        // Force immediate mixer update to apply idle pose
-        if (this.game.animationMixer) {
-            this.game.animationMixer.update(0.001);
-        }
-
-        // Broadcast respawn to peers
+        // Best-effort: tell peers we're disconnecting for respawn
         this.networkManager.broadcastP2P({
-            type: 'player_respawn',
-            payload: {
-                position: [spawnX, spawnY, spawnZ]
-            }
+            type: 'player_death_disconnect',
+            payload: { clientId: this.gameState.clientId }
         });
+
+        // Brief delay to let the message send, then reload.
+        // Page reload cleanly tears down all WebSocket + WebRTC connections,
+        // wipes all client state, and shows the spawn screen fresh
+        // (saved session was already cleared on death in killEntity).
+        setTimeout(() => {
+            window._allowNavigation = true;
+            window.location.reload();
+        }, 150);
     }
 
     /**
@@ -1127,6 +869,11 @@ export class DeathManager {
         this.game.deathReason = null;
         this._isRespawning = false;  // Clear debounce flag
         this.playerCombat.respawn();
+
+        // Show player mesh again (was hidden when corpse was created)
+        if (this.game.playerObject?.children[0]) {
+            this.game.playerObject.children[0].visible = true;
+        }
 
         // CRITICAL: Reset CombatHUD state on respawn
         // If player had "Hold Fire" enabled before death, it persists and breaks all combat

@@ -597,7 +597,7 @@ export const CONFIG = {
             'tent', 'campfire', 'outpost', 'house', 'crate', 'market', 'dock',
             'tileworks', 'ironworks', 'blacksmith', 'bakery', 'gardener',
             'miner', 'woodcutter', 'stonemason', 'horse', 'cart', 'boat', 'sailboat', 'ship2', 'ship', 'wall',
-            'bearden', 'artillery', 'deertree'
+            'bearden', 'artillery', 'deertree', 'warehouse'
         ]),
 
         // Quality ranges (affects durability/resources)
@@ -738,6 +738,7 @@ export const CONFIG = {
             miner: { width: 1.0, depth: 1.0, height: 3.0 },  // 1x1 decorative building
             woodcutter: { width: 1.0, depth: 1.0, height: 3.0 },  // 1x1 decorative building
             stonemason: { width: 2.0, depth: 2.0, height: 3.0 },  // 2x2 decorative building
+            warehouse: { width: 2.0, depth: 2.0, height: 4.0 },  // 2x2 storage building
             road: { width: 1.0, depth: 2.0, height: 0.1 },  // Pill shape: 1 unit wide, 2 units long
             market: { width: 2.0, depth: 8.0, height: 12.0 },
 
@@ -753,6 +754,7 @@ export const CONFIG = {
             horse: { radius: 0.15, height: 2.0 },
             cart: { radius: 0.25, height: 3.0 },  // Scaled 2x
             artillery: { radius: 0.25, height: 2.0 },  // Cylindrical like cart
+            corpse: { width: 0.5, depth: 1.5, height: 0.3 },  // Lying body dimensions
 
             // Natural objects (trees use radius-based collision)
             // Trees - cylindrical bounds (reduced by 20%)
@@ -810,7 +812,8 @@ export const CONFIG = {
             gardener: 'construction',
             miner: 'construction',
             woodcutter: 'construction',
-            stonemason: '2x2construction'
+            stonemason: '2x2construction',
+            warehouse: '2x2construction'
             // Add more mappings here as needed (e.g., house: 'houseconstruction')
         },
 
@@ -918,6 +921,11 @@ export const CONFIG = {
             },
             wall: {
                 chiseledlimestone: 1   // Stone wall (limestone or sandstone applies tint)
+            },
+            warehouse: {
+                oakplank: 1,
+                chiseledlimestone: 1,
+                tile: 1
             }
         },
 
@@ -1004,6 +1012,11 @@ export const CONFIG = {
             fisherman: {
                 height: 3.0,  // Height of fisherman model
                 inventorySize: { rows: 4, cols: 4 }  // Smaller inventory for specialized processing
+            },
+            corpse: {
+                height: 0.5,
+                inventorySize: { rows: 10, cols: 5 },  // Same as player backpack
+                hasSlingSlot: true  // Can have rifle in sling
             }
         },
 

@@ -1674,6 +1674,16 @@ export class GameStateManager extends EventEmitter {
             this.removePeerFromChunkRegistry(fromPeer, peerData);
         }
 
+        // Hide avatar after death animation completes (600ms)
+        // Corpse structure will be the sole visual representation
+        if (avatar) {
+            setTimeout(() => {
+                if (avatar) {
+                    avatar.visible = false;
+                }
+            }, 600);
+        }
+
         // Emit event
         this.emit('player_death', { peerId: fromPeer });
     }
@@ -1839,19 +1849,22 @@ export class GameStateManager extends EventEmitter {
             this.game.nameTagManager.setEntityAlive(`peer_${fromPeer}`);
         }
 
+        // Move to respawn position FIRST (before making visible)
+        if (payload.position) {
+            avatar.position.fromArray(payload.position);
+        }
+
         // Reset mesh rotation to upright
         // Death animation rotates avatar.rotation.x/z directly for peers (see DeathSystem.js)
-        // Also reset children[0] rotation in case of nested mesh issues
         avatar.rotation.x = 0;
         avatar.rotation.z = 0;
         if (avatar.children[0]) {
             avatar.children[0].rotation.set(0, 0, 0);
         }
 
-        // Move to respawn position
-        if (payload.position) {
-            avatar.position.fromArray(payload.position);
-        }
+        // Make avatar visible again (was hidden after death animation)
+        // Now safe because we already moved it to new position
+        avatar.visible = true;
 
         // Restart idle/walk animation if available
         if (avatar.userData.walkAction) {
