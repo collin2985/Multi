@@ -22,10 +22,14 @@ export class SettingsPanel {
         // Load saved proximate status setting or default to false
         this.proximateStatusVisible = this.loadProximateStatus();
 
+        // Load saved nametag visibility setting or default to true
+        this.nametagsVisible = this.loadNametags();
+
         this.createElements();
         this.applyVolume();
         this.applyDebugInfo();
         this.applyProximateStatus();
+        this.applyNametags();
     }
 
     loadVolume() {
@@ -81,6 +85,19 @@ export class SettingsPanel {
             if (nearestObject) nearestObject.style.display = 'none';
             if (structurePanel) structurePanel.style.display = 'none';
         }
+    }
+
+    loadNametags() {
+        const saved = localStorage.getItem('nametagsVisible');
+        return saved !== 'false'; // Default to true
+    }
+
+    saveNametags() {
+        localStorage.setItem('nametagsVisible', this.nametagsVisible.toString());
+    }
+
+    applyNametags() {
+        window.nametagsVisible = this.nametagsVisible;
     }
 
     /**
@@ -194,6 +211,18 @@ export class SettingsPanel {
             </div>
 
             <div style="margin-bottom: 20px;">
+                <label style="color: #D4C4A8; font-size: 14px; display: flex; align-items: center; cursor: pointer;">
+                    <input type="checkbox" id="nametagsToggle" ${this.nametagsVisible ? 'checked' : ''} style="
+                        width: 18px;
+                        height: 18px;
+                        margin-right: 10px;
+                        cursor: pointer;
+                    ">
+                    Show Player Nametags
+                </label>
+            </div>
+
+            <div style="margin-bottom: 20px;">
                 <button id="settingsReportBugBtn" style="
                     width: 100%;
                     padding: 10px;
@@ -282,6 +311,15 @@ export class SettingsPanel {
                 this.proximateStatusVisible = e.target.checked;
                 this.applyProximateStatus();
                 this.saveProximateStatus();
+            };
+        }
+
+        const nametagsToggle = document.getElementById('nametagsToggle');
+        if (nametagsToggle) {
+            nametagsToggle.onchange = (e) => {
+                this.nametagsVisible = e.target.checked;
+                this.applyNametags();
+                this.saveNametags();
             };
         }
 

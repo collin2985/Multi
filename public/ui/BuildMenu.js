@@ -549,8 +549,10 @@ export class BuildMenu {
         if (!type || !MARKET_STRUCTURES.includes(type)) return '';
 
         const dist = this._findNearestMarketDistance(placement.position);
-        if (dist === null) return ' | No market nearby';
-        return ` | Market: ${Math.round(dist)}/20`;
+        if (dist === null) return ' | <span style="color:#FF6B6B">No market nearby</span>';
+        const rounded = Math.round(dist);
+        if (rounded >= 20) return ` | <span style="color:#FF6B6B">Market: ${rounded}/20</span>`;
+        return ` | Market: ${rounded}/20`;
     }
 
     /**

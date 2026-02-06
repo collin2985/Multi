@@ -381,6 +381,15 @@ export class NameTagManager {
      * @param {THREE.Vector3} playerPosition - Player position for distance check
      */
     updateVisibility(playerPosition) {
+        if (window.nametagsVisible === false) {
+            for (const [, tagData] of this.tags) {
+                if (tagData.sprite.visible) tagData.sprite.visible = false;
+                if (tagData.chatSprite?.visible) tagData.chatSprite.visible = false;
+                tagData.visible = false;
+            }
+            return;
+        }
+
         for (const [entityId, tagData] of this.tags) {
             const { sprite, mesh, chatSprite } = tagData;
 

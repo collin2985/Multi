@@ -3679,12 +3679,12 @@ export const ui = {
 
         if (message === null) {
             placementEl.style.display = 'none';
-            placementEl.textContent = '';
+            placementEl.innerHTML = '';
             if (cancelHintEl) cancelHintEl.style.display = 'none';
             return;
         }
 
-        placementEl.textContent = message;
+        placementEl.innerHTML = message;
         placementEl.style.display = 'block';
         placementEl.className = isValid ? '' : 'invalid';
         if (cancelHintEl) cancelHintEl.style.display = 'block';
