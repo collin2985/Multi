@@ -632,7 +632,8 @@ export class MarketUI {
             statMultiplier = quality / 100;
         }
 
-        const finalPrice = Math.floor(basePrice * supplyMultiplier * statMultiplier);
+        const minPrice = priceType === 'buy' ? 2 : 1;
+        const finalPrice = Math.max(minPrice, Math.floor(basePrice * supplyMultiplier * statMultiplier));
 
         return {
             price: finalPrice,

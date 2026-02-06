@@ -525,17 +525,58 @@ export class BuildMenu {
         if (!placement.active) return;
 
         if (!placement.isValid) {
-            ui.updatePlacementStatus(placement.invalidReason, false);
+            const distSuffix = this._getMarketDistanceSuffix(placement);
+            ui.updatePlacementStatus(placement.invalidReason + distSuffix, false);
             return;
         }
 
         const mode = this.getRotationMode();
+        const distSuffix = this._getMarketDistanceSuffix(placement);
 
         if (mode === 'manual') {
-            ui.updatePlacementStatus('Scroll/Q/E to rotate - Click to place', true);
+            ui.updatePlacementStatus('Scroll/Q/E to rotate - Click to place' + distSuffix, true);
         } else {
-            ui.updatePlacementStatus('Click to place', true);
+            ui.updatePlacementStatus('Click to place' + distSuffix, true);
         }
+    }
+
+    /**
+     * Get market distance suffix for placement status (only for worker/dock structures)
+     */
+    _getMarketDistanceSuffix(placement) {
+        const MARKET_STRUCTURES = ['tileworks', 'ironworks', 'blacksmith', 'bakery', 'gardener', 'miner', 'woodcutter', 'stonemason', 'fisherman', 'dock'];
+        const type = placement.structure?.type;
+        if (!type || !MARKET_STRUCTURES.includes(type)) return '';
+
+        const dist = this._findNearestMarketDistance(placement.position);
+        if (dist === null) return ' | No market nearby';
+        return ` | Market: ${Math.round(dist)}/20`;
+    }
+
+    /**
+     * Find distance to nearest market from a world position (2D, ignoring Y)
+     */
+    _findNearestMarketDistance(position) {
+        const { chunkX, chunkZ } = ChunkCoordinates.worldToChunk(position.x, position.z);
+        let nearestDistSq = Infinity;
+
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dz = -1; dz <= 1; dz++) {
+                const key = `${chunkX + dx},${chunkZ + dz}`;
+                const markets = this.gameState?.getMarketsInChunk(key) || [];
+                for (let i = 0; i < markets.length; i++) {
+                    const market = markets[i];
+                    const mdx = market.position.x - position.x;
+                    const mdz = market.position.z - position.z;
+                    const distSq = mdx * mdx + mdz * mdz;
+                    if (distSq < nearestDistSq) {
+                        nearestDistSq = distSq;
+                    }
+                }
+            }
+        }
+
+        return nearestDistSq === Infinity ? null : Math.sqrt(nearestDistSq);
     }
 
     /**
