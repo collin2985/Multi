@@ -3,7 +3,45 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Guns Horses & Ships</title>
+    <title>Guns Horses & Ships — Free Multiplayer Browser Strategy Game</title>
+    <meta name="description" content="Guns Horses & Ships — a free multiplayer browser strategy game set in 1840. Build settlements, trade by sea, and fight for territory. No download, play free in your browser.">
+    <meta name="theme-color" content="#1a1510">
+    <link rel="canonical" href="https://playghs.onrender.com/">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="Guns Horses & Ships — Free Multiplayer Browser Strategy Game">
+    <meta property="og:description" content="Guns Horses & Ships — a free multiplayer browser strategy game set in 1840. Build settlements, trade by sea, and fight for territory. No download, play free in your browser.">
+    <meta property="og:image" content="https://playghs.onrender.com/images/background.webp">
+    <meta property="og:url" content="https://playghs.onrender.com/">
+    <meta property="og:type" content="website">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Guns Horses & Ships — Free Multiplayer Browser Strategy Game">
+    <meta name="twitter:description" content="Guns Horses & Ships — a free multiplayer browser strategy game set in 1840. Build settlements, trade by sea, and fight for territory. No download, play free in your browser.">
+    <meta name="twitter:image" content="https://playghs.onrender.com/images/background.webp">
+
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "VideoGame",
+        "name": "Guns Horses & Ships",
+        "description": "A free multiplayer browser strategy game set in 1840. Build settlements, trade by sea, craft tools, and fight for territory against bandits, bears, and rival factions.",
+        "genre": ["Strategy", "Survival", "Multiplayer"],
+        "playMode": ["MultiPlayer"],
+        "url": "https://playghs.onrender.com/",
+        "applicationCategory": "Game",
+        "operatingSystem": "Web Browser",
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+        }
+    }
+    </script>
+
     <style>
         * {
             margin: 0;
@@ -12,7 +50,12 @@
         }
         body {
             font-family: Georgia, serif;
-            background: url('images/background.webp') center center / cover no-repeat fixed;
+            background-color: #1a1510;
+            background-image: url('images/background.webp');
+            background-size: cover;
+            background-position: center center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
             color: #f5f1e8;
             min-height: 100vh;
             display: flex;
@@ -203,6 +246,35 @@
             background: #5c4a32;
             transform: scale(1.05);
         }
+        .about-section {
+            max-width: 600px;
+            margin-top: 50px;
+            border-top: 1px solid rgba(139, 115, 85, 0.4);
+            padding-top: 30px;
+            text-align: left;
+        }
+        .about-section h2 {
+            font-size: 1.5em;
+            color: #ffffff;
+            margin-bottom: 15px;
+            text-align: center;
+            text-shadow:
+                2px 2px 0 #000,
+                -2px -2px 0 #000,
+                2px -2px 0 #000,
+                -2px 2px 0 #000,
+                1px 1px 0 #000,
+                -1px -1px 0 #000,
+                1px -1px 0 #000,
+                -1px 1px 0 #000;
+        }
+        .about-section p {
+            font-size: 1em;
+            color: #d4cfc5;
+            line-height: 1.7;
+            margin-bottom: 12px;
+            text-shadow: 1px 1px 2px #000, -1px -1px 2px #000;
+        }
         .devlog {
             max-width: 600px;
             margin-top: 50px;
@@ -210,7 +282,7 @@
             padding-top: 30px;
             text-align: left;
         }
-        .devlog-title {
+        .devlog h2 {
             font-size: 1.5em;
             color: #ffffff;
             margin-bottom: 20px;
@@ -284,8 +356,10 @@
         <div class="buttons">
             <a href="client.html" class="btn btn-play">Play Now</a>
             <a href="wiki.html" class="btn btn-wiki">Game Wiki</a>
-            <a href="https://discord.gg/duRJ3GzvwF" target="_blank" class="btn btn-wiki">Discord</a>
-            <a href="https://www.reddit.com/r/GunsHorsesShips/" target="_blank" class="btn btn-wiki">Reddit</a>
+            <div style="display:flex;gap:20px">
+                <a href="https://discord.gg/duRJ3GzvwF" target="_blank" class="btn btn-wiki">Discord</a>
+                <a href="https://www.reddit.com/r/GunsHorsesShips/" target="_blank" class="btn btn-wiki">Reddit</a>
+            </div>
         </div>
 
         <div class="donate-section">
@@ -312,10 +386,18 @@
             <p>But beware - you are not alone. Bandits lurk in the hills. Bears prowl the forests. And across the great divide, another faction watches for the breath of your chimneys.</p>
             <p class="final">This land will not be given. It must be taken.</p>
         </div>
-        <div class="devlog">
-            <div class="devlog-title">Dev Log</div>
 
-            <div class="devlog-entry">
+        <div class="about-section">
+            <h2>About the Game</h2>
+            <p>Guns Horses & Ships is a free multiplayer browser game set on the 1840s frontier. No download required - jump straight into a persistent open world where every structure, trade route, and territory is built by players.</p>
+            <p>Harvest timber and stone, craft tools and weapons, cook food to survive, and build settlements from the ground up. Ride horses across the wilderness, sail ships along the coast, and trade goods at bustling player-run markets.</p>
+            <p>Choose a faction - Southguard or Northmen - and fight for control of the frontier. Recruit militia to defend your base, man artillery cannons, and wage PvP battles for territory. Whether you prefer base building, crafting, trading by sea, or multiplayer survival combat, there is a role for you in this world.</p>
+        </div>
+
+        <div class="devlog">
+            <h2>Dev Log</h2>
+
+            <div class="devlog-entry" id="devlog-2026-02-05">
                 <h3>Warehouses, Lootable Corpses & Fixes</h3>
                 <div class="devlog-date">February 5, 2026</div>
                 <ul>

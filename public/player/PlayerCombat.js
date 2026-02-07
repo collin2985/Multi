@@ -268,8 +268,8 @@ export class PlayerCombat {
         // Don't auto-shoot rifle while manning artillery
         if (this.gameState?.mannedArtillery?.manningState?.isManning) return;
 
-        // Don't shoot rifle while on a vehicle (boat/sailboat/ship)
-        if (this.gameState?.vehicleState?.isActive()) return;
+        // On boats: still detect threats for HUD, but don't shoot
+        const isOnBoat = this.gameState?.vehicleState?.isPilotingBoat() || false;
 
         // Check if hold fire is enabled (still do targeting, just don't shoot)
         const isHoldingFire = window.game?.combatHUD?.isHoldingFire;
@@ -506,8 +506,9 @@ export class PlayerCombat {
 
         // inCombatStance = enemy nearby (for HUD threat indicator)
         // showCombatAnimation = enemy nearby AND has rifle (for animation/rifle visibility)
+        // On boats: show HUD but no rifle animation (can't shoot from boats)
         this.inCombatStance = distance <= 35;
-        this.showCombatAnimation = distance <= 35 && this.hasRifle();
+        this.showCombatAnimation = distance <= 35 && this.hasRifle() && !isOnBoat;
 
         // Calculate shooting range based on height advantage
         const shootingRange = this.calculateShootingRange(playerPos.y, targetPos.y);
@@ -515,8 +516,8 @@ export class PlayerCombat {
         const canShootTiming = timeSinceLastShot >= this.shootInterval;
 
         // Shoot at enemy every 6 seconds when within shooting range
-        // Don't shoot if hold fire is enabled (targeting still happens for HUD)
-        if (distance <= shootingRange && canShootTiming && !isHoldingFire) {
+        // Don't shoot if hold fire is enabled or on a boat (targeting still happens for HUD)
+        if (distance <= shootingRange && canShootTiming && !isHoldingFire && !isOnBoat) {
             // Check if player has a rifle
             if (!this.hasRifle()) {
                 // No rifle - can't shoot but still in combat stance
@@ -588,13 +589,8 @@ export class PlayerCombat {
     update(enemies) {
         if (this.isDead) return;
 
-        // No combat while piloting a mobile entity (boat/cart/horse)
-        if (this.gameState?.vehicleState?.isActive()) {
-            this.inCombatStance = false;
-            this.showCombatAnimation = false;
-            this.shootTarget = null;
-            return;
-        }
+        // On boats: still detect threats for HUD, but don't shoot (handled below)
+        const isOnBoatLegacy = this.gameState?.vehicleState?.isPilotingBoat() || false;
 
         const now = Date.now();
         const playerPos = this.playerObject.position;
@@ -618,14 +614,15 @@ export class PlayerCombat {
         const distance = this.shootTarget.distance;
 
         // inCombatStance = enemy nearby (for HUD), showCombatAnimation = has rifle too (for animation)
+        // On boats: show HUD but no rifle animation
         this.inCombatStance = distance <= 35;
-        this.showCombatAnimation = distance <= 35 && this.hasRifle();
+        this.showCombatAnimation = distance <= 35 && this.hasRifle() && !isOnBoatLegacy;
 
         // Calculate shooting range based on height advantage
         const shootingRange = this.calculateShootingRange(playerPos.y, targetPos.y);
 
-        // Shoot at enemy every 6 seconds when within shooting range
-        if (distance <= shootingRange && now - this.lastShootTime >= this.shootInterval) {
+        // Shoot at enemy every 6 seconds when within shooting range (not on boats)
+        if (distance <= shootingRange && now - this.lastShootTime >= this.shootInterval && !isOnBoatLegacy) {
             this.shoot(playerPos, targetPos, distance);
         }
     }

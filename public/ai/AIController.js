@@ -1811,6 +1811,39 @@ export class AIController extends BaseAIController {
             }
         }
 
+        // 4. Add enemy structures as targets for artillery militia
+        const STRUCTURE_WHITELIST = new Set([
+            'tent', 'campfire', 'house', 'crate', 'outpost', 'market',
+            'dock', 'tileworks', 'ironworks', 'blacksmith', 'bakery', 'gardener',
+            'miner', 'woodcutter', 'stonemason', 'bearden',
+            'wall', 'fisherman', 'boat', 'sailboat', 'ship2', 'ship', 'cart', 'artillery'
+        ]);
+        const chunkObjects = this.game?.chunkManager?.chunkObjects;
+        if (chunkObjects) {
+            for (const key of chunkKeys) {
+                const objects = chunkObjects.get(key);
+                if (!objects) continue;
+                for (const obj of objects) {
+                    const ud = obj.userData;
+                    if (!ud || !ud.objectId) continue;
+                    if (!STRUCTURE_WHITELIST.has(ud.modelType)) continue;
+                    if (ud.isRuin || ud.isConstructionSite || ud._decayMessageSent) continue;
+
+                    if (ud.isBanditStructure) {
+                        // Bandit structures are always valid targets
+                        result.push(getTargetObj(ud.objectId, obj.position.x, obj.position.z, obj.position.y, 'structure'));
+                        continue;
+                    }
+
+                    // Player structures: require owner and enemy faction
+                    if (!ud.owner) continue;
+                    if (ud.ownerFactionId == null) continue;
+                    if (!this._isEnemyFaction(militiaFactionId, ud.ownerFactionId)) continue;
+                    result.push(getTargetObj(ud.objectId, obj.position.x, obj.position.z, obj.position.y, 'structure'));
+                }
+            }
+        }
+
         // Cache before returning
         this._militiaTargetCache.set(cacheKey, result);
         return result;
@@ -2005,7 +2038,13 @@ export class AIController extends BaseAIController {
         const range = ARTILLERY_COMBAT.RANGE || 28;
         const offset = entity._frameOffset || 0;
         if ((this._frameCount + offset) % config.IDLE_CHECK_INTERVAL === 0) {
-            const target = this._findClosestPlayer(entity.position, range, targetList);
+            // Two-pass priority: living targets first, structures as fallback
+            const livingTargets = targetList.filter(t => t.type !== 'structure');
+            let target = this._findClosestPlayer(entity.position, range, livingTargets);
+            if (!target) {
+                const structureTargets = targetList.filter(t => t.type === 'structure');
+                target = this._findClosestPlayer(entity.position, range, structureTargets);
+            }
             entity._cachedTarget = target;
             entity.target = target ? target.id : null;
         }
@@ -2029,6 +2068,8 @@ export class AIController extends BaseAIController {
                     aimX = livePos.x;
                     aimZ = livePos.z;
                 }
+            } else if (target.type === 'structure') {
+                // Structures don't move - use cached position
             } else if (target.type !== 'player') {
                 // For NPC targets (bandits, bears, militia), use current entity position
                 const npcEntity = this.entities.get(target.id);
@@ -2209,6 +2250,8 @@ export class AIController extends BaseAIController {
                 liveTargetZ = livePos.z;
                 liveTargetY = livePos.y || liveTargetY;
             }
+        } else if (target.type === 'structure') {
+            // Structures don't move - use cached position
         } else if (target.type !== 'player') {
             const npcEntity = this.entities.get(target.id);
             if (npcEntity?.position) {
@@ -2248,7 +2291,7 @@ export class AIController extends BaseAIController {
             this._calculateMissPosition(liveTarget, worldHeading, artilleryWorldPos);
         if (this.game?.effectManager && impactPos) {
             if (typeof this.game.effectManager.spawnArtilleryImpact === 'function') {
-                this.game.effectManager.spawnArtilleryImpact(impactPos, isHit);
+                this.game.effectManager.spawnArtilleryImpact(impactPos, isHit, target.type);
             }
         }
 
@@ -2314,6 +2357,18 @@ export class AIController extends BaseAIController {
             if (this.registry) {
                 this.registry.killEntity('bandit', target.id, entity.tentId);
             }
+        } else if (target.type === 'structure') {
+            // Find structure mesh and apply damage via game pipeline
+            const structureMesh = this._findStructureMesh(target.id);
+            if (structureMesh && this.game?.applyArtilleryStructureDamage) {
+                this.game.applyArtilleryStructureDamage({
+                    entity: structureMesh,
+                    type: 'structure',
+                    position: structureMesh.position,
+                    structureId: target.id,
+                    chunkKey: structureMesh.userData?.chunkKey
+                });
+            }
         } else if (target.type === 'player') {
             // Add to pending kills and broadcast
             entity.pendingKills.add(target.id);
@@ -2334,6 +2389,22 @@ export class AIController extends BaseAIController {
                 isArtillery: true,  // Flag to indicate artillery damage
             });
         }
+    }
+
+    /**
+     * Find a structure mesh by objectId in nearby chunks
+     * @param {string} objectId - Structure object ID
+     * @returns {THREE.Object3D|null}
+     */
+    _findStructureMesh(objectId) {
+        const chunkObjects = this.game?.chunkManager?.chunkObjects;
+        if (!chunkObjects) return null;
+        for (const objects of chunkObjects.values()) {
+            for (const obj of objects) {
+                if (obj.userData?.objectId === objectId) return obj;
+            }
+        }
+        return null;
     }
 
     /**

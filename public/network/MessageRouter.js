@@ -2819,7 +2819,7 @@ export class MessageRouter {
 
             // Show impact effect at structure position
             if (this.game?.effectManager && structure.position) {
-                this.game.effectManager.spawnArtilleryImpact(structure.position, true);
+                this.game.effectManager.spawnArtilleryImpact(structure.position, true, 'structure');
             }
 
             // Update UI if this is the nearest structure being viewed

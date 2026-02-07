@@ -5152,7 +5152,7 @@ class MultiplayerGame {
 
             // Spawn impact effect
             if (this.effectManager && hitResult.impactPos) {
-                this.effectManager.spawnArtilleryImpact(hitResult.impactPos, isHit);
+                this.effectManager.spawnArtilleryImpact(hitResult.impactPos, isHit, hitResult.target?.type);
             }
         } else {
             // No target - impact at max range in barrel direction

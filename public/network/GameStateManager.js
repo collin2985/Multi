@@ -3377,7 +3377,7 @@ export class GameStateManager extends EventEmitter {
                 y: impactPos[1],
                 z: impactPos[2]
             };
-            this.game.effectManager.spawnArtilleryImpact(impact, isHit);
+            this.game.effectManager.spawnArtilleryImpact(impact, isHit, targetType);
         }
 
         // Notify ambient sound system of combat (silences plains/forest)
@@ -3437,7 +3437,7 @@ export class GameStateManager extends EventEmitter {
                 y: impactPos[1],
                 z: impactPos[2]
             };
-            this.game.effectManager.spawnArtilleryImpact(impact, isHit);
+            this.game.effectManager.spawnArtilleryImpact(impact, isHit, targetType);
         }
 
         // Notify ambient sound system of combat

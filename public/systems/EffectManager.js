@@ -587,9 +587,9 @@ export class EffectManager {
      * @param {{x,y,z}} position - Impact position
      * @param {boolean} isHit - Whether target was hit (red vs brown particles)
      */
-    spawnArtilleryImpact(position, isHit = false) {
+    spawnArtilleryImpact(position, isHit = false, targetType = null) {
         // Use enhanced dirt/blood effect for artillery
-        if (isHit) {
+        if (isHit && targetType !== 'structure') {
             // Multiple hit effects for explosive impact
             for (let i = 0; i < 3; i++) {
                 const offsetPos = {

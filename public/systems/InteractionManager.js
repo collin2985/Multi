@@ -627,7 +627,10 @@ export class InteractionManager {
                 }
 
                 // Display structure panel with durability info
-                if (isConstructionSite) {
+                const isRuin = nearestStructure.userData?.isRuin;
+                if (isRuin) {
+                    // Ruins only show "Demolish Ruin" button, no structure panel
+                } else if (isConstructionSite) {
                     // Construction sites have 1-hour lifespan
                     const minutesLeft = hoursUntilRuin !== undefined ? (hoursUntilRuin * 60).toFixed(0) : 0;
                     ui.showStructurePanel(
