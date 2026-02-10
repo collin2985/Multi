@@ -553,7 +553,7 @@
             <tr>
                 <td>Resume Last Session</td>
                 <td>Where you last played</td>
-                <td>Restored (syncs every 60 seconds)</td>
+                <td>Restored (requires Save and Exit)</td>
             </tr>
             <tr>
                 <td>Random Spawn</td>
@@ -571,7 +571,7 @@
                 <td>Empty</td>
             </tr>
         </table>
-        <p>Resume Last Session is only available for registered players whose session was synced before death. If you die shortly after spawning, this option may not appear.</p>
+        <p>Resume Last Session is only available for registered players who used Save and Exit (in Settings) before closing the game. This is the only way to preserve your inventory between sessions - closing the browser without saving loses everything you're carrying. Dying also clears your saved session.</p>
         <h3>Spawn Protection</h3>
         <p>After respawning, you have 2 minutes of protection from bandits and bears. A "Protected: Xs" counter appears in your status bar showing how many seconds remain. During this time, enemies will not attack you, giving you a chance to get your bearings and find safety.</p>
         <h3>Friends</h3>
@@ -698,6 +698,8 @@
         <h3>World Size</h3>
         <p>The world spans 100,000 units in each direction - far more than you could ever explore. The chunk system loads terrain and objects as you travel, with about 21 chunks visible around you at any time. Each chunk is 50 units across.</p>
         <p>There are no invisible walls at the world's edge, but the procedural generation ensures you'll always find more ocean and continents in any direction. The world is persistent across sessions - structures you build remain until they decay or are destroyed.</p>
+        <h3>Region Borders</h3>
+        <p>Small dark wooden posts mark the boundaries between regions. Each region has its own resource quality ranges, so crossing a border means the quality of trees, rocks, and other resources may change. Use these markers to keep track of which region you're in while exploring.</p>
     </section>
 
     <script>

@@ -28,7 +28,7 @@ const AI_CONFIG = {
         MOVE_SPEED: CONFIG.BROWN_BEAR?.MOVE_SPEED ?? 2.75,      // Units per second (faster than bandits)
         WANDER_SPEED: CONFIG.BROWN_BEAR?.WANDER_SPEED ?? 0.75,  // Slow walk speed for wandering
         FLEE_SPEED: CONFIG.BROWN_BEAR?.FLEE_SPEED ?? 2.75,      // Units per second when fleeing
-        CHASE_RANGE: 30,           // Distance to detect/chase players
+        CHASE_RANGE: 25,           // Distance to detect/chase players
         LEASH_RANGE: 50,           // Max distance from home den
         TURN_SPEED: 4.0,           // Radians per second (~229 deg/sec)
 

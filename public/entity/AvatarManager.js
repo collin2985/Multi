@@ -45,6 +45,10 @@ export class AvatarManager {
         // PERFORMANCE: Reusable vectors to avoid GC pressure (pooled objects)
         this._tempNextPosition = new THREE.Vector3();
         this._tempDirection = new THREE.Vector3();
+        this._tempArtilleryPos = new THREE.Vector3();
+        this._tempSlotOffset = new THREE.Vector3();
+        this._tempCartDir = new THREE.Vector3();
+        this._tempBarrelPos = new THREE.Vector3();
 
         // PERFORMANCE: Pre-computed squared thresholds
         this.stopThresholdSq = this.stopThreshold * this.stopThreshold;
@@ -551,9 +555,8 @@ export class AvatarManager {
 
                     if (artilleryData?.mesh) {
                         // Use artillery mesh world position (accounts for ship position + rotation + slot offset)
-                        const artilleryWorldPos = new THREE.Vector3();
-                        artilleryData.mesh.getWorldPosition(artilleryWorldPos);
-                        avatar.position.copy(artilleryWorldPos);
+                        artilleryData.mesh.getWorldPosition(this._tempArtilleryPos);
+                        avatar.position.copy(this._tempArtilleryPos);
                     } else {
                         // Fallback: Calculate from slot config + ship transform using proper 3D transformation
                         const slotIndex = peer.mannedArtillery.slotIndex ?? 0;
@@ -561,9 +564,9 @@ export class AvatarManager {
 
                         if (slotConfig) {
                             // Use proper 3D vector transformation (fixes Bug #8)
-                            const localOffset = new THREE.Vector3(slotConfig.x, slotConfig.y, slotConfig.z);
-                            localOffset.applyQuaternion(shipMesh.quaternion);
-                            avatar.position.copy(shipMesh.position).add(localOffset);
+                            this._tempSlotOffset.set(slotConfig.x, slotConfig.y, slotConfig.z);
+                            this._tempSlotOffset.applyQuaternion(shipMesh.quaternion);
+                            avatar.position.copy(shipMesh.position).add(this._tempSlotOffset);
                         } else {
                             // Last resort fallback - use slot Y offset
                             avatar.position.set(shipMesh.position.x, shipMesh.position.y + 0.8, shipMesh.position.z);
@@ -635,15 +638,15 @@ export class AvatarManager {
                         const CART_Z = -0.1;      // CONFIG.CRATE_CART.CART_Z_OFFSET
 
                         // Position crate on cart
-                        const cartDir = new THREE.Vector3(
+                        this._tempCartDir.set(
                             Math.sin(cartMesh.rotation.y),
                             0,
                             Math.cos(cartMesh.rotation.y)
                         );
                         crateMesh.position.set(
-                            cartMesh.position.x + cartDir.x * CART_Z,
+                            cartMesh.position.x + this._tempCartDir.x * CART_Z,
                             cartMesh.position.y + CART_HEIGHT,
-                            cartMesh.position.z + cartDir.z * CART_Z
+                            cartMesh.position.z + this._tempCartDir.z * CART_Z
                         );
                         crateMesh.rotation.y = cartMesh.rotation.y;
                     }
@@ -956,9 +959,8 @@ export class AvatarManager {
             avatar.userData.muzzleFlash.flash();
             // Spawn gunsmoke at barrel position
             if (this.effectManager) {
-                const barrelPos = new THREE.Vector3();
-                avatar.userData.muzzleFlash.sprite.getWorldPosition(barrelPos);
-                this.effectManager.spawnGunSmoke(barrelPos);
+                avatar.userData.muzzleFlash.sprite.getWorldPosition(this._tempBarrelPos);
+                this.effectManager.spawnGunSmoke(this._tempBarrelPos);
             }
         }
 

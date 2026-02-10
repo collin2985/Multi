@@ -42,7 +42,7 @@ class ChunkObjectGenerator {
         };
 
         // Performance settings
-        this.FRAME_BUDGET_MS = 1.7; // Max milliseconds per frame
+        this.FRAME_BUDGET_MS = 3.0; // Max milliseconds per frame
         this.BATCH_SIZE = 30;     // Objects to attempt per batch
 
         // Track chunks where object generation has actually completed

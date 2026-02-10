@@ -799,14 +799,22 @@ export class ChunkManager {
         }
 
         // Dispose mesh resources
+        const disposeMat = (mat) => {
+            // Dispose canvas-generated textures (unique per object)
+            // Skip GLB textures — shared across clones, Three.js cache handles them
+            if (mat.map && mat.map.image instanceof HTMLCanvasElement) {
+                mat.map.dispose();
+            }
+            mat.dispose();
+        };
         object.traverse((child) => {
             if (child instanceof THREE.Mesh) {
                 if (child.geometry) child.geometry.dispose();
                 if (child.material) {
                     if (Array.isArray(child.material)) {
-                        child.material.forEach(mat => mat.dispose());
+                        child.material.forEach(disposeMat);
                     } else {
-                        child.material.dispose();
+                        disposeMat(child.material);
                     }
                 }
             }

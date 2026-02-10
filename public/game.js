@@ -4036,6 +4036,11 @@ class MultiplayerGame {
                     }, PRIORITY.LOW, `trapper_${generation}`, generation);
                 }
 
+                // Rebuild chunk border marker posts around new position
+                if (this.chunkBorderMarkerSystem) {
+                    this.chunkBorderMarkerSystem.rebuild(currentPlayerChunkX, currentPlayerChunkZ);
+                }
+
                 ChunkPerfTimer.end('game.chunkCrossing_total');
             } else {
                 ChunkPerfTimer.end('game.updatePlayerChunk');

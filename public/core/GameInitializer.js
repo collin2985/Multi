@@ -8,6 +8,7 @@ import { FallingTreeSystem } from '../systems/FallingTreeSystem.js';
 
 import { RockModelSystem } from '../RockModelSystem.js';
 import { StructureModelSystem } from '../systems/StructureModelSystem.js';
+import { ChunkBorderMarkerSystem } from '../systems/ChunkBorderMarkerSystem.js';
 // import { TreeGUI } from '../TreeGUI.js';
 import { AudioManager, OceanSoundManager, PlainsSoundManager, MountainSoundManager, CampfireSoundManager, BuildingFireSoundManager } from '../audio.js';
 import { NetworkManager } from '../network/NetworkManager.js';
@@ -194,6 +195,11 @@ export class GameInitializer {
         if (this.game.billboardSystem) {
             this.game.billboardSystem.terrainGenerator = this.game.terrainGenerator;
         }
+
+        // Initialize chunk border marker posts (region boundary indicators)
+        this.game.chunkBorderMarkerSystem = new ChunkBorderMarkerSystem(
+            this.game.scene, this.game.terrainGenerator
+        );
 
         this.setupScene(spawnX, spawnZ);
         this.setupPlayer();

@@ -194,7 +194,7 @@ export class WebSocketTransport {
                             // Has other data but no version - corrupted/stale state
                             localStorage.clear();
                             window._allowNavigation = true;
-                            location.reload(true);
+                            location.href = location.pathname + '?v=' + Date.now();
                             return;
                         }
                         // Truly new user - no data at all, let them through
@@ -202,7 +202,7 @@ export class WebSocketTransport {
                         // Version mismatch - clear cache and hard refresh
                         localStorage.clear();
                         window._allowNavigation = true;
-                        location.reload(true);
+                        location.href = location.pathname + '?v=' + Date.now();
                         return;
                     }
 

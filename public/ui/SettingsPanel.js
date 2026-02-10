@@ -144,6 +144,7 @@ export class SettingsPanel {
         this.render();
         this.panel.style.display = 'block';
         this.isVisible = true;
+        window.tasksPanel?.onSettingsOpened();
     }
 
     hide() {

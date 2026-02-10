@@ -455,9 +455,8 @@ export class P2PTransport {
     setTurnCredentials(iceServersConfig) {
         if (iceServersConfig?.iceServers?.length > 0) {
             this.iceConfigWithTurn = iceServersConfig;
-            console.warn('[P2P] TURN credentials received:', iceServersConfig.iceServers.length, 'servers');
         } else {
-            console.warn('[P2P] No TURN credentials received (empty or invalid)');
+            console.error('[P2P] No TURN credentials received (empty or invalid)');
         }
     }
 

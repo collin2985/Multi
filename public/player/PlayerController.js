@@ -362,11 +362,6 @@ export class PlayerController {
                     this.isMoving = false;
                     this.isWASDMoving = false;
                     this.inputManager?.cancelAutoRun();
-                    const now = performance.now();
-                    if (now - this.lastPathBlockedToast > this.PATH_BLOCKED_COOLDOWN) {
-                        ui.showToast('Path blocked', 'warning');
-                        this.lastPathBlockedToast = now;
-                    }
                     if (this.onBlockedCallback) {
                         this.onBlockedCallback(position.clone());
                     }

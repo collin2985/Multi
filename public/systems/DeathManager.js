@@ -957,6 +957,11 @@ export class DeathManager {
             // Initialize navigation maps for worker AI pathfinding
             this.game.chunkManager.initializeNavMapsAroundPlayer(spawnChunkX, spawnChunkZ);
 
+            // Rebuild chunk border marker posts around respawn position
+            if (this.game.chunkBorderMarkerSystem) {
+                this.game.chunkBorderMarkerSystem.rebuild(spawnChunkX, spawnChunkZ);
+            }
+
             // Also ensure objects are in objectRegistry for interaction detection
             this._repopulateObjectRegistry(spawnChunkX, spawnChunkZ);
         }

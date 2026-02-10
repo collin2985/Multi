@@ -2652,22 +2652,26 @@ export const ui = {
             // Check if structure is near a market (within 20 units)
             let hasMarketNearby = false;
             if (isSellable && isOwner && !isAlreadySold && window.game?.chunkManager?.chunkObjects) {
-                const MARKET_RANGE = 20;
-                const structurePos = nearestStructure.position;
-                for (const objects of window.game.chunkManager.chunkObjects.values()) {
-                    for (const obj of objects) {
-                        if (obj.userData?.modelType === 'market') {
-                            const dx = structurePos.x - obj.position.x;
-                            const dz = structurePos.z - obj.position.z;
-                            const dist = Math.sqrt(dx * dx + dz * dz);
-                            if (dist <= MARKET_RANGE) {
-                                hasMarketNearby = true;
-                                break;
+                const structId = nearestStructure.userData?.objectId;
+                if (!ui._proprietorMarketCache || ui._proprietorMarketCache.structId !== structId) {
+                    const MARKET_RANGE_SQ = 20 * 20;
+                    const structurePos = nearestStructure.position;
+                    for (const objects of window.game.chunkManager.chunkObjects.values()) {
+                        for (const obj of objects) {
+                            if (obj.userData?.modelType === 'market') {
+                                const dx = structurePos.x - obj.position.x;
+                                const dz = structurePos.z - obj.position.z;
+                                if (dx * dx + dz * dz <= MARKET_RANGE_SQ) {
+                                    hasMarketNearby = true;
+                                    break;
+                                }
                             }
                         }
+                        if (hasMarketNearby) break;
                     }
-                    if (hasMarketNearby) break;
+                    ui._proprietorMarketCache = { structId, hasMarketNearby };
                 }
+                hasMarketNearby = ui._proprietorMarketCache.hasMarketNearby;
             }
 
             shouldShow = isSellable && isOwner && !isAlreadySold && hasMarketNearby;

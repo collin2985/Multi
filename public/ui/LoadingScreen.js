@@ -254,6 +254,10 @@ export class LoadingScreen {
             this.game.chunkManager.initializeNavMapsAroundPlayer(chunkX, chunkZ);
             // Ensure all objects in physics radius have colliders for interaction
             this.game.chunkManager.initializePhysicsCollidersAroundPlayer(chunkX, chunkZ);
+            // Build initial chunk border marker posts
+            if (this.game.chunkBorderMarkerSystem) {
+                this.game.chunkBorderMarkerSystem.rebuild(chunkX, chunkZ);
+            }
         }
 
         // Re-enable game input

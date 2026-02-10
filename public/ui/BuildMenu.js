@@ -544,9 +544,20 @@ export class BuildMenu {
      * Get market distance suffix for placement status (only for worker/dock structures)
      */
     _getMarketDistanceSuffix(placement) {
-        const MARKET_STRUCTURES = ['tileworks', 'ironworks', 'blacksmith', 'bakery', 'gardener', 'miner', 'woodcutter', 'stonemason', 'fisherman', 'dock'];
         const type = placement.structure?.type;
-        if (!type || !MARKET_STRUCTURES.includes(type)) return '';
+        if (!type) return '';
+
+        // Market placement: show dock distance
+        if (type === 'market') {
+            const dist = this._findNearestDockDistance(placement.position);
+            if (dist === null) return ' | <span style="color:#FF6B6B">No dock nearby</span>';
+            const rounded = Math.round(dist);
+            if (rounded >= 20) return ` | <span style="color:#FF6B6B">Dock: ${rounded}/20</span>`;
+            return ` | Dock: ${rounded}/20`;
+        }
+
+        const MARKET_STRUCTURES = ['tileworks', 'ironworks', 'blacksmith', 'bakery', 'gardener', 'miner', 'woodcutter', 'stonemason', 'fisherman', 'dock'];
+        if (!MARKET_STRUCTURES.includes(type)) return '';
 
         const dist = this._findNearestMarketDistance(placement.position);
         if (dist === null) return ' | <span style="color:#FF6B6B">No market nearby</span>';
@@ -571,6 +582,32 @@ export class BuildMenu {
                     const mdx = market.position.x - position.x;
                     const mdz = market.position.z - position.z;
                     const distSq = mdx * mdx + mdz * mdz;
+                    if (distSq < nearestDistSq) {
+                        nearestDistSq = distSq;
+                    }
+                }
+            }
+        }
+
+        return nearestDistSq === Infinity ? null : Math.sqrt(nearestDistSq);
+    }
+
+    /**
+     * Find distance to nearest dock from a world position (2D, ignoring Y)
+     */
+    _findNearestDockDistance(position) {
+        const { chunkX, chunkZ } = ChunkCoordinates.worldToChunk(position.x, position.z);
+        let nearestDistSq = Infinity;
+
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dz = -1; dz <= 1; dz++) {
+                const key = `${chunkX + dx},${chunkZ + dz}`;
+                const docks = this.gameState?.docks?.get(key) || [];
+                for (let i = 0; i < docks.length; i++) {
+                    const dock = docks[i];
+                    const ddx = dock.x - position.x;
+                    const ddz = dock.z - position.z;
+                    const distSq = ddx * ddx + ddz * ddz;
                     if (distSq < nearestDistSq) {
                         nearestDistSq = distSq;
                     }

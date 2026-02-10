@@ -397,6 +397,20 @@
         <div class="devlog">
             <h2>Dev Log</h2>
 
+            <div class="devlog-entry" id="devlog-2026-02-10">
+                <h3>Region Borders, Tutorial Updates & Performance</h3>
+                <div class="devlog-date">February 10, 2026</div>
+                <ul>
+                    <li>Dark wooden border posts now mark region boundaries where resource quality changes</li>
+                    <li>Market placement now shows distance to nearest dock</li>
+                    <li>Bear chase range reduced from 30 to 25 units</li>
+                    <li>New tutorial tasks: Save and Exit walkthrough, build a house</li>
+                    <li>Tutorial text improved with dock placement tips and region border mentions</li>
+                    <li>Removed "Path blocked" toast notification</li>
+                    <li>Performance: faster chunk object loading, reduced memory allocations, texture cleanup, cached UI searches</li>
+                </ul>
+            </div>
+
             <div class="devlog-entry" id="devlog-2026-02-05">
                 <h3>Warehouses, Lootable Corpses & Fixes</h3>
                 <div class="devlog-date">February 5, 2026</div>
@@ -444,7 +458,7 @@
                     const cached = localStorage.getItem('serverVersion');
                     if (cached && cached !== String(data.version)) {
                         localStorage.clear();
-                        location.reload(true);
+                        location.href = location.pathname + '?v=' + Date.now();
                     }
                 })
                 .catch(() => {}); // Fail silently if server unreachable
