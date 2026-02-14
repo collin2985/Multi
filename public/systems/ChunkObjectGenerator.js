@@ -8,6 +8,7 @@ import { CONFIG } from '../TerrainConfig.js';
 import { CONFIG as GAME_CONFIG } from '../config.js';
 import { COLLISION_GROUPS } from '../core/PhysicsManager.js';
 import { QualityGenerator } from '../core/QualityGenerator.js';
+import { frameBudget } from '../core/FrameBudget.js';
 import * as THREE from 'three';
 
 // Bandit camp seed offset for deterministic generation
@@ -87,7 +88,10 @@ class ChunkObjectGenerator {
      * Process object generation for one frame
      */
     processNextFrame() {
+        if (!frameBudget.hasTime(0.5)) return;
+
         const frameStartTime = performance.now();
+        const budget = Math.min(this.FRAME_BUDGET_MS, frameBudget.remaining());
 
         // Get next chunk if not currently processing one
         if (!this.currentChunk && this.queue.length > 0) {
@@ -100,7 +104,7 @@ class ChunkObjectGenerator {
         }
 
         // Process objects until frame budget is exhausted
-        while (performance.now() - frameStartTime < this.FRAME_BUDGET_MS) {
+        while (performance.now() - frameStartTime < budget) {
             if (!this.generateNextBatch()) {
                 // Chunk complete
                 this.finalizeCurrentChunk();

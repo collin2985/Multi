@@ -159,6 +159,45 @@ export const QualityGenerator = {
     },
 
     /**
+     * Get the quality range name for a given quality value
+     * @param {number} value - Quality value (1-100)
+     * @returns {string} - Quality name ('very poor', 'poor', ..., 'exceptional')
+     */
+    getQualityNameForValue(value) {
+        for (const range of QUALITY_RANGES) {
+            if (value >= range.min && value <= range.max) return range.name;
+        }
+        return QUALITY_RANGES[QUALITY_RANGES.length - 1].name;
+    },
+
+    /**
+     * Get continent-adjusted quality range for a resource in a specific chunk
+     * Applies the same continent bonus as getQuality() so tooltips match actual harvests
+     * @param {number} worldSeed - World generation seed (from CONFIG.TERRAIN.seed)
+     * @param {number} chunkX - Chunk X coordinate
+     * @param {number} chunkZ - Chunk Z coordinate
+     * @param {string} resourceType - Resource type ('vines', 'mushroom', 'pine', etc.)
+     * @returns {object} - { min: number, max: number, name: string }
+     */
+    getAdjustedQualityRange(worldSeed, chunkX, chunkZ, resourceType) {
+        const range = this.getQualityRange(worldSeed, chunkX, chunkZ, resourceType);
+        const terrainGen = getTerrainGenerator();
+        if (terrainGen) {
+            const worldX = chunkX * CONTINENT_BONUS.CHUNK_SIZE;
+            const worldZ = chunkZ * CONTINENT_BONUS.CHUNK_SIZE;
+            const continentMask = terrainGen.getContinentMask(worldX, worldZ);
+            if (continentMask > CONTINENT_BONUS.THRESHOLD) {
+                const bonusFactor = (continentMask - CONTINENT_BONUS.THRESHOLD) / (1 - CONTINENT_BONUS.THRESHOLD);
+                const bonus = Math.floor(bonusFactor * CONTINENT_BONUS.MAX_BONUS);
+                const adjustedMin = Math.min(100, range.min + bonus);
+                const adjustedMax = Math.min(100, range.max + bonus);
+                return { min: adjustedMin, max: adjustedMax, name: this.getQualityNameForValue(adjustedMin) };
+            }
+        }
+        return range;
+    },
+
+    /**
      * Get a random quality value within the chunk's quality range (GENERIC)
      * Includes continent bonus: deeper inland = higher quality
      * @param {number} worldSeed - World generation seed (from CONFIG.TERRAIN.seed)

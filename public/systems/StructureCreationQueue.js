@@ -17,6 +17,7 @@
  */
 
 import { CONFIG } from '../config.js';
+import { frameBudget } from '../core/FrameBudget.js';
 
 // Priority order: higher priority structures are created first
 const STRUCTURE_PRIORITY = {
@@ -128,16 +129,18 @@ class StructureCreationQueue {
             this._isProcessing = false;
             return 0;
         }
+        if (!frameBudget.hasTime(0.3)) return 0;
 
         this._isProcessing = true;
         const startTime = performance.now();
+        const budget = Math.min(this.frameBudgetMs, frameBudget.remaining());
         let processed = 0;
 
         // Process structures within frame budget
         while (
             processed < this.maxStructuresPerFrame &&
             this._queue.length > 0 &&
-            (performance.now() - startTime) < this.frameBudgetMs
+            (performance.now() - startTime) < budget
         ) {
             const item = this._queue.shift();
 

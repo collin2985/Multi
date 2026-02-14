@@ -397,6 +397,20 @@
         <div class="devlog">
             <h2>Dev Log</h2>
 
+            <div class="devlog-entry" id="devlog-2026-02-14">
+                <h3>Performance, Audio & Quality of Life</h3>
+                <div class="devlog-date">February 14, 2026</div>
+                <ul>
+                    <li>Global frame budget system prevents frame spikes by coordinating time allocation across all subsystems</li>
+                    <li>Dirt/road overlay now uses double-buffered painting spread across frames instead of blocking on chunk crossing</li>
+                    <li>Region border posts rebuild incrementally across frames instead of all at once</li>
+                    <li>Border post spacing reduced from 10 to 5 units for clearer region boundaries</li>
+                    <li>Worker NPC sounds (woodcutter, miner, stonemason, fisherman) now fade with distance instead of playing at full volume everywhere</li>
+                    <li>Trapper quality display now accounts for continent bonus, matching actual harvest quality</li>
+                    <li>Vegetables now use region-based quality instead of random</li>
+                </ul>
+            </div>
+
             <div class="devlog-entry" id="devlog-2026-02-10">
                 <h3>Region Borders, Tutorial Updates & Performance</h3>
                 <div class="devlog-date">February 10, 2026</div>

@@ -3,7 +3,7 @@ import { ui } from '../ui.js';
 import { CONFIG } from '../config.js';
 import { COLLISION_GROUPS } from '../core/PhysicsManager.js';
 import { QualityGenerator } from '../core/QualityGenerator.js';
-import { TERRAIN_CONFIG } from '../terrainsystem.js';
+import { CONFIG as TERRAIN_CONFIG } from '../TerrainConfig.js';
 import * as THREE from 'three';
 
 /**
@@ -985,15 +985,17 @@ export class InteractionManager {
             if (this.gameState.onGrass && grassDetection.chunkId) {
                 const [, coords] = grassDetection.chunkId.split('_');
                 const [chunkX, chunkZ] = coords.split(',').map(Number);
-                const worldSeed = TERRAIN_CONFIG.SEED || 12345;
+                const worldSeed = TERRAIN_CONFIG.TERRAIN.seed;
 
-                this.gameState.mushroomQualityRange = QualityGenerator.getQualityRange(worldSeed, chunkX, chunkZ, 'mushroom');
-                this.gameState.vegetableSeedsQualityRange = QualityGenerator.getQualityRange(worldSeed, chunkX, chunkZ, 'vegetableseeds');
-                this.gameState.hempSeedsQualityRange = QualityGenerator.getQualityRange(worldSeed, chunkX, chunkZ, 'hempseeds');
+                this.gameState.mushroomQualityRange = QualityGenerator.getAdjustedQualityRange(worldSeed, chunkX, chunkZ, 'mushroom');
+                this.gameState.vegetableSeedsQualityRange = QualityGenerator.getAdjustedQualityRange(worldSeed, chunkX, chunkZ, 'vegetableseeds');
+                this.gameState.hempSeedsQualityRange = QualityGenerator.getAdjustedQualityRange(worldSeed, chunkX, chunkZ, 'hempseeds');
+                this.gameState.limestoneQualityRange = QualityGenerator.getAdjustedQualityRange(worldSeed, chunkX, chunkZ, 'limestone');
             } else {
                 this.gameState.mushroomQualityRange = null;
                 this.gameState.vegetableSeedsQualityRange = null;
                 this.gameState.hempSeedsQualityRange = null;
+                this.gameState.limestoneQualityRange = null;
             }
 
             // If player just stopped on grass, roll for mushroom (10% chance)
@@ -1247,7 +1249,8 @@ export class InteractionManager {
                 vines: this.gameState.grassQualityRange,
                 mushroom: this.gameState.mushroomQualityRange,
                 vegetableseeds: this.gameState.vegetableSeedsQualityRange,
-                hempseeds: this.gameState.hempSeedsQualityRange
+                hempseeds: this.gameState.hempSeedsQualityRange,
+                limestone: this.gameState.limestoneQualityRange
             },
             mobileEntitySystem,  // For boat velocity check in crate loading
             this.gameState.nearestLoadableArtillery,  // Nearest loadable artillery for ship2

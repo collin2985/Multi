@@ -9,6 +9,7 @@ import { CONFIG } from '../config.js';
 import { objectPlacer, modelManager, applyEuclideanFog } from '../objects.js';
 import { COLLISION_GROUPS } from '../core/PhysicsManager.js';
 import { ChunkPerfTimer } from '../core/PerformanceTimer.js';
+import { frameBudget } from '../core/FrameBudget.js';
 
 export class SceneObjectFactory {
     constructor(game) {
@@ -388,13 +389,17 @@ export class SceneObjectFactory {
         if (this.pendingCreations.length === 0) {
             return { processed: 0, remaining: 0 };
         }
+        if (!frameBudget.hasTime(0.2)) {
+            return { processed: 0, remaining: this.pendingCreations.length };
+        }
 
         ChunkPerfTimer.start('SceneFactory.processCreationQueue');
         const startTime = performance.now();
+        const budget = Math.min(this.CREATION_BUDGET_MS, frameBudget.remaining());
         let processed = 0;
 
         while (this.pendingCreations.length > 0 &&
-               performance.now() - startTime < this.CREATION_BUDGET_MS) {
+               performance.now() - startTime < budget) {
             const change = this.pendingCreations.shift();
             ChunkPerfTimer.start('SceneFactory.addObjectFromChange');
             this.addObjectFromChange(change);

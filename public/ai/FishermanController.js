@@ -567,8 +567,8 @@ class FishermanController extends BaseWorkerController {
     _playFishingSound(entity) {
         // Play fishing sound using audioManager
         const audioManager = this.game?.audioManager;
-        if (audioManager && entity.visual?.mesh) {
-            entity.activeSound = audioManager.playFishingSound();
+        if (audioManager && entity.mesh) {
+            entity.activeSound = audioManager.playPositionalSound('fishing', entity.mesh);
         }
     }
 

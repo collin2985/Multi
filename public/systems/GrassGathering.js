@@ -84,7 +84,7 @@ export class GrassGathering {
 
         // Player is on grass terrain! Get quality range for vines in this chunk
         const worldSeed = TERRAIN_CONFIG.TERRAIN.seed;
-        const qualityRange = QualityGenerator.getQualityRange(worldSeed, chunkX, chunkZ, 'vines');
+        const qualityRange = QualityGenerator.getAdjustedQualityRange(worldSeed, chunkX, chunkZ, 'vines');
 
         return {
             onGrass: true,

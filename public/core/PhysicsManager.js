@@ -7,6 +7,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { ChunkPerfTimer } from './PerformanceTimer.js';
+import { frameBudget } from './FrameBudget.js';
 
 // Collision groups (bit masks for filtering)
 export const COLLISION_GROUPS = {
@@ -384,9 +385,11 @@ export class PhysicsManager {
      */
     processColliderQueue() {
         if (!this.initialized || this.pendingColliders.size === 0) return 0;
+        if (!frameBudget.hasTime(0.3)) return 0;
 
         ChunkPerfTimer.start('Physics.processColliderQueue');
         const startTime = performance.now();
+        const budget = Math.min(this.COLLIDER_BATCH_BUDGET_MS, frameBudget.remaining());
         let created = 0;
 
         for (const [objectId, pending] of this.pendingColliders) {
@@ -413,7 +416,7 @@ export class PhysicsManager {
             created++;
 
             // Check frame budget
-            if (performance.now() - startTime > this.COLLIDER_BATCH_BUDGET_MS) {
+            if (performance.now() - startTime > budget) {
                 break;
             }
         }

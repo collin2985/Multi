@@ -5,6 +5,7 @@
  */
 
 import { ChunkPerfTimer } from '../core/PerformanceTimer.js';
+import { frameBudget } from '../core/FrameBudget.js';
 
 export const PRIORITY = {
     CRITICAL: 0,
@@ -167,7 +168,10 @@ export class ChunkTransitionQueue {
         ChunkPerfTimer.start('TransitionQueue.processFrame');
 
         const isEmergency = pending > this.EMERGENCY_THRESHOLD;
-        const budget = isEmergency ? this.EMERGENCY_BUDGET_MS : this.FRAME_BUDGET_MS;
+        const budget = Math.min(
+            isEmergency ? this.EMERGENCY_BUDGET_MS : this.FRAME_BUDGET_MS,
+            frameBudget.remaining()
+        );
 
         let processed = 0;
 

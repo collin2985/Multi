@@ -947,7 +947,7 @@ class ObjectPlacer {
 
                 // Use chunk-based quality for specific types
                 const worldSeed = TERRAIN_CONFIG.TERRAIN.seed;
-                if (['fir', 'pine', 'apple', 'clay', 'limestone', 'sandstone', 'iron', 'hemp'].includes(modelType)) {
+                if (['fir', 'pine', 'apple', 'clay', 'limestone', 'sandstone', 'iron', 'hemp', 'vegetables'].includes(modelType)) {
                     quality = QualityGenerator.getQuality(worldSeed, gridX, gridZ, modelType);
                 } else if (modelType === 'log' || modelType.endsWith('_log')) {
                     quality = Math.floor(rng.range(1, 25));

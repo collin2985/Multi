@@ -203,10 +203,8 @@ class WoodcutterController extends BaseWorkerController {
                 if (entity.activeSound?.isPlaying) {
                     entity.activeSound.stop();
                 }
-                if (targetSoundType === 'saw') {
-                    entity.activeSound = audioManager.playSawSound();
-                } else if (targetSoundType === 'axe') {
-                    entity.activeSound = audioManager.playAxeSound();
+                if (entity.mesh && (targetSoundType === 'saw' || targetSoundType === 'axe')) {
+                    entity.activeSound = audioManager.playPositionalSound(targetSoundType, entity.mesh);
                 }
             }
         } else {
@@ -219,6 +217,10 @@ class WoodcutterController extends BaseWorkerController {
 
             if (entity.activeSound?.isPlaying) {
                 entity.activeSound.stop();
+            }
+            if (entity.activeSound) {
+                entity.mesh?.remove(entity.activeSound);
+                entity.activeSound.disconnect();
                 entity.activeSound = null;
             }
         }
@@ -544,8 +546,8 @@ class WoodcutterController extends BaseWorkerController {
         if (elapsed >= 7000 && !entity.treeSoundPlayed) {
             entity.treeSoundPlayed = true;
             const audioManager = this.game?.audioManager;
-            if (audioManager) {
-                audioManager.playTreeSound();
+            if (audioManager && entity.mesh) {
+                audioManager.playPositionalSound('tree', entity.mesh);
             }
             if (this.broadcastP2P) {
                 this.broadcastP2P({
@@ -999,6 +1001,11 @@ class WoodcutterController extends BaseWorkerController {
         // Stop any active sounds
         if (entity.activeSound?.isPlaying) {
             entity.activeSound.stop();
+        }
+        if (entity.activeSound) {
+            entity.mesh?.remove(entity.activeSound);
+            entity.activeSound.disconnect();
+            entity.activeSound = null;
         }
     }
 

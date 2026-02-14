@@ -177,11 +177,13 @@ class MinerController extends BaseWorkerController {
 
             // Play pickaxe sound
             const audioManager = this.game?.audioManager;
-            if (audioManager) {
+            if (audioManager && entity.mesh) {
                 if (entity.activeSound?.isPlaying) {
                     entity.activeSound.stop();
+                    entity.mesh.remove(entity.activeSound);
+                    entity.activeSound.disconnect();
                 }
-                entity.activeSound = audioManager.playPickaxeSound();
+                entity.activeSound = audioManager.playPositionalSound('pickaxe', entity.mesh);
             }
         } else {
             entity.visual.miningAction?.stop();
@@ -193,6 +195,10 @@ class MinerController extends BaseWorkerController {
 
             if (entity.activeSound?.isPlaying) {
                 entity.activeSound.stop();
+            }
+            if (entity.activeSound) {
+                entity.mesh?.remove(entity.activeSound);
+                entity.activeSound.disconnect();
                 entity.activeSound = null;
             }
         }
@@ -506,11 +512,13 @@ class MinerController extends BaseWorkerController {
                         entity.miningStartTime = Date.now();
                         // Restart pickaxe sound for next harvest
                         const audioManager = this.game?.audioManager;
-                        if (audioManager) {
+                        if (audioManager && entity.mesh) {
                             if (entity.activeSound?.isPlaying) {
                                 entity.activeSound.stop();
+                                entity.mesh.remove(entity.activeSound);
+                                entity.activeSound.disconnect();
                             }
-                            entity.activeSound = audioManager.playPickaxeSound();
+                            entity.activeSound = audioManager.playPositionalSound('pickaxe', entity.mesh);
                         }
                     } else {
                         // Rock depleted
@@ -594,11 +602,13 @@ class MinerController extends BaseWorkerController {
                         entity.miningStartTime = Date.now();
                         // Restart pickaxe sound for next harvest
                         const audioManager = this.game?.audioManager;
-                        if (audioManager) {
+                        if (audioManager && entity.mesh) {
                             if (entity.activeSound?.isPlaying) {
                                 entity.activeSound.stop();
+                                entity.mesh.remove(entity.activeSound);
+                                entity.activeSound.disconnect();
                             }
-                            entity.activeSound = audioManager.playPickaxeSound();
+                            entity.activeSound = audioManager.playPositionalSound('pickaxe', entity.mesh);
                         }
                     } else {
                         this._setMining(entity, false);
@@ -702,6 +712,11 @@ class MinerController extends BaseWorkerController {
         // Stop any active sounds
         if (entity.activeSound?.isPlaying) {
             entity.activeSound.stop();
+        }
+        if (entity.activeSound) {
+            entity.mesh?.remove(entity.activeSound);
+            entity.activeSound.disconnect();
+            entity.activeSound = null;
         }
     }
 

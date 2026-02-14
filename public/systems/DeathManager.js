@@ -959,7 +959,7 @@ export class DeathManager {
 
             // Rebuild chunk border marker posts around respawn position
             if (this.game.chunkBorderMarkerSystem) {
-                this.game.chunkBorderMarkerSystem.rebuild(spawnChunkX, spawnChunkZ);
+                this.game.chunkBorderMarkerSystem.rebuildImmediate(spawnChunkX, spawnChunkZ);
             }
 
             // Also ensure objects are in objectRegistry for interaction detection

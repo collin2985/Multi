@@ -41,6 +41,7 @@ import { InventorySyncSystem } from './systems/InventorySyncSystem.js';
 import { SaveExitOverlay } from './ui/SaveExitOverlay.js';
 import { GrassGathering } from './systems/GrassGathering.js';
 import { PhysicsManager, COLLISION_GROUPS } from './core/PhysicsManager.js';
+import { frameBudget } from './core/FrameBudget.js';
 import ChunkCoordinates from './core/ChunkCoordinates.js';
 import { QualityGenerator } from './core/QualityGenerator.js';
 import { LoginModal } from './ui/LoginModal.js';
@@ -2514,6 +2515,8 @@ class MultiplayerGame {
     setupGameLoop() {
         // Setup update callback
         this.gameLoop.onUpdate((deltaTime, now) => {
+            frameBudget.beginFrame();
+
             // Process chunk transition queue (spread expensive chunk operations across frames)
             const transitionQueue = getChunkTransitionQueue();
             if (transitionQueue.hasPendingWork()) {
@@ -3692,10 +3695,17 @@ class MultiplayerGame {
 
             // Process AI spawn queue (spreads spawns across frames to prevent stutter)
             // Run before AI updates so newly spawned entities are immediately available
-            getAISpawnQueue().processQueue();
+            if (frameBudget.hasTime(1.0)) {
+                getAISpawnQueue().processQueue();
+            }
 
             // Process structure creation queue (spreads bandit camp structure creation across frames)
             getStructureCreationQueue().processQueue();
+
+            // Process border marker rebuild (spreads terrain lookups across frames)
+            if (this.chunkBorderMarkerSystem && frameBudget.hasTime(0.5)) {
+                this.chunkBorderMarkerSystem.continueRebuild();
+            }
 
             // Update BanditController (bandit detection, spawning, behavior)
             // NOTE: This MUST run before aiEnemyManager.updateTentAIEnemies so visual state
@@ -3867,7 +3877,7 @@ class MultiplayerGame {
 
             // Process chunk creation queue (only if work pending)
             // Process all chunks at once when behind loading screen, otherwise 1 per frame
-            if (this.chunkManager.pendingChunkCreations.length > 0) {
+            if (this.chunkManager.pendingChunkCreations.length > 0 && frameBudget.hasTime(0.3)) {
                 const behindLoadingScreen = this.loadingScreen && this.loadingScreen.isActive;
                 this.chunkManager.processChunkQueue(behindLoadingScreen);
             }
@@ -3879,7 +3889,7 @@ class MultiplayerGame {
 
             // Update dirt overlay system BEFORE clipmap (fixes first-frame initialization race)
             const playerPos = this.playerObject ? this.playerObject.position : null;
-            if (playerPos && this.dirtOverlay) {
+            if (playerPos && this.dirtOverlay && frameBudget.hasTime(0.5)) {
                 this.dirtOverlay.update(playerPos.x, playerPos.z);
             }
 

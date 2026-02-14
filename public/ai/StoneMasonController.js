@@ -182,12 +182,13 @@ class StoneMasonController extends BaseWorkerController {
 
             // Play chisel sound - mirrors CraftingSystem lines 64-68
             const audioManager = this.game?.audioManager;
-            if (audioManager) {
+            if (audioManager && entity.mesh) {
                 if (entity.activeSound?.isPlaying) {
                     entity.activeSound.stop();
+                    entity.mesh.remove(entity.activeSound);
+                    entity.activeSound.disconnect();
                 }
-                entity.activeSound = audioManager.playChiselSound?.() ||
-                                     audioManager.playSound?.('chisel');
+                entity.activeSound = audioManager.playPositionalSound('chisel', entity.mesh);
             }
         } else {
             // Stop chisel animation
@@ -203,6 +204,10 @@ class StoneMasonController extends BaseWorkerController {
             // Stop sound
             if (entity.activeSound?.isPlaying) {
                 entity.activeSound.stop();
+            }
+            if (entity.activeSound) {
+                entity.mesh?.remove(entity.activeSound);
+                entity.activeSound.disconnect();
             }
             entity.activeSound = null;
         }
@@ -473,12 +478,13 @@ class StoneMasonController extends BaseWorkerController {
 
                 // Replay chisel sound for next stone
                 const audioManager = this.game?.audioManager;
-                if (audioManager) {
+                if (audioManager && entity.mesh) {
                     if (entity.activeSound?.isPlaying) {
                         entity.activeSound.stop();
+                        entity.mesh.remove(entity.activeSound);
+                        entity.activeSound.disconnect();
                     }
-                    entity.activeSound = audioManager.playChiselSound?.() ||
-                                         audioManager.playSound?.('chisel');
+                    entity.activeSound = audioManager.playPositionalSound('chisel', entity.mesh);
                 }
             } else {
                 // All done - clear action and transition (mirrors lines 149-152)
@@ -544,6 +550,11 @@ class StoneMasonController extends BaseWorkerController {
         // Stop any active sounds
         if (entity.activeSound?.isPlaying) {
             entity.activeSound.stop();
+        }
+        if (entity.activeSound) {
+            entity.mesh?.remove(entity.activeSound);
+            entity.activeSound.disconnect();
+            entity.activeSound = null;
         }
         // Stop chiseling animation
         this._setChiseling(entity, false);

@@ -426,11 +426,11 @@ export class TrapperSystem {
         const info = [];
 
         for (const resourceType of RESOURCE_TYPES) {
-            const range = QualityGenerator.getQualityRange(this.worldSeed, chunkX, chunkZ, resourceType);
+            const range = QualityGenerator.getAdjustedQualityRange(this.worldSeed, chunkX, chunkZ, resourceType);
             info.push({
                 type: resourceType,
                 displayName: RESOURCE_DISPLAY_NAMES[resourceType] || resourceType,
-                range: range
+                range
             });
         }
 

@@ -4,8 +4,8 @@
  * Renders dirt patches under structures and natural objects (trees, rocks)
  * onto a texture that the terrain shader samples for blending.
  *
- * This replaces the old vertex-color-based dirt painting that was incompatible
- * with the new clipmap terrain system.
+ * Uses double-buffered canvas painting to spread work across multiple frames,
+ * preventing frame spikes on chunk/grid boundary crossings.
  */
 
 import * as THREE from 'three';
@@ -37,6 +37,14 @@ const RECTANGULAR = {
     MAX_MARGIN: 0.3       // Max noise margin for soft edges
 };
 
+// Rebuild state machine
+const REBUILD_IDLE = 0;
+const REBUILD_PAINTING = 1;
+const REBUILD_READY = 2;
+
+// How many chunks to paint per frame during incremental rebuild
+const CHUNKS_PER_FRAME = 5;
+
 export class DirtOverlaySystem {
     /**
      * @param {ChunkManager} chunkManager - Reference to chunk manager for object data
@@ -55,28 +63,26 @@ export class DirtOverlaySystem {
         this.scale = this.textureSize / this.worldRange;  // ~5.12 pixels per world unit
         this.halfSize = this.textureSize / 2;
 
-        // Center tracking (for shader uniforms)
+        // Double-buffered canvases: front (displayed) and back (being painted)
+        this.buffers = [this._createBuffer(), this._createBuffer()];
+        this.frontIdx = 0;
+        this.backIdx = 1;
+
+        // Public-facing properties — always point at front buffer (what the shader sees)
         this.centerX = 0;
         this.centerZ = 0;
+        this.texture = this.buffers[0].texture;
+        this.ctx = this.buffers[0].ctx;
+        this.canvas = this.buffers[0].canvas;
+
+        // Rebuild state machine
+        this._rebuildState = REBUILD_IDLE;
+        this._rebuildProgress = null;
 
         // Chunk-based tracking - only repaint on chunk boundary crossing
         this.currentChunkX = null;  // Current player chunk X
         this.currentChunkZ = null;  // Current player chunk Z
-        this.current3x3Keys = new Set();  // Keys of chunks in current 3x3 grid
-
-        // Create canvas for CPU-side rendering
-        this.canvas = document.createElement('canvas');
-        this.canvas.width = this.textureSize;
-        this.canvas.height = this.textureSize;
-        this.ctx = this.canvas.getContext('2d', { willReadFrequently: false });
-
-        // Create THREE.js texture
-        this.texture = new THREE.CanvasTexture(this.canvas);
-        this.texture.wrapS = THREE.ClampToEdgeWrapping;
-        this.texture.wrapT = THREE.ClampToEdgeWrapping;
-        this.texture.minFilter = THREE.LinearFilter;
-        this.texture.magFilter = THREE.LinearFilter;
-        this.texture.flipY = false;  // Disable Y-flip to match shader UV coordinates
+        this.current3x3Keys = new Set();  // Keys of chunks in current 5x5 grid
 
         // State flags
         this.needsUpload = false;
@@ -88,6 +94,26 @@ export class DirtOverlaySystem {
 
         // Cache grid dimensions reference
         this.gridDimensions = CONFIG.CONSTRUCTION?.GRID_DIMENSIONS || {};
+    }
+
+    /**
+     * Create a canvas + context + texture buffer triplet
+     * @returns {{canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, texture: THREE.CanvasTexture}}
+     */
+    _createBuffer() {
+        const canvas = document.createElement('canvas');
+        canvas.width = this.textureSize;
+        canvas.height = this.textureSize;
+        const ctx = canvas.getContext('2d', { willReadFrequently: false });
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.ClampToEdgeWrapping;
+        texture.wrapT = THREE.ClampToEdgeWrapping;
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        texture.flipY = false;  // Disable Y-flip to match shader UV coordinates
+
+        return { canvas, ctx, texture };
     }
 
     /**
@@ -125,7 +151,7 @@ export class DirtOverlaySystem {
 
     /**
      * Update overlay based on player position
-     * Called from game loop - uses chunk-based rebuilding for stability
+     * Called from game loop - uses double-buffered incremental rebuilding
      * @param {number} playerX - Player world X
      * @param {number} playerZ - Player world Z
      * @returns {boolean} True if overlay was rebuilt (center changed)
@@ -178,26 +204,48 @@ export class DirtOverlaySystem {
             }
         }
 
-        // Rebuild if grid boundary crossed (center moved) OR chunk boundary crossed (new objects in range)
-        if (gridBoundaryCrossed || chunkBoundaryCrossed) {
-            // Set center BEFORE rebuilding (critical for coordinate alignment)
-            this.setCenter(playerX, playerZ);
-
-            // Rebuild canvas with current objects and roads
-            this.rebuildFrom3x3Chunks();
+        // Step 1: If a previous rebuild just finished, swap it in first
+        if (this._rebuildState === REBUILD_READY) {
+            this._swapBuffers();
             this.centerChanged = true;
         }
 
-        // Also rebuild if marked dirty (objects added/removed since last paint)
-        if (this._needsRepaint && !this.centerChanged) {
-            this.rebuildFrom3x3Chunks();
+        // Step 2: Check if we need to start a new rebuild
+        const needsRebuild = gridBoundaryCrossed || chunkBoundaryCrossed || this._needsRepaint;
+
+        if (needsRebuild) {
             this._needsRepaint = false;
-            // Don't set centerChanged since center didn't actually move
+
+            // Calculate the pending center for the new rebuild
+            const pendingCenterX = gridBoundaryCrossed ? wrapCoord(snappedX) : this.centerX;
+            const pendingCenterZ = gridBoundaryCrossed ? wrapCoord(snappedZ) : this.centerZ;
+            const pendingSnappedX = gridBoundaryCrossed ? snappedX : this._lastSnappedX;
+            const pendingSnappedZ = gridBoundaryCrossed ? snappedZ : this._lastSnappedZ;
+
+            // Update snapped tracking immediately to prevent re-triggering next frame
+            if (gridBoundaryCrossed) {
+                this._lastSnappedX = snappedX;
+                this._lastSnappedZ = snappedZ;
+            }
+
+            // Cancel any in-progress rebuild and start fresh
+            this._startRebuild(pendingCenterX, pendingCenterZ, pendingSnappedX, pendingSnappedZ);
         }
 
-        // Upload texture if needed
+        // Step 3: Make progress on the incremental rebuild
+        if (this._rebuildState === REBUILD_PAINTING) {
+            this._paintChunksIncremental();
+
+            // If it just finished, swap immediately (don't wait an extra frame)
+            if (this._rebuildState === REBUILD_READY) {
+                this._swapBuffers();
+                this.centerChanged = true;
+            }
+        }
+
+        // Upload front texture if needed (handles both swap uploads and immediate paints)
         if (this.needsUpload) {
-            this.texture.needsUpdate = true;
+            this.buffers[this.frontIdx].texture.needsUpdate = true;
             this.needsUpload = false;
         }
 
@@ -205,23 +253,197 @@ export class DirtOverlaySystem {
     }
 
     /**
-     * Set the center of the overlay
-     * @param {number} x - World X
-     * @param {number} z - World Z
+     * Start an incremental rebuild on the back buffer
+     * Cancels any in-progress rebuild
      */
-    setCenter(x, z) {
-        // Snap to CLIPMAP grid (same as terrain mesh) to prevent drift between
-        // dirt overlay center and meshWorldOffset in shader.
-        const snappedX = Math.round(x / this.snapGrid) * this.snapGrid;
-        const snappedZ = Math.round(z / this.snapGrid) * this.snapGrid;
+    _startRebuild(pendingCenterX, pendingCenterZ, pendingSnappedX, pendingSnappedZ) {
+        this._rebuildState = REBUILD_PAINTING;
 
-        // Store both wrapped (for shader) and unwrapped (for tracking) centers
-        this.centerX = wrapCoord(snappedX);
-        this.centerZ = wrapCoord(snappedZ);
+        // Clear the back canvas
+        const backCtx = this.buffers[this.backIdx].ctx;
+        backCtx.clearRect(0, 0, this.textureSize, this.textureSize);
+        backCtx.globalCompositeOperation = 'lighten';
 
-        // Store unwrapped snapped position for grid-boundary detection
-        this._lastSnappedX = snappedX;
-        this._lastSnappedZ = snappedZ;
+        // Set up progress tracking
+        this._rebuildProgress = {
+            chunkKeys: Array.from(this.current3x3Keys),
+            chunkIndex: 0,
+            pendingCenterX,
+            pendingCenterZ,
+            pendingSnappedX,
+            pendingSnappedZ
+        };
+    }
+
+    /**
+     * Paint a few chunks per frame on the back buffer
+     * Temporarily swaps this.ctx and this.centerX/Z to back buffer values
+     * so all existing draw methods work without modification
+     */
+    _paintChunksIncremental() {
+        const prog = this._rebuildProgress;
+        if (!prog) return;
+
+        // Validation
+        if (!this.chunkManager?.chunkObjects) {
+            if (!this._warnedNoChunkManager) {
+                console.error('[DirtOverlay] No chunkManager.chunkObjects!');
+                this._warnedNoChunkManager = true;
+            }
+            this._rebuildState = REBUILD_IDLE;
+            this._rebuildProgress = null;
+            return;
+        }
+
+        // Temporarily swap to back buffer for drawing
+        const savedCenterX = this.centerX;
+        const savedCenterZ = this.centerZ;
+        const savedCtx = this.ctx;
+
+        this.centerX = prog.pendingCenterX;
+        this.centerZ = prog.pendingCenterZ;
+        this.ctx = this.buffers[this.backIdx].ctx;
+
+        // Paint up to CHUNKS_PER_FRAME chunks (objects + roads + docks for each)
+        let processed = 0;
+        while (prog.chunkIndex < prog.chunkKeys.length && processed < CHUNKS_PER_FRAME) {
+            const key = prog.chunkKeys[prog.chunkIndex];
+            this._paintChunkObjects(key);
+            this._paintChunkRoads(key);
+            this._paintChunkDocks(key);
+            prog.chunkIndex++;
+            processed++;
+        }
+
+        // Restore front buffer references
+        this.centerX = savedCenterX;
+        this.centerZ = savedCenterZ;
+        this.ctx = savedCtx;
+
+        // Check if all chunks are done
+        if (prog.chunkIndex >= prog.chunkKeys.length) {
+            // Reset composite on back buffer
+            this.buffers[this.backIdx].ctx.globalCompositeOperation = 'source-over';
+            this._rebuildState = REBUILD_READY;
+        }
+    }
+
+    /**
+     * Paint dirt patches for all objects in a single chunk
+     */
+    _paintChunkObjects(chunkKey) {
+        const objects = this.chunkManager.chunkObjects.get(chunkKey);
+        if (!objects || objects.length === 0) return;
+
+        for (const obj of objects) {
+            const pos = obj.position;
+            if (!pos) continue;
+
+            // Skip underwater objects
+            if (pos.y < 1.1) continue;
+
+            const modelType = obj.userData?.modelType;
+            if (!modelType) continue;
+
+            // Skip excluded types
+            if (EXCLUDED_TYPES.has(modelType) || isLogType(modelType)) continue;
+
+            const dims = this.gridDimensions[modelType];
+            if (!dims) continue;
+
+            const scale = obj.userData?.originalScale || obj.scale?.x || 1.0;
+
+            // Skip objects with invalid positions
+            if (!Number.isFinite(pos.x) || !Number.isFinite(pos.z)) continue;
+
+            // Wrap object position to match shader coordinate space
+            const wrappedX = wrapCoord(pos.x);
+            const wrappedZ = wrapCoord(pos.z);
+
+            // Cylindrical objects (trees, rocks)
+            if (dims.radius !== undefined) {
+                // Use explicit dirtRadius from config, or fall back to formula
+                const dirtRadius = dims.dirtRadius !== undefined
+                    ? dims.dirtRadius
+                    : Math.max(dims.radius * 2.5, 1.0);
+                this.drawCylindricalDirt(wrappedX, wrappedZ, scale, dirtRadius);
+            }
+            // Rectangular structures
+            else if (dims.width !== undefined && dims.depth !== undefined) {
+                const rotation = obj.rotation?.y || 0;
+                this.drawRectangularDirt(wrappedX, wrappedZ, dims.width * scale, dims.depth * scale, rotation);
+            }
+        }
+    }
+
+    /**
+     * Paint road textures for a single chunk
+     */
+    _paintChunkRoads(chunkKey) {
+        const roads = this.game?.gameState?.roads?.get(chunkKey);
+        if (!roads || roads.length === 0) return;
+
+        for (const road of roads) {
+            if (!Number.isFinite(road.x) || !Number.isFinite(road.z)) continue;
+
+            const wrappedX = wrapCoord(road.x);
+            const wrappedZ = wrapCoord(road.z);
+            const rotation = road.rotation || 0;
+            this.drawPillRoadPatch(wrappedX, wrappedZ, rotation, road.materialType || 'limestone');
+        }
+    }
+
+    /**
+     * Paint dock textures for a single chunk
+     */
+    _paintChunkDocks(chunkKey) {
+        const docks = this.game?.gameState?.docks?.get(chunkKey);
+        if (!docks || docks.length === 0) return;
+
+        for (const dock of docks) {
+            if (!Number.isFinite(dock.x) || !Number.isFinite(dock.z)) continue;
+
+            const wrappedX = wrapCoord(dock.x);
+            const wrappedZ = wrapCoord(dock.z);
+            const rotation = dock.rotation || 0;
+            this.drawDockPatch(wrappedX, wrappedZ, rotation, dock.materialType || 'limestone');
+        }
+    }
+
+    /**
+     * Atomic swap: replace front buffer with completed back buffer
+     * Updates texture + center together so shader never sees a mismatch
+     */
+    _swapBuffers() {
+        const prog = this._rebuildProgress;
+        if (!prog) return;
+
+        // Swap indices
+        const oldFront = this.frontIdx;
+        this.frontIdx = this.backIdx;
+        this.backIdx = oldFront;
+
+        // Update public-facing properties to new front buffer
+        const front = this.buffers[this.frontIdx];
+        this.centerX = prog.pendingCenterX;
+        this.centerZ = prog.pendingCenterZ;
+        this.texture = front.texture;
+        this.ctx = front.ctx;
+        this.canvas = front.canvas;
+
+        // Push the new texture reference to all terrain shader materials
+        // (the old uniform.value still points at the previous buffer's texture)
+        if (this.game?.clipmap) {
+            this.game.clipmap.applyTextureToMaterials('texDirtOverlay', this.texture);
+        }
+
+        // Mark for GPU upload
+        this.needsUpload = true;
+        this.isInitialized = true;
+
+        // Clean up
+        this._rebuildState = REBUILD_IDLE;
+        this._rebuildProgress = null;
     }
 
     /**
@@ -229,7 +451,7 @@ export class DirtOverlaySystem {
      */
     forceRebuild() {
         if (this.currentChunkX !== null) {
-            this.rebuildFrom3x3Chunks();
+            this._startRebuild(this.centerX, this.centerZ, this._lastSnappedX, this._lastSnappedZ);
         }
     }
 
@@ -250,120 +472,22 @@ export class DirtOverlaySystem {
     }
 
     /**
-     * Rebuild entire overlay from only the current 5x5 chunk grid
-     * This is called synchronously on chunk boundary crossing to prevent flicker
+     * Synchronous full rebuild (safety fallback / debugging)
+     * Paints everything in one frame on the front buffer directly
      */
-    rebuildFrom3x3Chunks() {
-        // Clear entire canvas first (clean slate - prevents accumulation)
+    _rebuildSync() {
         this.ctx.clearRect(0, 0, this.textureSize, this.textureSize);
-
-        // Set up composite operation for max blending (prevents accumulation from overlapping patches)
         this.ctx.globalCompositeOperation = 'lighten';
 
-        // Validation
-        if (!this.chunkManager?.chunkObjects) {
-            if (!this._warnedNoChunkManager) {
-                console.warn('[DirtOverlay] No chunkManager.chunkObjects!');
-                this._warnedNoChunkManager = true;
-            }
-            return;
-        }
+        if (!this.chunkManager?.chunkObjects) return;
 
-        let objectCount = 0;
-
-        // Iterate chunks in expanded grid (covers full 200-unit overlay range)
         for (const chunkKey of this.current3x3Keys) {
-            const objects = this.chunkManager.chunkObjects.get(chunkKey);
-            if (!objects || objects.length === 0) continue;
-
-            for (const obj of objects) {
-                const pos = obj.position;
-                if (!pos) continue;
-
-                // Skip underwater objects
-                if (pos.y < 1.1) continue;
-
-                const modelType = obj.userData?.modelType;
-                if (!modelType) continue;
-
-                // Skip excluded types
-                if (EXCLUDED_TYPES.has(modelType) || isLogType(modelType)) continue;
-
-                const dims = this.gridDimensions[modelType];
-                if (!dims) continue;
-
-                const scale = obj.userData?.originalScale || obj.scale?.x || 1.0;
-
-                // Skip objects with invalid positions
-                if (!Number.isFinite(pos.x) || !Number.isFinite(pos.z)) continue;
-
-                // Wrap object position to match shader coordinate space
-                const wrappedX = wrapCoord(pos.x);
-                const wrappedZ = wrapCoord(pos.z);
-
-                // Cylindrical objects (trees, rocks)
-                if (dims.radius !== undefined) {
-                    // Use explicit dirtRadius from config, or fall back to formula
-                    const dirtRadius = dims.dirtRadius !== undefined
-                        ? dims.dirtRadius
-                        : Math.max(dims.radius * 2.5, 1.0);
-                    this.drawCylindricalDirt(wrappedX, wrappedZ, scale, dirtRadius);
-                    objectCount++;
-                }
-                // Rectangular structures
-                else if (dims.width !== undefined && dims.depth !== undefined) {
-                    const rotation = obj.rotation?.y || 0;
-                    this.drawRectangularDirt(wrappedX, wrappedZ, dims.width * scale, dims.depth * scale, rotation);
-                    objectCount++;
-                }
-            }
+            this._paintChunkObjects(chunkKey);
+            this._paintChunkRoads(chunkKey);
+            this._paintChunkDocks(chunkKey);
         }
 
-        // Paint roads from stored road data (persisted across chunk rebuilds)
-        // Roads are stored in gameState.roads keyed by chunkKey
-        let roadCount = 0;
-        if (this.game?.gameState?.roads) {
-            for (const chunkKey of this.current3x3Keys) {
-                const roads = this.game.gameState.roads.get(chunkKey);
-                if (!roads || roads.length === 0) continue;
-
-                for (const road of roads) {
-                    // Skip roads with invalid positions
-                    if (!Number.isFinite(road.x) || !Number.isFinite(road.z)) continue;
-
-                    const wrappedX = wrapCoord(road.x);
-                    const wrappedZ = wrapCoord(road.z);
-                    const rotation = road.rotation || 0; // Already in radians
-                    this.drawPillRoadPatch(wrappedX, wrappedZ, rotation, road.materialType || 'limestone');
-                    roadCount++;
-                }
-            }
-        }
-
-        // Paint docks from stored dock data (terrain-based docks use texture overlay)
-        // Docks are stored in gameState.docks keyed by chunkKey
-        let dockCount = 0;
-        if (this.game?.gameState?.docks) {
-            for (const chunkKey of this.current3x3Keys) {
-                const docks = this.game.gameState.docks.get(chunkKey);
-                if (!docks || docks.length === 0) continue;
-
-                for (const dock of docks) {
-                    // Skip docks with invalid positions
-                    if (!Number.isFinite(dock.x) || !Number.isFinite(dock.z)) continue;
-
-                    const wrappedX = wrapCoord(dock.x);
-                    const wrappedZ = wrapCoord(dock.z);
-                    const rotation = dock.rotation || 0; // Already in radians
-                    this.drawDockPatch(wrappedX, wrappedZ, rotation, dock.materialType || 'limestone');
-                    dockCount++;
-                }
-            }
-        }
-
-        // Reset composite operation
         this.ctx.globalCompositeOperation = 'source-over';
-
         this.needsUpload = true;
         this.isInitialized = true;
     }
@@ -462,7 +586,7 @@ export class DirtOverlaySystem {
 
     /**
      * Paint road immediately at world position (for real-time feedback)
-     * Does NOT clear canvas - additive painting
+     * Does NOT clear canvas - additive painting on front buffer
      *
      * @param {number} worldX - Road center world X
      * @param {number} worldZ - Road center world Z
@@ -503,7 +627,7 @@ export class DirtOverlaySystem {
         const width = 4.0;
         const depth = 12.0;
 
-        // Detect if rotation is ~90° or ~270° (East/West facing)
+        // Detect if rotation is ~90deg or ~270deg (East/West facing)
         // sin(PI/2) = 1, sin(3*PI/2) = -1
         const sinR = Math.sin(rotation);
         const isEastWest = Math.abs(sinR) > 0.99;
@@ -522,7 +646,7 @@ export class DirtOverlaySystem {
 
         this.ctx.save();
         this.ctx.translate(px, pz);
-        // NO ctx.rotate() - dimensions are swapped for 90°/270°, and 0°/180° are already axis-aligned
+        // NO ctx.rotate() - dimensions are swapped for 90/270, and 0/180 are already axis-aligned
 
         // Sandstone uses BLUE channel, limestone uses GREEN channel
         const isSandstone = materialType === 'sandstone';
@@ -536,7 +660,7 @@ export class DirtOverlaySystem {
 
     /**
      * Paint dock immediately at world position (for terrain-based dock rendering)
-     * Does NOT clear canvas - additive painting
+     * Does NOT clear canvas - additive painting on front buffer
      *
      * @param {number} worldX - Dock center world X
      * @param {number} worldZ - Dock center world Z
@@ -708,10 +832,13 @@ export class DirtOverlaySystem {
      * Dispose of resources
      */
     dispose() {
-        if (this.texture) {
-            this.texture.dispose();
-            this.texture = null;
+        for (const buf of this.buffers) {
+            if (buf.texture) {
+                buf.texture.dispose();
+            }
         }
+        this.buffers = null;
+        this.texture = null;
         this.canvas = null;
         this.ctx = null;
     }

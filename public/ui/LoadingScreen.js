@@ -256,7 +256,7 @@ export class LoadingScreen {
             this.game.chunkManager.initializePhysicsCollidersAroundPlayer(chunkX, chunkZ);
             // Build initial chunk border marker posts
             if (this.game.chunkBorderMarkerSystem) {
-                this.game.chunkBorderMarkerSystem.rebuild(chunkX, chunkZ);
+                this.game.chunkBorderMarkerSystem.rebuildImmediate(chunkX, chunkZ);
             }
         }
 
