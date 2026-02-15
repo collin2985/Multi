@@ -849,7 +849,7 @@ wss.on('connection', ws => {
                         }
                     }
 
-                    const registerResult = await AuthManager.register(payload.username, payload.password);
+                    const registerResult = await AuthManager.register(payload.username, payload.password, payload.email);
                     // Set accountId and username on websocket so subsequent messages work
                     if (registerResult.success) {
                         // Store fingerprint with new account
@@ -1149,6 +1149,30 @@ wss.on('connection', ws => {
                         type: 'logout_response',
                         payload: {
                             ...logoutResult,
+                            requestId: payload.requestId
+                        }
+                    }));
+                }
+                break;
+
+            case 'update_email':
+                if (!ws.accountId) {
+                    ws.send(JSON.stringify({
+                        type: 'update_email_response',
+                        payload: {
+                            success: false,
+                            message: 'Not authenticated',
+                            requestId: payload.requestId
+                        }
+                    }));
+                    break;
+                }
+                if (AuthManager) {
+                    const emailResult = await AuthManager.updateEmail(ws.accountId, payload.email);
+                    ws.send(JSON.stringify({
+                        type: 'update_email_response',
+                        payload: {
+                            ...emailResult,
                             requestId: payload.requestId
                         }
                     }));

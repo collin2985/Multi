@@ -127,7 +127,8 @@ class DatabaseManager {
                 created_at TIMESTAMP DEFAULT NOW(),
                 last_login TIMESTAMP,
                 fingerprint_hash VARCHAR(64),
-                fingerprint_signals JSONB
+                fingerprint_signals JSONB,
+                email VARCHAR(255) DEFAULT NULL
             );
 
             -- Sessions table (login tokens)
@@ -320,6 +321,12 @@ class DatabaseManager {
                 IF NOT EXISTS (SELECT 1 FROM information_schema.columns
                     WHERE table_name='audit_log' AND column_name='actor_fingerprint') THEN
                     ALTER TABLE audit_log ADD COLUMN actor_fingerprint VARCHAR(64) DEFAULT NULL;
+                END IF;
+
+                -- Add email to players if not exists
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                    WHERE table_name='players' AND column_name='email') THEN
+                    ALTER TABLE players ADD COLUMN email VARCHAR(255) DEFAULT NULL;
                 END IF;
             END $$;
         `;

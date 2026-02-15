@@ -118,6 +118,13 @@ export class LoginModal {
                         </div>
 
                         <div class="login-form-group">
+                            <label for="register-email">Email</label>
+                            <input type="email" id="register-email" name="email"
+                                   required
+                                   placeholder="For announcements and account recovery">
+                        </div>
+
+                        <div class="login-form-group">
                             <label for="register-password">Password</label>
                             <input type="password" id="register-password" name="password"
                                    required minlength="8"
@@ -197,6 +204,28 @@ export class LoginModal {
                     </div>
                 </div>
 
+                <!-- Email Prompt View (for existing users without email) -->
+                <div id="login-email-view" class="login-view" style="display: none;">
+                    <h2>Add Your Email</h2>
+                    <p class="login-subtitle" style="margin-bottom: 20px; color: #C8B898;">
+                        Used for announcements and account recovery only.
+                    </p>
+
+                    <form id="email-form" class="login-form">
+                        <div class="login-form-group">
+                            <label for="update-email">Email</label>
+                            <input type="email" id="update-email" name="email"
+                                   required placeholder="Enter your email">
+                        </div>
+
+                        <button type="submit" class="login-btn login-btn-primary" id="email-submit-btn">
+                            Save Email
+                        </button>
+                    </form>
+
+                    <div id="email-error" class="login-error" style="display: none;"></div>
+                </div>
+
                 <!-- Loading Overlay -->
                 <div id="login-loading" class="login-loading" style="display: none;">
                     <div class="login-spinner"></div>
@@ -234,6 +263,8 @@ export class LoginModal {
 
         // Close button
         document.getElementById('login-close-btn').addEventListener('click', () => {
+            // Email view cannot be closed — must submit email
+            if (this.currentView === 'email') return;
             // If user is already in-game, just close the modal
             if (this.gameState.hasCompletedInitialAuth) {
                 this.hide();
@@ -254,6 +285,8 @@ export class LoginModal {
 
         // Overlay click to close (optional)
         document.querySelector('.login-modal-overlay').addEventListener('click', () => {
+            // Email view cannot be closed — must submit email
+            if (this.currentView === 'email') return;
             // Only allow closing via overlay if user has completed initial auth choice
             if (this.gameState.hasCompletedInitialAuth) {
                 this.hide();
@@ -326,6 +359,12 @@ export class LoginModal {
 
         document.getElementById('faction-confirm-no').addEventListener('click', () => {
             this.cancelFactionSelection();
+        });
+
+        // Email prompt form
+        document.getElementById('email-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.handleEmailSubmit();
         });
 
         // Password confirmation validation
@@ -510,6 +549,48 @@ export class LoginModal {
     }
 
     /**
+     * Handle email form submission (for existing users without email)
+     */
+    async handleEmailSubmit() {
+        const email = document.getElementById('update-email').value;
+        if (!email) return;
+
+        this.showLoading('Saving email...');
+
+        try {
+            await this.authClient.sendUpdateEmail(email);
+
+            this.hideLoading();
+            this.completeEmailLogin();
+        } catch (error) {
+            this.hideLoading();
+            this.showError('email', error.message || 'Failed to save email');
+        }
+    }
+
+    /**
+     * Complete the login flow after email is provided
+     */
+    completeEmailLogin() {
+        if (!this.pendingEmailLogin) return;
+
+        const { authType, data } = this.pendingEmailLogin;
+        this.pendingEmailLogin = null;
+
+        // Request friends list for auto-login (normal login already does this)
+        if (authType === 'auto-login' && window.game?.networkManager) {
+            window.game.networkManager.sendMessage('get_friends_list', {});
+        }
+
+        // onAuthComplete handles spawn screen, inventory sync, and save exit overlay
+        if (this.onAuthComplete) {
+            this.onAuthComplete(authType === 'auto-login' ? 'login' : authType, data);
+        }
+
+        this.hide();
+    }
+
+    /**
      * Handle login form submission
      */
     async handleLogin() {
@@ -584,6 +665,20 @@ export class LoginModal {
 
                 this.hideLoading();
 
+                // Check if user needs to provide email
+                if (result.hasEmail === false) {
+                    this.pendingEmailLogin = {
+                        authType: 'login',
+                        data: {
+                            playerId: result.playerId,
+                            username: username,
+                            playerData: result.playerData
+                        }
+                    };
+                    this.showView('email');
+                    return;
+                }
+
                 // Trigger auth complete callback (shows spawn screen)
                 if (this.onAuthComplete) {
                     this.onAuthComplete('login', {
@@ -609,6 +704,7 @@ export class LoginModal {
      */
     async handleRegister() {
         const username = document.getElementById('register-username').value;
+        const email = document.getElementById('register-email').value;
         const password = document.getElementById('register-password').value;
         const passwordConfirm = document.getElementById('register-password-confirm').value;
 
@@ -621,7 +717,7 @@ export class LoginModal {
         this.showLoading('Creating account...');
 
         try {
-            const result = await this.authClient.register(username, password);
+            const result = await this.authClient.register(username, password, email);
 
             if (result.success) {
                 // Auto-login after registration
@@ -832,6 +928,23 @@ export class LoginModal {
                     }
 
                     this.hideLoading();
+
+                    // Check if user needs to provide email
+                    if (result.hasEmail === false) {
+                        this.pendingEmailLogin = {
+                            authType: 'auto-login',
+                            data: {
+                                playerId: result.playerId,
+                                username: result.username,
+                                playerData: result.playerData
+                            }
+                        };
+                        this.modal.style.display = 'block';
+                        this.isVisible = true;
+                        this.showView('email');
+                        return 'needs_email';
+                    }
+
                     return true;
                 }
             } catch (error) {

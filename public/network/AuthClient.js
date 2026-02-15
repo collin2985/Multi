@@ -43,7 +43,7 @@ export class AuthClient {
      * @param {string} password
      * @returns {Promise} Resolves with registration result
      */
-    async register(username, password) {
+    async register(username, password, email) {
         // Collect fingerprint before registering
         let fingerprint, partialHashes;
         try {
@@ -67,6 +67,7 @@ export class AuthClient {
             const success = this.networkManager.sendMessage('register_request', {
                 username,
                 password,
+                email,
                 fingerprint,
                 partialHashes,
                 requestId
@@ -214,6 +215,37 @@ export class AuthClient {
     }
 
     /**
+     * Send update_email request for existing users
+     * @param {string} email
+     * @returns {Promise} Resolves with update result
+     */
+    sendUpdateEmail(email) {
+        return new Promise((resolve, reject) => {
+            const requestId = 'update_email_' + Date.now();
+
+            this.pendingRequests.set(requestId, { resolve, reject });
+
+            const success = this.networkManager.sendMessage('update_email', {
+                email,
+                requestId
+            });
+
+            if (!success) {
+                this.pendingRequests.delete(requestId);
+                reject(new Error('Failed to send email update request'));
+            }
+
+            // Timeout after 10 seconds
+            setTimeout(() => {
+                if (this.pendingRequests.has(requestId)) {
+                    this.pendingRequests.delete(requestId);
+                    reject(new Error('Email update request timed out'));
+                }
+            }, 10000);
+        });
+    }
+
+    /**
      * Send auth upgrade message (guest -> registered)
      * @param {string} accountId
      * @param {string} username
@@ -308,6 +340,14 @@ export class AuthClient {
 
             case 'auth_upgrade_success':
                 pending.resolve(payload);
+                break;
+
+            case 'update_email_response':
+                if (payload.success) {
+                    pending.resolve(payload);
+                } else {
+                    pending.reject(new Error(payload.message || 'Failed to update email'));
+                }
                 break;
 
             default:

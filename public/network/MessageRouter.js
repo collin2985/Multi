@@ -91,6 +91,7 @@ export class MessageRouter {
             'session_validation': (payload) => this.handleAuthResponse('session_validation', payload),
             'logout_response': (payload) => this.handleAuthResponse('logout_response', payload),
             'auth_upgrade_success': (payload) => this.handleAuthResponse('auth_upgrade_success', payload),
+            'update_email_response': (payload) => this.handleAuthResponse('update_email_response', payload),
             'player_data_loaded': (payload) => this.handlePlayerDataLoaded(payload),
             'kicked': (payload) => this.handleKicked(payload),
             'admin_broadcast': (payload) => this.handleAdminBroadcast(payload),

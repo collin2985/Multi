@@ -9855,7 +9855,7 @@ modelManager.loadAllModels().then(async () => {
 
     // Check for auto-login or show login modal
     const autoLoggedIn = await game.loginModal.attemptAutoLogin();
-    if (autoLoggedIn) {
+    if (autoLoggedIn === true) {
         // Request friends list before showing spawn screen
         game.networkManager.sendMessage('get_friends_list', {});
 
@@ -9870,6 +9870,9 @@ modelManager.loadAllModels().then(async () => {
 
         // Auto-logged in - show spawn screen
         game.spawnScreen.show({ isRespawn: false });
+    } else if (autoLoggedIn === 'needs_email') {
+        // Auto-logged in but needs email - LoginModal is showing email prompt
+        // Spawn screen will be shown after email is submitted via onAuthComplete
     } else {
         // Show login modal
         game.loginModal.show();

@@ -182,6 +182,12 @@ class MessageHandlers {
         ws.clientId = clientId;
         ws.accountId = accountId || null;  // Track account ID if provided
 
+        // Look up username for audit logging
+        if (accountId && this.authManager && !ws.username) {
+            const name = await this.authManager.getUsernameById(accountId);
+            if (name) ws.username = name;
+        }
+
         // Clean up stale sessions from same account (handles hard refresh race condition)
         // When a player hard refreshes, old WebSocket may not have closed yet
         if (accountId) {

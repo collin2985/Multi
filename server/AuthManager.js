@@ -128,7 +128,7 @@ class AuthManager {
      * @param {string} password - Plain text password (will be hashed)
      * @returns {Promise<{success: boolean, playerId?: string, token?: string, message?: string}>}
      */
-    async register(username, password) {
+    async register(username, password, email) {
         // Validate input
         if (!username || typeof username !== 'string' ||
             username.length < 3 || username.length > 20 ||
@@ -152,6 +152,13 @@ class AuthManager {
             };
         }
 
+        if (!email || !this.validateEmail(email)) {
+            return {
+                success: false,
+                message: 'A valid email address is required'
+            };
+        }
+
         if (!this.useDatabase) {
             // LOCAL MODE: Simple in-memory storage
             // Use lowercase key for case-insensitive lookup, store original for display
@@ -169,6 +176,7 @@ class AuthManager {
                 playerId,
                 displayUsername: username, // Original case for display
                 password, // WARNING: Plain text for local testing only!
+                email,
                 createdAt: new Date()
             });
 
@@ -206,10 +214,10 @@ class AuthManager {
 
             // Create player (store original case for display)
             const playerResult = await client.query(
-                `INSERT INTO players (username, password_hash)
-                 VALUES ($1, $2)
+                `INSERT INTO players (username, password_hash, email)
+                 VALUES ($1, $2, $3)
                  RETURNING id`,
-                [username, passwordHash]
+                [username, passwordHash, email]
             );
 
             const playerId = playerResult.rows[0].id;
@@ -281,7 +289,7 @@ class AuthManager {
             // Get influence for local mode
             const influence = await this.getInfluence(user.playerId);
 
-            return { success: true, playerId: user.playerId, token, influence };
+            return { success: true, playerId: user.playerId, token, influence, hasEmail: !!user.email };
         }
 
         // PRODUCTION MODE
@@ -294,7 +302,7 @@ class AuthManager {
         try {
             // Get user (case-insensitive lookup, return original username for display)
             const userResult = await db.query(
-                `SELECT id, username, password_hash FROM players WHERE LOWER(username) = LOWER($1)`,
+                `SELECT id, username, password_hash, email IS NOT NULL as has_email FROM players WHERE LOWER(username) = LOWER($1)`,
                 [username]
             );
 
@@ -336,7 +344,7 @@ class AuthManager {
             // Get influence for production mode
             const influence = await this.getInfluence(user.id);
 
-            return { success: true, playerId: user.id, token, influence };
+            return { success: true, playerId: user.id, token, influence, hasEmail: user.has_email };
 
         } catch (error) {
             console.error('Login error:', error);
@@ -415,18 +423,28 @@ class AuthManager {
             // Get influence for local mode
             const influence = await this.getInfluence(session.playerId);
 
+            // Find user email for hasEmail flag
+            let hasEmail = false;
+            for (const [, userData] of this.localUsers) {
+                if (userData.playerId === session.playerId) {
+                    hasEmail = !!userData.email;
+                    break;
+                }
+            }
+
             return {
                 valid: true,
                 playerId: session.playerId,
                 username: session.username,
-                influence
+                influence,
+                hasEmail
             };
         }
 
         // PRODUCTION MODE
         try {
             const result = await db.query(
-                `SELECT s.player_id, s.expires_at, p.username
+                `SELECT s.player_id, s.expires_at, p.username, p.email IS NOT NULL as has_email
                  FROM sessions s
                  JOIN players p ON s.player_id = p.id
                  WHERE s.token = $1`,
@@ -458,7 +476,8 @@ class AuthManager {
                 valid: true,
                 playerId: session.player_id,
                 username: session.username,
-                influence
+                influence,
+                hasEmail: session.has_email
             };
 
         } catch (error) {
@@ -1497,6 +1516,55 @@ class AuthManager {
     validatePassword(password) {
         if (!password || typeof password !== 'string') return false;
         return password.length >= 8;
+    }
+
+    /**
+     * Validate email format
+     * @param {string} email
+     * @returns {boolean}
+     */
+    validateEmail(email) {
+        if (!email || typeof email !== 'string') return false;
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    }
+
+    /**
+     * Update email for an existing player
+     * @param {string} playerId
+     * @param {string} email
+     * @returns {Promise<{success: boolean, message?: string}>}
+     */
+    async updateEmail(playerId, email) {
+        if (!playerId) {
+            return { success: false, message: 'Not authenticated' };
+        }
+
+        if (!this.validateEmail(email)) {
+            return { success: false, message: 'Invalid email address' };
+        }
+
+        if (!this.useDatabase) {
+            // LOCAL MODE - find user by playerId
+            for (const [, userData] of this.localUsers) {
+                if (userData.playerId === playerId) {
+                    userData.email = email;
+                    return { success: true };
+                }
+            }
+            return { success: false, message: 'Player not found' };
+        }
+
+        // PRODUCTION MODE
+        try {
+            await db.query(
+                'UPDATE players SET email = $1 WHERE id = $2',
+                [email, playerId]
+            );
+            return { success: true };
+        } catch (error) {
+            console.error('Update email error:', error);
+            return { success: false, message: 'Failed to update email' };
+        }
     }
 
     /**

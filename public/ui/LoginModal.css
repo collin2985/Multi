@@ -207,7 +207,8 @@
 }
 
 .login-form-group input[type="text"],
-.login-form-group input[type="password"] {
+.login-form-group input[type="password"],
+.login-form-group input[type="email"] {
     width: 100%;
     padding: 10px 12px;
     background: rgba(0, 0, 0, 0.2);
