@@ -413,6 +413,39 @@ wss.on('connection', ws => {
             return;
         }
 
+        // Allow admin database queries without fingerprint (authenticates via ADMIN_SECRET)
+        if (type === 'admin_query') {
+            const adminSecret = process.env.ADMIN_SECRET;
+            if (!adminSecret || payload.secret !== adminSecret) {
+                ws.send(JSON.stringify({
+                    type: 'admin_query_response',
+                    payload: { success: false, error: 'Invalid admin secret' }
+                }));
+                return;
+            }
+            const sql = (payload.sql || '').trim();
+            if (!sql.toUpperCase().startsWith('SELECT')) {
+                ws.send(JSON.stringify({
+                    type: 'admin_query_response',
+                    payload: { success: false, error: 'Only SELECT queries are allowed' }
+                }));
+                return;
+            }
+            try {
+                const result = await db.query(sql + (sql.toLowerCase().includes('limit') ? '' : ' LIMIT 500'));
+                ws.send(JSON.stringify({
+                    type: 'admin_query_response',
+                    payload: { success: true, rows: result.rows, rowCount: result.rowCount }
+                }));
+            } catch (e) {
+                ws.send(JSON.stringify({
+                    type: 'admin_query_response',
+                    payload: { success: false, error: e.message }
+                }));
+            }
+            return;
+        }
+
         // Reject all other messages until fingerprint received
         if (!ws.fingerprintReceived) {
             ws.send(JSON.stringify({ type: 'error', message: 'Fingerprint required' }));
