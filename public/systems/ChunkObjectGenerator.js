@@ -565,14 +565,14 @@ class ChunkObjectGenerator {
         // Need terrainGenerator to check if chunk is on land
         if (!this.terrainGenerator) return false;
 
-        // Check if chunk center is on land using continent mask
+        // Check if chunk center is far enough inland
         const chunkSize = CONFIG.TERRAIN.chunkSize;
         const centerX = chunkX * chunkSize;
         const centerZ = chunkZ * chunkSize;
 
-        // Require continent mask > 0.8 (solidly on land, not in transition zone)
-        const continentMask = this.terrainGenerator.getContinentMask(centerX, centerZ);
-        if (continentMask < 0.8) return false;
+        // Require at least 50 units inside continent edge (~100-150 from visible coastline)
+        const info = this.terrainGenerator.computeContinentInfo(centerX, centerZ);
+        if (info.radius - info.distance < 50) return false;
 
         // FNV-1a hash for deterministic probability selection
         let hash = 0x811c9dc5;
@@ -596,9 +596,9 @@ class ChunkObjectGenerator {
         const centerX = chunkX * chunkSize;
         const centerZ = chunkZ * chunkSize;
 
-        // Require continent mask > 0.8 (solidly on land)
-        const continentMask = this.terrainGenerator.getContinentMask(centerX, centerZ);
-        if (continentMask < 0.8) return false;
+        // Require at least 50 units inside continent edge (~100-150 from visible coastline)
+        const info = this.terrainGenerator.computeContinentInfo(centerX, centerZ);
+        if (info.radius - info.distance < 50) return false;
 
         // FNV-1a hash with different offset than bandits
         let hash = 0x811c9dc5;
