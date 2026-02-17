@@ -94,30 +94,6 @@ async function initializeServer() {
     // Initialize database connection
     await chunkManager.initialize();
 
-    // ONE-TIME MIGRATION: Change mag5 structures from Northmen(3) to Southguard(1)
-    // Safe here because chunk cache is empty at startup. Remove after confirming.
-    if (chunkManager.dbReady) {
-        try {
-            const migrationResult = await db.query(`
-                UPDATE chunks SET data = jsonb_set(data, '{objectChanges}',
-                    (SELECT jsonb_agg(
-                        CASE
-                            WHEN elem->>'owner' = 'fa48717a-f00d-46e4-9fa5-b025177d7a14'
-                                 AND elem->>'action' = 'add'
-                                 AND elem ? 'factionId'
-                            THEN jsonb_set(elem, '{factionId}', '1')
-                            ELSE elem
-                        END
-                    ) FROM jsonb_array_elements(data->'objectChanges') elem)
-                )
-                WHERE chunk_id = 'chunk_-24,4'
-            `);
-            console.log(`[Migration] mag5 faction change: ${migrationResult.rowCount} chunk(s) updated`);
-        } catch (e) {
-            console.error('[Migration] mag5 faction change failed:', e.message);
-        }
-    }
-
     // Load persisted server state (tick only - version is now hardcoded)
     const serverState = await chunkManager.loadServerState();
     const initialTick = serverState.tick;
