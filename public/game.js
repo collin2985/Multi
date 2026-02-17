@@ -9679,10 +9679,13 @@ modelManager.loadAllModels().then(async () => {
                     spawnX = -1220;
                     spawnZ = 205;
                 } else {
-                    // Neutral/guest - random position in world
-                    const result = findValidSpawnPoint(spawnTerrainGenerator, 0, 0, minX, maxX, minZ, maxZ, bc);
-                    spawnX = result.x;
-                    spawnZ = result.z;
+                    // Neutral/guest - fixed spawn point
+                    // TODO: Re-enable random spawn later:
+                    // const result = findValidSpawnPoint(spawnTerrainGenerator, 0, 0, minX, maxX, minZ, maxZ, bc);
+                    // spawnX = result.x;
+                    // spawnZ = result.z;
+                    spawnX = -1558;
+                    spawnZ = -8;
                 }
             }
 
