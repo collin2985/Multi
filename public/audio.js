@@ -527,7 +527,7 @@ export class AudioManager {
                     sound.stop();
                 }
                 avatar.remove(sound);
-                sound.disconnect();
+                try { sound.disconnect(); } catch (e) { /* already disconnected by stop() */ }
             }, duration);
         }
 

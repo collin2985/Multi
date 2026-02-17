@@ -695,6 +695,16 @@ class WoodcutterController extends BaseWorkerController {
     }
 
     _handleProcessingLog(entity, deltaTime) {
+        // Verify log still exists in the world (not just a stale JS reference)
+        if (!this._findLogById(entity.currentLogId)) {
+            this._setChopping(entity, false);
+            entity.state = WOODCUTTER_STATE.IDLE;
+            entity.currentLogId = null;
+            entity.currentLog = null;
+            entity.waitingForHarvestResponse = false;
+            return;
+        }
+
         if (entity.waitingForHarvestResponse) {
             if (!entity._harvestResponseTime) entity._harvestResponseTime = Date.now();
             if (Date.now() - entity._harvestResponseTime > 2000) {

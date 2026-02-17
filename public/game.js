@@ -9669,11 +9669,21 @@ modelManager.loadAllModels().then(async () => {
                 spawnX = result.x;
                 spawnZ = result.z;
             } else {
-                // Random spawn - find valid position in faction zone
-                // Uses optimized continent-based algorithm (fast, no loading needed)
-                const result = findValidSpawnPoint(spawnTerrainGenerator, 0, 0, minX, maxX, minZ, maxZ, bc);
-                spawnX = result.x;
-                spawnZ = result.z;
+                // Random spawn - use fixed faction spawn points
+                if (factionId === 3) {
+                    // Northmen
+                    spawnX = -1170;
+                    spawnZ = 420;
+                } else if (factionId === 1) {
+                    // Southguard
+                    spawnX = -1220;
+                    spawnZ = 205;
+                } else {
+                    // Neutral/guest - random position in world
+                    const result = findValidSpawnPoint(spawnTerrainGenerator, 0, 0, minX, maxX, minZ, maxZ, bc);
+                    spawnX = result.x;
+                    spawnZ = result.z;
+                }
             }
 
             // Check if this is initial spawn or respawn

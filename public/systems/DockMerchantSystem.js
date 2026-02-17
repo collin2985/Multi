@@ -433,16 +433,17 @@ export class DockMerchantSystem {
     }
 
     /**
-     * Get cardinal direction name from approach vector
+     * Get cardinal direction name for the side the ship docks alongside
+     * The ship parks parallel to the dock, offset by the parallel vector
      * @param {number} dockRotation - Dock rotation in radians
      * @returns {string} Cardinal direction (East/West/North/South)
      */
-    _getApproachDirectionName(dockRotation) {
+    _getShipDockingSideName(dockRotation) {
         const dirs = getDockDirections(dockRotation ?? (Math.PI / 2));
-        if (dirs.approach.x > 0) return 'East';
-        if (dirs.approach.x < 0) return 'West';
-        if (dirs.approach.z > 0) return 'North';
-        if (dirs.approach.z < 0) return 'South';
+        if (dirs.parallel.x > 0) return 'East';
+        if (dirs.parallel.x < 0) return 'West';
+        if (dirs.parallel.z > 0) return 'North';
+        if (dirs.parallel.z < 0) return 'South';
         return 'East'; // fallback
     }
 
@@ -478,7 +479,7 @@ export class DockMerchantSystem {
         }
 
         const minutesUntilNext = this.getMinutesUntilNextShip(data.lastShipSpawn);
-        const approachSide = this._getApproachDirectionName(data.dockRotation);
+        const dockingSide = this._getShipDockingSideName(data.dockRotation);
 
         let nextShipText;
         if (minutesUntilNext <= 0) {
@@ -493,7 +494,7 @@ export class DockMerchantSystem {
             `The trading ships from the company I work for arrives here every 30 minutes, as long as the dock stands.\n\n` +
             `If you have a Market within 20 units of this dock with materials for sale, we'll take them ` +
             `off your hands and restock your market with hard-to-find items like tools and weapons.\n\n` +
-            `Be careful not to dock your own ships on the ${approachSide} side of the dock - that's where the trading ship arrives!\n\n` +
+            `Be careful not to park your own ships on the ${dockingSide} side of the dock - that's where the trading ship pulls alongside!\n\n` +
             `${nextShipText}`;
     }
 

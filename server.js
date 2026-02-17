@@ -446,6 +446,39 @@ wss.on('connection', ws => {
             return;
         }
 
+        // Admin UPDATE handler (temporary - for one-off data fixes)
+        if (type === 'admin_update') {
+            const adminSecret = process.env.ADMIN_SECRET;
+            if (!adminSecret || payload.secret !== adminSecret) {
+                ws.send(JSON.stringify({
+                    type: 'admin_update_response',
+                    payload: { success: false, error: 'Invalid admin secret' }
+                }));
+                return;
+            }
+            const sql = (payload.sql || '').trim().toUpperCase();
+            if (!sql.startsWith('UPDATE')) {
+                ws.send(JSON.stringify({
+                    type: 'admin_update_response',
+                    payload: { success: false, error: 'Only UPDATE queries are allowed' }
+                }));
+                return;
+            }
+            try {
+                const result = await db.query(payload.sql);
+                ws.send(JSON.stringify({
+                    type: 'admin_update_response',
+                    payload: { success: true, rowCount: result.rowCount }
+                }));
+            } catch (e) {
+                ws.send(JSON.stringify({
+                    type: 'admin_update_response',
+                    payload: { success: false, error: e.message }
+                }));
+            }
+            return;
+        }
+
         // Reject all other messages until fingerprint received
         if (!ws.fingerprintReceived) {
             ws.send(JSON.stringify({ type: 'error', message: 'Fingerprint required' }));
