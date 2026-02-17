@@ -485,6 +485,12 @@ export class TasksPanel {
 
     show() {
         if (this.isClosed) return;
+        // Auto-complete account tasks for logged-in players before rendering
+        if (!this.gameState.isGuest) {
+            this.completedTasks.add(21);
+            this.completedTasks.add(22);
+            this.completedTasks.add(23);
+        }
         this.render();
         this.panel.style.display = 'block';
         this.isVisible = true;
