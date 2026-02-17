@@ -220,7 +220,7 @@ class WoodcutterController extends BaseWorkerController {
             }
             if (entity.activeSound) {
                 entity.mesh?.remove(entity.activeSound);
-                entity.activeSound.disconnect();
+                try { entity.activeSound.disconnect(); } catch (e) { /* already disconnected */ }
                 entity.activeSound = null;
             }
         }
@@ -1014,7 +1014,7 @@ class WoodcutterController extends BaseWorkerController {
         }
         if (entity.activeSound) {
             entity.mesh?.remove(entity.activeSound);
-            entity.activeSound.disconnect();
+            try { entity.activeSound.disconnect(); } catch (e) { /* already disconnected */ }
             entity.activeSound = null;
         }
     }

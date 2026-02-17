@@ -181,7 +181,7 @@ class MinerController extends BaseWorkerController {
                 if (entity.activeSound?.isPlaying) {
                     entity.activeSound.stop();
                     entity.mesh.remove(entity.activeSound);
-                    entity.activeSound.disconnect();
+                    try { entity.activeSound.disconnect(); } catch (e) { /* already disconnected */ }
                 }
                 entity.activeSound = audioManager.playPositionalSound('pickaxe', entity.mesh);
             }
@@ -198,7 +198,7 @@ class MinerController extends BaseWorkerController {
             }
             if (entity.activeSound) {
                 entity.mesh?.remove(entity.activeSound);
-                entity.activeSound.disconnect();
+                try { entity.activeSound.disconnect(); } catch (e) { /* already disconnected */ }
                 entity.activeSound = null;
             }
         }
@@ -516,7 +516,7 @@ class MinerController extends BaseWorkerController {
                             if (entity.activeSound?.isPlaying) {
                                 entity.activeSound.stop();
                                 entity.mesh.remove(entity.activeSound);
-                                entity.activeSound.disconnect();
+                                try { entity.activeSound.disconnect(); } catch (e) { /* already disconnected */ }
                             }
                             entity.activeSound = audioManager.playPositionalSound('pickaxe', entity.mesh);
                         }
@@ -606,7 +606,7 @@ class MinerController extends BaseWorkerController {
                             if (entity.activeSound?.isPlaying) {
                                 entity.activeSound.stop();
                                 entity.mesh.remove(entity.activeSound);
-                                entity.activeSound.disconnect();
+                                try { entity.activeSound.disconnect(); } catch (e) { /* already disconnected */ }
                             }
                             entity.activeSound = audioManager.playPositionalSound('pickaxe', entity.mesh);
                         }
@@ -715,7 +715,7 @@ class MinerController extends BaseWorkerController {
         }
         if (entity.activeSound) {
             entity.mesh?.remove(entity.activeSound);
-            entity.activeSound.disconnect();
+            try { entity.activeSound.disconnect(); } catch (e) { /* already disconnected */ }
             entity.activeSound = null;
         }
     }

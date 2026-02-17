@@ -55,7 +55,8 @@ const CONFIG = {
         CHUNK_SIZE: 50,
 
         // Load chunks in NxN grid (1=3x3, 2=5x5, etc)
-        // MUST match client config.js value!
+        // Controls how far structure data is sent to clients (~radius*50 units)
+        // Intentionally smaller than client LOAD_RADIUS (10) — see GAME_CONTEXT.md
         LOAD_RADIUS: 2,
     },
 
