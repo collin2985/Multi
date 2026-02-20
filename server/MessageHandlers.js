@@ -3127,20 +3127,6 @@ class MessageHandlers {
                 }
             });
 
-            // Set as player's home if they have an accountId (not for bandit tents)
-            if (accountId && this.authManager && !isBanditStructure) {
-                await this.authManager.setHome(accountId, tentId, position[0], position[2]);
-
-                // Notify client their home was set
-                this.messageRouter.sendToAccount(accountId, {
-                    type: 'home_set',
-                    payload: {
-                        structureId: tentId,
-                        x: position[0],
-                        z: position[2]
-                    }
-                });
-            }
         } catch (error) {
             console.error('ERROR in place_tent:', error);
         }
@@ -5414,7 +5400,7 @@ class MessageHandlers {
 
                 for (const obj of chunkData.objectChanges) {
                     // Look for house or tent owned by this player
-                    if (obj.owner === ownerId && (obj.name === 'house' || obj.name === 'tent')) {
+                    if (obj.owner === ownerId && obj.name === 'house') {
                         const buildTime = obj.lastRepairTime || 0;
                         if (!mostRecent || buildTime > mostRecent.buildTime) {
                             mostRecent = {

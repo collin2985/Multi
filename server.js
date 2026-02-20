@@ -918,7 +918,7 @@ wss.on('connection', ws => {
                                 registerResult.playerId
                             );
 
-                            // If structures were transferred, find house/tent and set as home
+                            // If structures were transferred, find house and set as home
                             if (transferred > 0) {
                                 const homeStructure = await messageHandlers.findOwnedHome(registerResult.playerId);
                                 if (homeStructure) {
@@ -1254,7 +1254,7 @@ wss.on('connection', ws => {
                                 payload.accountId
                             );
 
-                            // If structures were transferred, find house/tent and set as home
+                            // If structures were transferred, find house and set as home
                             if (structuresTransferred > 0) {
                                 const homeStructure = await messageHandlers.findOwnedHome(payload.accountId);
                                 if (homeStructure) {

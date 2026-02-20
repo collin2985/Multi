@@ -291,6 +291,7 @@ export class ActionManager {
 
             const vehicleNames = { boat: 'Boat', sailboat: 'Sailboat', ship2: 'Ship' };
             ui.showToast(`${vehicleNames[vehicleType] || 'Boat'} complete!`, 'success');
+            window.tasksPanel?.onStructurePlaced(vehicleType);
 
             // Resume walk animation if moving
             if (this.gameState.isMoving && this.game.animationAction) {

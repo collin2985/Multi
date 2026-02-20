@@ -975,17 +975,6 @@ export class BuildMenu {
             }
         }
 
-        // Show warning when building a tent - will override existing home spawn
-        if (structure.type === 'tent') {
-            const confirmed = await ui.showConfirmDialog(
-                'Building a tent will make it your home spawn point.\n\n' +
-                'This will override any existing home (tent or house).\n\n' +
-                'Continue?'
-            );
-            if (!confirmed) {
-                return; // User cancelled
-            }
-        }
 
         // Show placement tips once per structure type (stored in localStorage)
         const tipKey = `placementTip_${structure.type}`;
@@ -1646,6 +1635,7 @@ export class BuildMenu {
             // Note: Animation handled in game.js action system
 
             ui.updateActionStatus('Building road...', 10000);
+            window.tasksPanel?.onRoadPlaced();
             this.cancelStructurePlacement();  // Remove preview
             return;
         }

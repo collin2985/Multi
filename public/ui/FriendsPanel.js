@@ -358,6 +358,7 @@ export class FriendsPanel {
         this.networkManager.sendMessage('friend_request', {
             username: username
         });
+        window.tasksPanel?.onFriendRequestSent();
 
         input.value = '';
 

@@ -991,6 +991,7 @@ class MultiplayerGame {
                     if (trapper && this.trapperSystem) {
                         const info = this.trapperSystem.getResourceInfo(trapper.chunkX, trapper.chunkZ);
                         ui.showTrapperResourceInfo(info);
+                        window.tasksPanel?.onTrapperTalkedTo();
                     }
                 }
             },
@@ -2619,6 +2620,7 @@ class MultiplayerGame {
                             climbState.climbingPhase = 'occupied';
                             this.playerObject.position.copy(climbState.targetPosition);
                             ui.updateStatus('🧗 In outpost - Climb Down to exit');
+                            window.tasksPanel?.onOutpostClimbed();
 
                             // Update button states to show Climb Down button
                             const hasAxe = this.hasToolWithDurability('axe');
@@ -2766,6 +2768,7 @@ class MultiplayerGame {
                     if (progress >= 1.0) {
                         // Boarding complete - transition to piloting
                         vState.completeBoardingToPiloting();
+                        window.tasksPanel?.onVehicleBoarded(vState.pilotingEntityType);
 
                         // Check disembark immediately (vehicle is already stopped)
                         // Without this, disembark button won't show until player moves and stops
@@ -3302,6 +3305,7 @@ class MultiplayerGame {
                         // Apply hit if local authority
                         if (isHit && target.isLocal) {
                             this.deerController.killDeer(target.treeId, this.gameState.clientId);  // FIX: was chunkKey
+                            window.tasksPanel?.onEnemyKilled('deer');
                         }
                         // If not local authority, peer will handle kill from broadcast
 
@@ -3409,6 +3413,7 @@ class MultiplayerGame {
                             if (tentId && this.banditController) {
                                 this.banditController.killEntity(tentId, this.gameState.clientId);
                             }
+                            window.tasksPanel?.onEnemyKilled('bandit');
                         }
                         // If target is peer's AI, they will handle the death from the broadcast
                     } else {
@@ -4775,6 +4780,8 @@ class MultiplayerGame {
         });
 
         ui.showToast(`${entityType === 'cart' ? 'Cart' : 'Artillery'} attached`, 'info');
+        if (entityType === 'cart') window.tasksPanel?.onCartAttached();
+        else window.tasksPanel?.onArtilleryTowed();
     }
 
     /**
@@ -4898,6 +4905,7 @@ class MultiplayerGame {
         const artilleryEntity = new Artillery();
         artilleryEntity.startManning(artillery, artilleryId, artillery.userData.chunkKey);
         this.gameState.vehicleState.mannedArtillery = artilleryEntity;
+        window.tasksPanel?.onArtilleryManned();
 
         // Mark as occupied (prevents others from manning or towing)
         if (this.mobileEntitySystem) {
@@ -5108,6 +5116,7 @@ class MultiplayerGame {
 
         // Fire!
         mannedArtillery.recordFire(now);
+        window.tasksPanel?.onArtilleryFired();
 
         const combat = mannedArtillery.getCombatConfig();
         const range = combat.RANGE;
@@ -5915,6 +5924,7 @@ class MultiplayerGame {
             });
 
             ui.showToast('Crate loaded', 'info');
+            window.tasksPanel?.onCrateLoaded();
 
         } catch (error) {
             // Server rejected or timeout - restore state

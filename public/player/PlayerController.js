@@ -187,6 +187,7 @@ export class PlayerController {
             const pos = this.playerObject.position;
             if (this.navigationManager.isOnRoad(pos.x, pos.z)) {
                 newSpeed *= 1.5;
+                window.tasksPanel?.onRoadWalked();
             }
         }
 
@@ -535,6 +536,7 @@ export class PlayerController {
             const pos = this.playerObject.position;
             if (this.navigationManager.isOnRoad(pos.x, pos.z)) {
                 effectiveMaxSpeed *= CART.ROAD_SPEED_MULTIPLIER;
+                window.tasksPanel?.onRoadWalked();
             }
         }
 

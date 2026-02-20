@@ -2780,6 +2780,7 @@ export class MessageRouter {
             // Update UI if this is the nearest structure
             if (this.gameState.nearestStructure && this.gameState.nearestStructure.userData.objectId === structureId) {
                 ui.showToast(`Structure repaired! New quality: ${quality}`, 'success');
+                window.tasksPanel?.onStructureRepaired();
             }
         } else {
             console.warn(`[Structure Repaired] Could not find structure ${structureId} in scene`);
@@ -2946,6 +2947,7 @@ export class MessageRouter {
         }
 
         ui.showToast('Militia spawned!', 'success');
+        window.tasksPanel?.onMilitiaRecruited('tent');
     }
 
     /**
@@ -2985,6 +2987,7 @@ export class MessageRouter {
         }
 
         ui.showToast('Tower militia spawned!', 'success');
+        window.tasksPanel?.onMilitiaRecruited('outpost');
     }
 
     /**
@@ -3089,7 +3092,9 @@ export class MessageRouter {
      * Updates gameState and refreshes market UI if open
      */
     handleInfluenceResponse(payload) {
+        const oldInfluence = this.gameState.influence || 0;
         this.gameState.influence = payload.influence;
+        if (payload.influence > oldInfluence) window.tasksPanel?.onInfluenceEarned();
         // Update market UI if open
         if (window.game?.inventoryUI?.marketUI) {
             window.game.inventoryUI.marketUI.refreshInfluenceDisplay();

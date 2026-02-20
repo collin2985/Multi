@@ -206,6 +206,7 @@ export class FactionPanel {
             this.networkManager.sendMessage('join_faction', {
                 factionId: factionId
             });
+            window.tasksPanel?.onFactionJoined();
         }
     }
 }

@@ -1,6 +1,6 @@
 /**
  * TasksPanel.js
- * Beginner tutorial tasks UI
+ * Beginner tutorial tasks UI (82 tasks)
  * Shows on spawn, tracks completion, can be permanently closed
  */
 
@@ -16,11 +16,11 @@ export class TasksPanel {
         this.isClosed = false;
         this.completedTasks = new Set();
 
-        // Task definitions from tasklist.txt
         // Track cumulative gathering for tasks that require totals
         this.totalVinesGathered = 0;
 
         this.tasks = [
+            // === Survival Basics (1-9) ===
             { id: 1, title: 'Gather vines', description: 'Walk through a forest and stop on green patches of terrain. Look for a Gather Vines button at the top of the screen when you\'re stopped and press the button.' },
             { id: 2, title: 'Gather another vine', description: 'Gather a 2nd vine. Combining 2 vines will allow you to create rope, an essential crafting material.' },
             { id: 3, title: 'Check your backpack', description: 'Click the Backpack button at the top of the screen. You have limited inventory - keep space for tools and a little food. Discard items by dragging them out of your backpack.' },
@@ -30,8 +30,10 @@ export class TasksPanel {
             { id: 7, title: 'Combine vines into rope', description: 'In your backpack, drag one vine onto another to combine. Vines in different regions have different quality. The world is divided into regions - look for dark wooden posts that line the edges of each region. Resources change quality when you cross into a new region.' },
             { id: 8, title: 'Make 2 pieces of rope', description: 'Combine more vines for a second rope. The materials you use to craft or build determine its quality.' },
             { id: 9, title: 'Make a fishing net', description: 'Drag one rope onto another to combine. Food in your backpack is eaten automatically. Without food for 6 minutes, you die. Having different foods will make you less hungry.' },
+            // === Fishing (10-11) ===
             { id: 10, title: 'Go to ocean and fish', description: 'Walk to the shore. Click the Fish button when it appears. Higher quality nets increase your chance of catching fish and the quality of fish caught.' },
             { id: 11, title: 'Catch a fish', description: 'Keep trying until you catch one! High quality fish will make you less hungry once cooked. You can\'t eat raw fish.' },
+            // === Mining & Building (12-20) ===
             { id: 12, title: 'Mine limestone', description: 'Keep tools in your backpack and you will get options at the top of the screen to gather resources when in range. Find grey rocks in the world, stand next to them, and click "Mine Limestone". Always keep a limestone on you in case your improvised tool breaks - you can craft a new one with rope and limestone. Reminder: dark wooden posts mark region borders where resource quality changes.' },
             { id: 13, title: 'Build a campfire', description: 'Click Build, select Campfire, place on flat ground near you. Tip: Keep your campfire close to where you want to live. Steep slopes and rugged terrain slow you down. Roads can be built with chiseled limestone (chisel + limestone) to travel faster.' },
             { id: 14, title: 'Cut down a tree', description: 'Find a tree and go near it. As long as you have a tool in your backpack, you can chop trees down. Be aware of the durability of your tool, it drops with use.' },
@@ -41,21 +43,82 @@ export class TasksPanel {
             { id: 18, title: 'Saw a plank', description: 'Stand near a fallen log and click "Saw Planks". The plank\'s quality matches the tree\'s quality. If you don\'t have inventory space you can drop items by placing them outside your backpack. Be careful, tools are rare, don\'t drop them!' },
             { id: 19, title: 'Build a crate', description: 'You need 1 plank. Click "Build" (top-left), select Crate. Place on flat ground near you. Crates let you store extra materials to free up backpack space.' },
             { id: 20, title: 'Open your crate', description: 'Click the "Crate" button nearby. Store extra materials here to free backpack space - but keep tools (auto-equip) and food (prevents starvation) in your backpack.' },
-            { id: 21, title: 'Create an account', description: 'Click "Create Account" (top-left). With an account, you can use Save and Exit to keep your inventory. Build a tent later for a respawn point!' },
-            { id: 22, title: 'Enter your details', description: 'Choose a username (3-20 characters, letters/numbers/underscore). Password must be at least 8 characters.' },
-            { id: 23, title: 'Account created!', description: 'You can now use Save and Exit to preserve your inventory and position. Add friends and change factions anytime!' },
-            { id: 24, title: 'Find the Save and Exit button', description: 'Open Settings (gear icon, top-left). Find the "Save and Exit" button - this is the only way to keep your inventory between sessions. It saves your items and position. On your next login, choose "Resume Last Session" to restore them. Dying, or choosing any other spawn option, permanently removes the resume option. Without Save and Exit, closing the game loses your inventory.' },
-            { id: 25, title: 'Take apples from a tree', description: 'Find an apple tree, they look wider than pine trees. Stand near one and click the Backpack button. Drag apples into your backpack. Eat different food types to reduce hunger rate by up to 40%.' },
-            { id: 26, title: 'Gather vegetables', description: 'Find vegetable patches growing in the world. Stand near them and click "Gather Vegetables". You can plant your own - "Gather Seed" sometimes appears near plants, then use the Build menu to plant it.' },
-            { id: 27, title: 'Cook vegetables', description: 'Put vegetables and firewood in a campfire. After 1 minute they become roasted vegetables with double the nutrition value.' },
-            { id: 28, title: 'Build a dock', description: 'You need 1 chiseled limestone (drag your improvised tool onto limestone in your backpack to chisel it). Click Build, select Dock. Walk along the coast and move your cursor near the waterline - the dock auto-snaps to valid shoreline positions and picks its own rotation. Green means valid, red means invalid. If it stays red, try a different stretch of coast - the dock needs a gradual shoreline with deep open water ahead of it. Once green, click to place, then stand near the construction site, click the "Construction" button, add materials, and click Build. Make sure you have an improvised tool or hammer. Only 1 dock is allowed per region (the area between the dark wooden border posts). Tip: always place a dock before a market - docks are harder to position, then build your market within 20 units of it.' },
-            { id: 29, title: 'Gather clay', description: 'Find clay deposits in the world (reddish-brown patches). Stand near them and click "Mine Clay". You need clay to make tiles for building.' },
-            { id: 30, title: 'Cook clay into tile', description: 'Put clay and firewood in a campfire. After 5 minutes the clay becomes a tile. Tiles are needed to build markets and other advanced structures.' },
-            { id: 31, title: 'Build a market', description: 'You need 1 plank, 1 chiseled limestone, and 1 tile. Build a market within 20 units of your dock. Only 1 market is allowed per region. Place the construction site, then add materials and build it. Markets are your trading hub - sell resources to stock the market, then open the harbour to attract merchant ships. Ships take your materials and leave tools, weapons, and horses. Worker buildings placed nearby can automate resource delivery to your market.' },
-            { id: 32, title: 'Build a house', description: 'You need 1 plank, 1 chiseled limestone, and 1 tile. Place it with the Build menu, add materials, and click Build. Your house becomes your home - when you die, you can respawn here (with an empty inventory). It has a large 10x10 storage that only you can access, and you can cook inside it with firewood. You can only own one house at a time.' },
-            { id: 33, title: 'Build a woodcutter', description: 'You need 1 plank, 1 chiseled limestone, and 1 tile. Build within 20 units of your market. Once built, stand near it and click "Seek Proprietor" to sell it for 10 coins. A worker will spawn and automatically chop trees, delivering planks and firewood to your market. Sold structures never decay.' },
-            { id: 34, title: 'Open harbour to trade', description: 'Go next to the market and hit the Market button. Click "Harbour Closed" to open it to trade ships.' },
-            { id: 35, title: 'Talk to the merchant', description: 'Ships arrive every 30 minutes. In the meantime, gather resources and store them in your crate. When a ship docks, a merchant walks onto the pier. Stand near them and click "Talk to Merchant". Stock the market with 20 items of the same material to trade for tools/weapons.' }
+            // === Transport (21-25) — NEW ===
+            { id: 21, title: 'Build a cart', description: 'You need 1 plank. Click "Build" and select Cart. Carts let you haul a crate full of materials across the map.' },
+            { id: 22, title: 'Tow the cart', description: 'Walk near the cart and click "Attach Cart". You can tow it on foot. Later, you can tow faster with a horse.' },
+            { id: 23, title: 'Load crate onto the cart', description: 'While towing, walk near your crate and click "Load Crate". The crate rides on the cart with all its items inside. Click "Release Cart" when you want to stop.' },
+            { id: 24, title: 'Build a boat', description: 'You need 1 plank. Place it in the water using the Build menu. Boats let you scout the coastline for a good place to settle.' },
+            { id: 25, title: 'Sail the boat', description: 'Walk near the boat and click "Enter Boat". W forward, S reverse, A/D to turn. Click "Exit Boat" near shore to disembark.' },
+            // === Account & Saving (26-29) — shifted from 21-24 ===
+            { id: 26, title: 'Create an account', description: 'Click "Create Account" (top-left). With an account, you can use Save and Exit to keep your inventory. Build a house later for a respawn point!' },
+            { id: 27, title: 'Enter your details', description: 'Choose a username (3-20 characters, letters/numbers/underscore). Password must be at least 8 characters.' },
+            { id: 28, title: 'Account created!', description: 'You can now use Save and Exit to preserve your inventory and position. Add friends and change factions anytime!' },
+            { id: 29, title: 'Find the Save and Exit button', description: 'Open Settings (top-left). Find the "Save and Exit" button - this is the only way to keep your inventory between sessions. It saves your items and position. On your next login, choose "Resume Last Session" to restore them. Dying, or choosing any other spawn option, permanently removes the resume option. Without Save and Exit, closing the game loses your inventory.' },
+            // === Food Variety (30-32) — shifted from 25-27 ===
+            { id: 30, title: 'Take apples from a tree', description: 'Find an apple tree, they look wider than pine trees. Stand near one and click the Backpack button. Drag apples into your backpack. Eat different food types to reduce hunger rate by up to 40%.' },
+            { id: 31, title: 'Gather vegetables', description: 'Find vegetable patches growing in the world. Stand near them and click "Gather Vegetables". You can plant your own - "Gather Seed" sometimes appears near plants, then use the Build menu to plant it.' },
+            { id: 32, title: 'Cook vegetables', description: 'Put vegetables and firewood in a campfire. After 1 minute they become roasted vegetables with double the nutrition value.' },
+            // === Building a Town (33-40) — shifted from 28-35 ===
+            { id: 33, title: 'Build a dock', description: 'You need 1 chiseled limestone (drag your improvised tool onto limestone in your backpack to chisel it). Click Build, select Dock. Walk along the coast and move your cursor near the waterline - the dock auto-snaps to valid shoreline positions and picks its own rotation. Green means valid, red means invalid. If it stays red, try a different stretch of coast - the dock needs a gradual shoreline with deep open water ahead of it. Once green, click to place, then stand near the construction site, click the "Construction" button, add materials, and click Build. Make sure you have an improvised tool or hammer. Only 1 dock is allowed per region (the area between the dark wooden border posts). Tip: always place a dock before a market - docks are harder to position, then build your market within 20 units of it.' },
+            { id: 34, title: 'Gather clay', description: 'Find clay deposits in the world (reddish-brown patches). Stand near them and click "Mine Clay". You need clay to make tiles for building.' },
+            { id: 35, title: 'Cook clay into tile', description: 'Put clay and firewood in a campfire. After 5 minutes the clay becomes a tile. Tiles are needed to build markets and other advanced structures.' },
+            { id: 36, title: 'Build a market', description: 'You need 1 plank, 1 chiseled limestone, and 1 tile. Build a market within 20 units of your dock. Only 1 market is allowed per region. Place the construction site, then add materials and build it. Markets are your trading hub - sell resources to stock the market, then open the harbour to attract merchant ships. Ships take your materials and leave tools, weapons, and horses. Worker buildings placed nearby can automate resource delivery to your market.' },
+            { id: 37, title: 'Build a house', description: 'You need 1 plank, 1 chiseled limestone, and 1 tile. Place it with the Build menu, add materials, and click Build. Your house becomes your home - when you die, you can respawn here (with an empty inventory). It has a large 10x10 storage that only you can access, and you can cook inside it with firewood. You can only own one house at a time.' },
+            { id: 38, title: 'Build a woodcutter', description: 'You need 1 plank, 1 chiseled limestone, and 1 tile. Build within 20 units of your market. Once built, stand near it and click "Seek Proprietor" to sell it for 10 coins. A worker will spawn and automatically chop trees, delivering planks and firewood to your market. Sold structures never decay.' },
+            { id: 39, title: 'Open harbour to trade', description: 'Go next to the market and hit the Market button. Click "Harbour Closed" to open it to trade ships.' },
+            { id: 40, title: 'Talk to the merchant', description: 'Ships arrive every 30 minutes. In the meantime, gather resources and store them in your crate. When a ship docks, a merchant walks onto the pier. Stand near them and click "Talk to Merchant". Stock the market with 20 items of the same material to trade for tools/weapons.' },
+            // === Expand Your Economy (41-47) — NEW ===
+            { id: 41, title: 'Build a tileworks', description: 'Same materials as the woodcutter (1 plank, 1 chiseled limestone, 1 tile). Build within 20 units of your market. The tileworks turns clay into tiles much faster than a campfire.' },
+            { id: 42, title: 'Open the tileworks', description: 'Stand near your tileworks and click the "Tileworks" button to open it. The tileworks needs clay and firewood to produce tiles.' },
+            { id: 43, title: 'Add clay and firewood to the tileworks', description: 'Drag clay and firewood into the tileworks inventory. It processes tiles automatically - much faster than a campfire.' },
+            { id: 44, title: 'Take tiles from the tileworks', description: 'When processing finishes, drag the tiles to your backpack. Tiles are needed for houses, markets, and all worker buildings.' },
+            { id: 45, title: 'Build a miner', description: 'Same materials as other worker buildings (1 plank, 1 chiseled limestone, 1 tile). Build within 20 units of your market and sell to a proprietor. The miner harvests nearby rocks and delivers stone to your market. Once you have a miner supplying clay, you can also sell your tileworks to a proprietor to automate tile production.' },
+            { id: 46, title: 'Build a stonemason', description: 'The stonemason collects raw stone from your market, chisels it into chiseled stone, and delivers it back. Once a miner is supplying stone, the stonemason automates what you\'ve been doing by hand.' },
+            { id: 47, title: 'Build a gardener', description: 'Plants and harvests vegetables behind the building. Also plants trees during downtime, keeping your area supplied with wood. You can also build a baker (bakes apple tarts) or a fisherman (catches and cooks fish) if you want more food production.' },
+            // === Roads (48-49) — NEW ===
+            { id: 48, title: 'Build a road', description: 'Open the Build menu and select Road. Costs 1 chiseled limestone. Use the scroll wheel to rotate before placing.' },
+            { id: 49, title: 'Walk on a road', description: 'Step onto your road. You move twice as fast on roads. Worker NPCs and horses also move faster on roads. Build roads between your buildings.' },
+            // === Hemp & Fabric (50-51) — NEW ===
+            { id: 50, title: 'Gather hemp fiber', description: 'Find hemp plants at low elevations. Stop near one and click "Gather Hemp". Hemp fiber is used to make fabric.' },
+            { id: 51, title: 'Craft fabric', description: 'Drag one hemp fiber onto another in your backpack. Takes 6 seconds. Fabric is needed for tents, sailboats, and ships. You can also combine 2 animal skins into fabric.' },
+            // === Factions & Quality (52-55) — NEW ===
+            { id: 52, title: 'Join a faction', description: 'Open Settings (top-left) and click Faction. Choose Southguard (south territory) or Northmen (north territory). This is permanent. You must be in a faction to earn influence and recruit militia.' },
+            { id: 53, title: 'Talk to a trapper', description: 'Find a trapper NPC in the wild - a man standing near a tent. Walk close and click "Talk to Trapper". Pay 5 coins to see resource quality in that region. Dark wooden posts mark region borders where quality changes.' },
+            { id: 54, title: 'Sell quality 100 items to your market', description: 'Find a region with quality 100 resources using trappers. Harvest or have workers deliver Q100 materials to your market. The merchant ship takes the highest quality items first.' },
+            { id: 55, title: 'Earn influence', description: 'When a merchant ship takes a quality 100 item from your market, you earn 1 influence. Ships only take items when there are more than 10 of a type in your market - the ship takes the surplus, highest quality first.' },
+            // === Secure the Inland Route (56-61) — NEW ===
+            { id: 56, title: 'Build an outpost', description: 'You need 1 plank. Build an outpost between your base and the inland wilderness. Outposts give a height advantage for shooting - better accuracy and longer range.' },
+            { id: 57, title: 'Recruit outpost militia', description: 'Stand near your outpost and click "Spawn Militia" (costs 1 influence). The militia soldier shoots from the elevated position with better accuracy and range, defending against bandits and bears.' },
+            { id: 58, title: 'Build a tent', description: 'You need 1 plank, 1 rope, and 1 fabric. Build a tent deeper inland, past your outpost. Tents let you request militia to defend the area and have shared 10x10 storage for supplies.' },
+            { id: 59, title: 'Recruit tent militia', description: 'Station militia at your inland tent (1 influence). The soldier patrols nearby, defending against bandits, bears, and enemy faction players. Militia don\'t respawn if killed - you\'ll need to spend another influence to replace them.' },
+            { id: 60, title: 'Get a horse', description: 'Buy a horse from the market. Horses are restocked by merchant ships. They make the journey between your coastal base and inland outposts much faster.' },
+            { id: 61, title: 'Mount the horse', description: 'Walk near the horse and click "Mount Horse". Use WASD to ride. Horses are much faster than walking, especially on roads.' },
+            // === Combat (62-68) — NEW ===
+            { id: 62, title: 'Buy a rifle', description: 'Go to your market and buy a rifle. Drag it to the sling slot next to the "Backpack" label - this saves 10 inventory slots. Rifles and ammo are restocked by merchant ships.' },
+            { id: 63, title: 'Buy ammunition', description: 'Buy ammo from the market. Keep ammo in your backpack. You need both a rifle and ammo to fight - each shot uses 1 ammo.' },
+            { id: 64, title: 'Kill a bandit', description: 'Get within range of a bandit and you\'ll aim and fire automatically. Higher ground improves your accuracy and range.' },
+            { id: 65, title: 'Climb an outpost', description: 'Stand near an outpost and click "Climb". You can shoot from up here with better accuracy and range. Click "Climb Down" to come down.' },
+            { id: 66, title: 'Hunt a deer', description: 'Find a deer in the wild. Your rifle auto-targets it when in range. Deer flee when shot, so get close.' },
+            { id: 67, title: 'Harvest the deer', description: 'Stand near the dead deer and click "Harvest Deer". You\'ll get raw meat and animal skin. Animal skins can be combined into fabric.' },
+            { id: 68, title: 'Cook raw meat', description: 'Put raw meat and firewood in a campfire or house. Cooked meat is the most nutritious food in the game.' },
+            // === The Iron Expedition (69-72) — NEW ===
+            { id: 69, title: 'Mine iron', description: 'Iron only spawns at high elevations in the mountains. Look for dark, heavy-looking rocks above the tree line. Iron is rare - use trappers to find the best regions.' },
+            { id: 70, title: 'Sell iron at the market', description: 'Open the market and sell your iron. Stocking the market with materials is how you attract trade ships and supply worker buildings like the ironworks.' },
+            { id: 71, title: 'Build an ironworks', description: 'Same materials as other worker buildings (1 plank, 1 chiseled limestone, 1 tile). Build within 20 units of your market and sell to a proprietor. The ironworks smelts iron ore into iron ingots using firewood.' },
+            { id: 72, title: 'Build a blacksmith', description: 'Same materials. Build within 20 units of your market and sell to a proprietor. The blacksmith turns iron ingots into parts using firewood. Parts are needed for ships and artillery.' },
+            // === Water Upgrades (73) — NEW ===
+            { id: 73, title: 'Build a sailboat', description: 'You need 1 plank, 1 rope, and 1 fabric. Sailboats are faster than rowboats and can carry 1 crate on deck for transporting materials along the coast.' },
+            // === Social (74-75) — NEW ===
+            { id: 74, title: 'Add a friend', description: 'Open the Friends panel (top-left). Type a player\'s username and send a request. Friends show online status and you can spawn near same-faction friends.' },
+            { id: 75, title: 'Repair a structure', description: 'Stand near a damaged structure you own with a hammer in your backpack. Click "Repair" to restore its durability. Unrepaired structures eventually become ruins.' },
+            // === Artillery & Ships (76-82) — NEW ===
+            { id: 76, title: 'Build artillery', description: 'You need 1 plank and 1 parts (from the blacksmith). Artillery fires at much longer range than rifles (28 units).' },
+            { id: 77, title: 'Tow artillery with a horse', description: 'Mount your horse, then approach the artillery and click "Attach Artillery". Artillery can only be towed by horse.' },
+            { id: 78, title: 'Man the artillery', description: 'Dismount, then stand behind the artillery and click "Man Artillery". Use A/D to aim.' },
+            { id: 79, title: 'Load shells into artillery', description: 'Buy shells from the market (restocked by merchant ships). Open the artillery inventory and drag shells in. Shells are consumed when firing.' },
+            { id: 80, title: 'Fire the artillery', description: 'Press the fire button. 12-second cooldown between shots. Each shot uses 1 shell. The cannon fires at the nearest enemy in your aim direction. You can also station militia at artillery (1 influence) to have them operate it automatically.' },
+            { id: 81, title: 'Build a ship', description: 'You need 1 plank, 1 rope, 1 parts, and 1 fabric. Ships are the largest vessels - they can carry 4 crates, 2 artillery, and 3 horses.' },
+            { id: 82, title: 'Board and pilot a ship', description: 'Walk near the ship and click "Board Ship". Use WASD to steer. You can load crates, artillery, and horses onto the deck for transport across the sea.' }
         ];
 
         this.createElements();
@@ -143,15 +206,18 @@ export class TasksPanel {
         // Load taskCompletions from server (top-level for local mode, stats for production)
         const completions = playerData?.taskCompletions || playerData?.stats?.taskCompletions;
         if (completions && Array.isArray(completions)) {
-            this.completedTasks = new Set(completions);
+            // Migrate old task IDs (21-35 shifted to 26-40 in tutorial expansion)
+            const ID_MIGRATION = { 21: 26, 22: 27, 23: 28, 24: 29, 25: 30, 26: 31, 27: 32, 28: 33, 29: 34, 30: 35, 31: 36, 32: 37, 33: 38, 34: 39, 35: 40 };
+            const migrated = completions.map(id => ID_MIGRATION[id] || id);
+            this.completedTasks = new Set(migrated);
         }
 
         // Auto-complete registration tasks if player is logged in (they've already done this)
         if (!this.gameState.isGuest) {
-            const hadAccountTasks = this.completedTasks.has(21);
-            this.completedTasks.add(21); // Create an account
-            this.completedTasks.add(22); // Enter your details
-            this.completedTasks.add(23); // Account created!
+            const hadAccountTasks = this.completedTasks.has(26);
+            this.completedTasks.add(26); // Create an account
+            this.completedTasks.add(27); // Enter your details
+            this.completedTasks.add(28); // Account created!
             // Only save if we added new completions
             if (!hadAccountTasks) {
                 this.saveCompletions();
@@ -211,10 +277,7 @@ export class TasksPanel {
      */
     rewardCoin() {
         const inventory = this.gameState?.inventory;
-        if (!inventory || !inventory.items) {
-            console.warn('No inventory available for coin reward');
-            return;
-        }
+        if (!inventory || !inventory.items) return;
 
         const items = inventory.items;
 
@@ -229,7 +292,6 @@ export class TasksPanel {
         }
 
         // No existing coin - need to find space for new coin item
-        // Try each position in the grid
         const { rows, cols } = inventory;
         const newCoin = {
             id: 'coin_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
@@ -268,7 +330,6 @@ export class TasksPanel {
             const itemWidth = item.rotation === 90 ? item.height : item.width;
             const itemHeight = item.rotation === 90 ? item.width : item.height;
 
-            // Check if (x,y) falls within this item's bounds
             if (x >= item.x && x < item.x + itemWidth &&
                 y >= item.y && y < item.y + itemHeight) {
                 return false;
@@ -293,100 +354,52 @@ export class TasksPanel {
     onItemAdded(itemType, count) {
         if (this.isClosed) return;
 
-        // Normalize item type
         const type = itemType?.toLowerCase();
 
         // Tasks 1, 2, 6: Vine gathering (cumulative tracking)
         if (type === 'vines') {
-            this.completeTask(1); // Task 1: Gather vines
+            this.completeTask(1);
             this.totalVinesGathered++;
-            if (this.totalVinesGathered >= 2) {
-                this.completeTask(2); // Task 2: Gather another vine
-            }
-            if (this.totalVinesGathered >= 6) {
-                this.completeTask(6); // Task 6: Gather 4 more vines (6 total)
-            }
+            if (this.totalVinesGathered >= 2) this.completeTask(2);
+            if (this.totalVinesGathered >= 6) this.completeTask(6);
         }
 
         // Tasks 4, 7, 8: Make rope
         if (type === 'rope') {
-            this.completeTask(4);  // Task 4: Combine vines into rope (for improvised tool)
-            this.completeTask(7);  // Task 7: Combine vines into rope (for fishing net)
-            if (count >= 2) {
-                this.completeTask(8); // Task 8: Make 2 pieces of rope
-            }
+            this.completeTask(4);
+            this.completeTask(7);
+            if (count >= 2) this.completeTask(8);
         }
 
-        // Task 5: Craft improvised tool
-        if (type === 'improvisedtool') {
-            this.completeTask(5);
-        }
+        if (type === 'improvisedtool') this.completeTask(5);
+        if (type?.endsWith('plank')) this.completeTask(18);
+        if (type === 'fishingnet') this.completeTask(9);
+        if (type === 'fish') this.completeTask(11);
+        if (type === 'limestone') this.completeTask(12);
+        if (type?.includes('firewood')) this.completeTask(15);
+        if (type === 'cookedfish') this.completeTask(17);
+        if (type === 'apple') this.completeTask(30);
+        if (type === 'vegetables') this.completeTask(31);
+        if (type === 'roastedvegetables') this.completeTask(32);
+        if (type === 'clay') this.completeTask(34);
 
-        // Task 18: Saw a plank
-        if (type?.endsWith('plank')) {
-            this.completeTask(18);
-        }
-
-        // Task 9: Make fishing net
-        if (type === 'fishingnet') {
-            this.completeTask(9);
-        }
-
-        // Task 11: Catch a fish
-        if (type === 'fish') {
-            this.completeTask(11);
-        }
-
-        // Task 12: Mine limestone
-        if (type === 'limestone') {
-            this.completeTask(12);
-        }
-
-        // Task 15: Cut firewood
-        if (type?.includes('firewood')) {
-            this.completeTask(15);
-        }
-
-        // Task 17: Cook fish
-        if (type === 'cookedfish') {
-            this.completeTask(17);
-        }
-
-        // Task 25: Take apples from a tree
-        if (type === 'apple') {
-            this.completeTask(25);
-        }
-
-        // Task 26: Gather vegetables
-        if (type === 'vegetables') {
-            this.completeTask(26);
-        }
-
-        // Task 27: Cook vegetables
-        if (type === 'roastedvegetables') {
-            this.completeTask(27);
-        }
-
-        // Task 29: Gather clay
-        if (type === 'clay') {
-            this.completeTask(29);
-        }
-
-        // Task 30: Cook clay into tile
+        // Task 35: Cook clay into tile + Task 44: Take tiles from tileworks
         if (type === 'tile') {
-            this.completeTask(30);
+            this.completeTask(35);
+            if (this.completedTasks.has(43)) this.completeTask(44);
         }
+
+        // New item types
+        if (type === 'hempfiber') this.completeTask(50);
+        if (type === 'fabric') this.completeTask(51);
+        if (type === 'iron') this.completeTask(69);
+        if (type === 'rawmeat') this.completeTask(67);
+        if (type === 'cookedmeat') this.completeTask(68);
     }
 
     onActionComplete(actionType, harvestType) {
         if (this.isClosed) return;
-
-        // Task 14: Cut down a tree
-        if (actionType === 'chop') {
-            this.completeTask(14);
-        }
-
-        // Task 13: Build campfire
+        if (actionType === 'chop') this.completeTask(14);
         if (actionType === 'build_campfire' ||
             (actionType === 'build' && harvestType === 'campfire')) {
             this.completeTask(13);
@@ -395,90 +408,168 @@ export class TasksPanel {
 
     onInventoryOpened() {
         if (this.isClosed) return;
-        // Task 3: Check backpack
         this.completeTask(3);
     }
 
     onSettingsOpened() {
         if (this.isClosed) return;
-        // Task 24: Find the Save and Exit button
-        this.completeTask(24);
+        this.completeTask(29);
     }
 
     onFishButtonClicked() {
         if (this.isClosed) return;
-        // Task 10: Go to ocean and fish
         this.completeTask(10);
     }
 
     onItemMovedToCrate(itemType, structureType) {
         if (this.isClosed) return;
-        // Task 16: Add to campfire
-        if (structureType === 'campfire') {
-            this.completeTask(16);
-        }
+        if (structureType === 'campfire') this.completeTask(16);
+        if (structureType === 'tileworks') this.completeTask(43);
+        if (structureType === 'artillery' && itemType === 'shell') this.completeTask(79);
     }
 
     onStructurePlaced(structureType) {
         if (this.isClosed) return;
-        // Task 19: Build a crate
-        if (structureType === 'crate') {
-            this.completeTask(19);
-        }
-        // Task 28: Build a dock
-        if (structureType === 'dock') {
-            this.completeTask(28);
-        }
-        // Task 31: Build a market
-        if (structureType === 'market') {
-            this.completeTask(31);
-        }
-        // Task 32: Build a house
-        if (structureType === 'house') {
-            this.completeTask(32);
-        }
-        // Task 33: Build a woodcutter
-        if (structureType === 'woodcutter') {
-            this.completeTask(33);
-        }
+        const taskMap = {
+            crate: 19, cart: 21, boat: 24,
+            dock: 33, market: 36, house: 37, woodcutter: 38,
+            tileworks: 41, miner: 45, stonemason: 46, gardener: 47,
+            outpost: 56, tent: 58,
+            ironworks: 71, blacksmith: 72, sailboat: 73,
+            artillery: 76, ship2: 81
+        };
+        const taskId = taskMap[structureType];
+        if (taskId) this.completeTask(taskId);
     }
 
     onStructureInventoryOpened(structureType) {
         if (this.isClosed) return;
-        // Task 20: Open your crate
-        if (structureType === 'crate') {
-            this.completeTask(20);
-        }
+        if (structureType === 'crate') this.completeTask(20);
+        if (structureType === 'tileworks') this.completeTask(42);
     }
 
     onMerchantShipsEnabled() {
         if (this.isClosed) return;
-        // Task 34: Open harbour to trade
-        this.completeTask(34);
+        this.completeTask(39);
     }
 
     onCreateAccountClicked() {
         if (this.isClosed) return;
-        // Task 21: Create an account
-        this.completeTask(21);
+        this.completeTask(26);
     }
 
     onRegisterFormShown() {
         if (this.isClosed) return;
-        // Task 22: Enter your details
-        this.completeTask(22);
+        this.completeTask(27);
     }
 
     onAccountCreated() {
         if (this.isClosed) return;
-        // Task 23: Account created!
-        this.completeTask(23);
+        this.completeTask(28);
     }
 
     onTalkToMerchant() {
         if (this.isClosed) return;
-        // Task 35: Talk to the merchant
-        this.completeTask(35);
+        this.completeTask(40);
+    }
+
+    // ========== New Event Handlers (tutorial expansion) ==========
+
+    onCartAttached() {
+        if (this.isClosed) return;
+        this.completeTask(22);
+    }
+
+    onCrateLoaded() {
+        if (this.isClosed) return;
+        this.completeTask(23);
+    }
+
+    onVehicleBoarded(vehicleType) {
+        if (this.isClosed) return;
+        if (vehicleType === 'boat') this.completeTask(25);
+        if (vehicleType === 'horse') this.completeTask(61);
+        if (vehicleType === 'ship2') this.completeTask(82);
+    }
+
+    onRoadPlaced() {
+        if (this.isClosed) return;
+        this.completeTask(48);
+    }
+
+    onRoadWalked() {
+        if (this.isClosed) return;
+        this.completeTask(49);
+    }
+
+    onFactionJoined() {
+        if (this.isClosed) return;
+        this.completeTask(52);
+    }
+
+    onTrapperTalkedTo() {
+        if (this.isClosed) return;
+        this.completeTask(53);
+    }
+
+    onMarketBuy(itemType) {
+        if (this.isClosed) return;
+        if (itemType === 'horse') this.completeTask(60);
+        if (itemType === 'rifle') this.completeTask(62);
+        if (itemType === 'ammo') this.completeTask(63);
+    }
+
+    onMarketSell(itemType, quality) {
+        if (this.isClosed) return;
+        if (quality >= 100) this.completeTask(54);
+        if (itemType === 'iron') this.completeTask(70);
+    }
+
+    onInfluenceEarned() {
+        if (this.isClosed) return;
+        this.completeTask(55);
+    }
+
+    onMilitiaRecruited(structureType) {
+        if (this.isClosed) return;
+        if (structureType === 'outpost') this.completeTask(57);
+        if (structureType === 'tent') this.completeTask(59);
+    }
+
+    onEnemyKilled(enemyType) {
+        if (this.isClosed) return;
+        if (enemyType === 'bandit') this.completeTask(64);
+        if (enemyType === 'deer') this.completeTask(66);
+    }
+
+    onOutpostClimbed() {
+        if (this.isClosed) return;
+        this.completeTask(65);
+    }
+
+    onFriendRequestSent() {
+        if (this.isClosed) return;
+        this.completeTask(74);
+    }
+
+    onStructureRepaired() {
+        if (this.isClosed) return;
+        this.completeTask(75);
+    }
+
+    onArtilleryTowed() {
+        if (this.isClosed) return;
+        this.completeTask(77);
+    }
+
+    onArtilleryManned() {
+        if (this.isClosed) return;
+        this.completeTask(78);
+    }
+
+    onArtilleryFired() {
+        if (this.isClosed) return;
+        this.completeTask(80);
     }
 
     // ========== UI Methods ==========
@@ -487,9 +578,9 @@ export class TasksPanel {
         if (this.isClosed) return;
         // Auto-complete account tasks for logged-in players before rendering
         if (!this.gameState.isGuest) {
-            this.completedTasks.add(21);
-            this.completedTasks.add(22);
-            this.completedTasks.add(23);
+            this.completedTasks.add(26);
+            this.completedTasks.add(27);
+            this.completedTasks.add(28);
         }
         this.render();
         this.panel.style.display = 'block';

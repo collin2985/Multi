@@ -1599,6 +1599,7 @@ export class MarketUI {
                 durability: hasDurability ? Math.floor(durability || 50) : null,
                 transactionId
             });
+            window.tasksPanel?.onMarketBuy(itemType);
 
             // Set reconciliation timeout (accept server state as authoritative after 500ms)
             if (this.transactionTimeout) {
@@ -1813,5 +1814,6 @@ export class MarketUI {
         } else {
             ui.updateStatus(`Sold ${itemName} (Q:${Math.floor(item.quality)}) for 🪙${price}`);
         }
+        window.tasksPanel?.onMarketSell(itemType, Math.floor(item.quality));
     }
 }
